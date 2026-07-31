@@ -2,7 +2,7 @@
 
 **ERPNext V15 Manufacturing Custom Application**
 
-**Version:** 1.0.0  
+**Version:** 1.1.0 (In Development)  
 **Publisher:** OSDuo Tech LLP  
 **License:** MIT
 
@@ -12,24 +12,36 @@ Tekson Manufacturing is a custom ERPNext application designed to enhance manufac
 
 ## Features
 
-### Current (v1.0.0)
+### Current (v1.1.0 - Phase 1 MES Architecture)
+- ✅ Service-Oriented MES Architecture
+- ✅ Execution Engine (central orchestrator)
+- ✅ Material Readiness Engine (source-agnostic validation)
+- ✅ Dependency Engine (previous operation validation)
+- ✅ Diagnostics Engine (clear operator messages)
+- ✅ Service Layer (reusable business logic)
+- ✅ API Layer (client-side integration)
 - ✅ Job Card controller override with auto work order completion
-- ✅ Previous operation dependency validation
-- ✅ Material availability validation
-- ✅ Start Status automation (Awaiting, Ready, In Progress, Completed)
-- ✅ Custom fields for Job Card enhanced tracking
-- ✅ Automatic Stock Entry creation on work order completion
+- ✅ Configuration framework (Manufacturing Settings)
 
-### Coming in Phase 1 (Planned)
-- 🔄 Material Readiness Engine (cumulative transfer checking)
-- 🔄 Enhanced Work Order Completion Engine
-- 🔄 Material Traceability & Diagnostic Messages
-- 🔄 Warehouse Configuration (Raw, Component, WIP, FG)
-- 🔄 Common Component handling across multiple WOs
+### Phase 1 Implementation Status
+- ✅ Architecture restructuring (complete)
+- ✅ Execution Engine (complete)
+- ✅ Material Readiness Engine (complete)
+- ✅ Dependency Engine (complete)
+- ✅ Diagnostics Engine (complete)
+- ✅ Service Layer (complete)
+- ✅ API Layer (complete)
+- 🔄 Manufacturing Settings (framework ready)
+- 🔄 Warehouse Configuration (pending)
+- 🔄 Testing & UAT (pending)
 
-### Future Roadmap
+### Future Roadmap (Phase 2+)
 - Operator Work Queue
 - Supervisor Dashboard
+- Production Bucket concept
+- Date-wise Work Order consolidation
+- Planner Workbench
+- Capacity planning
 - Subcontract Planning Integration
 - Production Analytics & OEE
 - Multi-plant Manufacturing Support
@@ -48,21 +60,35 @@ bench install-app tekson_manufacturing
 
 ### Post-Installation
 
-1. **Configure Manufacturing Settings:**
-   - Set up warehouse configuration (Raw Material, WIP, FG)
-   - Configure default warehouses per operation
-
-2. **Verify Job Card Override:**
+1. **Verify Installation:**
    ```python
    # In bench console
-   from tekson_manufacturing.manufacturing.custom_job_card import TeksonJobCard
-   print("TeksonJobCard loaded successfully")
+   from tekson_manufacturing.execution.execution_engine import ExecutionEngine
+   from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+   print("MES Engines loaded successfully")
    ```
 
-3. **Test with Sample Work Order:**
+2. **Configure Manufacturing Settings:**
+   - Enable/disable MES features
+   - Configure warehouse mappings
+   - Set default warehouses
+
+3. **Test APIs:**
+   ```python
+   # Check if Job Card can start
+   from tekson_manufacturing.api.job_card import check_can_start
+   result = check_can_start("Job Card Name")
+   
+   # Check material readiness
+   from tekson_manufacturing.api.work_order import check_material_readiness
+   result = check_material_readiness("Work Order Name")
+   ```
+
+4. **Test with Sample Work Order:**
    - Create a Work Order
    - Complete all Job Cards
    - Verify Work Order auto-completes
+   - Check diagnostic messages
 
 ---
 
@@ -71,31 +97,69 @@ bench install-app tekson_manufacturing
 ### Separation of Responsibilities
 
 ```
-Production Planning → Material Readiness → Manufacturing Execution → Monitoring
+Production Planning (ERPNext Standard)
+        ↓
+Manufacturing Execution (tekson_manufacturing MES)
+        ↓
+Monitoring & Traceability
 ```
 
-1. **Planning Layer:** Decides source (Internal/Purchase/Subcontract)
-2. **Readiness Layer:** Validates material availability
-3. **Execution Layer:** Manages Job Cards & operations
-4. **Monitoring Layer:** Provides diagnostics & traceability
+1. **Planning Layer:** ERPNext Production Plan (standard)
+2. **Execution Layer:** MES Engine (Phase 1)
+3. **Monitoring Layer:** Diagnostics & Traceability
+
+### MES Architecture (Phase 1)
+
+```
+tekson_manufacturing/
+│
+├── manufacturing/          # ERPNext Overrides (Thin Layer)
+├── execution/              # MES Engine (Central Orchestrator)
+├── readiness/              # Material Readiness Engine
+├── validation/             # Dependency Validation Engine
+├── diagnostics/            # Operator Messages Engine
+├── services/               # Reusable Business Logic
+├── api/                    # Whitelisted APIs
+└── settings/               # Configuration Framework
+```
 
 ### Key Components
 
-| Module | Purpose |
-|--------|---------|
-| `custom_job_card.py` | Extends ERPNext JobCard with auto-completion |
-| `work_order.py` | Work order status evaluation & completion |
-| `material_engine.py` | Material readiness validation (Phase 1) |
-| `traceability.py` | Shortage diagnostics (Phase 1) |
+| Module | Purpose | Status |
+|--------|---------|--------|
+| `execution/execution_engine.py` | Central MES orchestrator | ✅ Complete |
+| `readiness/material_readiness.py` | Material readiness validation | ✅ Complete |
+| `validation/dependency_engine.py` | Previous operation validation | ✅ Complete |
+| `diagnostics/messages.py` | Clear operator messages | ✅ Complete |
+| `services/job_card_service.py` | Job Card business logic | ✅ Complete |
+| `services/work_order_service.py` | Work Order business logic | ✅ Complete |
+| `api/job_card.py` | Job Card APIs | ✅ Complete |
+| `api/work_order.py` | Work Order APIs | ✅ Complete |
+| `settings/manufacturing_settings.py` | Configuration framework | ✅ Framework |
+
+### Architecture Documentation
+
+See [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) for detailed architecture guide.
 
 ---
 
 ## Documentation
 
-- **[DEVELOPMENT_SUMMARY.md](./DEVELOPMENT_SUMMARY.md)** - Complete development history and technical architecture
-- **[UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md)** - UAT findings and new architecture design
-- **[PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md)** - Current development priorities and timeline
+### Architecture & Design
+- **[PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md)** - **Phase 1 MES architecture guide** ⭐ NEW
+- **[ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md)** - Latest architecture decisions (MPS/MES separation)
+- **[UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md)** - UAT findings and initial architecture
+
+### Planning & Timeline
+- **[PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md)** - Master timeline & roadmap
+- **[TIMELINE_SUMMARY_FOR_CUSTOMER.md](./TIMELINE_SUMMARY_FOR_CUSTOMER.md)** - Executive summary for customers
+- **[PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md)** - Technical implementation details
+
+### History & Reference
+- **[DEVELOPMENT_SUMMARY.md](./DEVELOPMENT_SUMMARY.md)** - Complete development history
+- **[SESSION_SUMMARY_20260731.md](./SESSION_SUMMARY_20260731.md)** - Session records
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history
+- **[DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - Navigation guide
 
 ---
 
@@ -152,10 +216,10 @@ If you encounter issues during UAT testing:
 
 ## Version History
 
-| Version | Date | Status |
-|---------|------|--------|
-| 1.0.0 | 2026-07-31 | ✅ Released |
-| 1.1.0 | TBD | 🔄 In Development (Phase 1) |
+| Version | Date | Status | Description |
+|---------|------|--------|-------------|
+| 1.1.0 | 2026-07-31 | 🔄 In Development | Phase 1 MES Architecture (Service-Oriented) |
+| 1.0.0 | 2026-07-31 | ✅ Released | Initial release (Job Card override, WO completion) |
 
 ---
 

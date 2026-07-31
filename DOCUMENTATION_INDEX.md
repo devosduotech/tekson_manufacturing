@@ -42,17 +42,19 @@ Start here if you're new to the project:
 
 | Document | Purpose | Lines | Status |
 |----------|---------|-------|--------|
-| [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) | **Latest architecture decisions** | 586 | ✅ **Current (Post-Review)** |
-| [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) | UAT findings & initial architecture | 838 | ✅ Superseded by updates |
+| [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) | **Phase 1 MES implementation guide** | ~400 | ✅ **Current (Latest)** |
+| [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) | Latest architecture decisions (MPS/MES) | 586 | ✅ Current |
+| [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) | UAT findings & initial architecture | 838 | ✅ Historical reference |
 | [SESSION_SUMMARY_20260731.md](./SESSION_SUMMARY_20260731.md) | 31-Jul session summary | 347 | ✅ Current |
 
 ### Planning & Implementation
 
 | Document | Purpose | Lines | Status |
 |----------|---------|-------|--------|
+| [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) | **Phase 1 MES architecture guide** | ~400 | ✅ **Complete** |
 | [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) | **Master timeline & roadmap** | 613 | ✅ **For customer approval** |
-| [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) | Phase 1 detailed technical plan | 399 | ✅ Ready to start |
-| [pyproject.toml](./pyproject.toml) | Project configuration | 60 | ✅ v1.0.0 |
+| [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) | Phase 1 detailed technical plan | 399 | ✅ Updated for new architecture |
+| [pyproject.toml](./pyproject.toml) | Project configuration | 60 | ✅ v1.1.0 (dev) |
 
 ---
 
@@ -92,8 +94,10 @@ Start here if you're new to the project:
 - 🔧 Review warehouse types and settings
 
 #### Understand the architecture
-- 🏗️ See [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md#12-proposed-architecture)
-- 📊 Review 9-phase breakdown
+- 🏗️ Read [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) - **Phase 1 implementation guide**
+- 🏛️ Read [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) - MPS/MES separation
+- 📊 Review service-oriented architecture
+- 🏭 See [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) - Historical context
 
 ---
 
@@ -172,13 +176,15 @@ tekson_manufacturing/
 
 | Category | Files | Total Lines |
 |----------|-------|-------------|
-| Project Overview | 1 | 140 |
+| Project Overview | 1 | 164 |
 | Development History | 1 | 445 |
-| Architecture Design | 1 | 838 |
+| Architecture Design | 3 | 1,838 |
 | Implementation Plans | 2 | 1,012 |
 | Session Summaries | 1 | 347 |
-| Version History | 1 | 25 |
-| **Total** | **7** | **2,807** |
+| Version History | 1 | 60 |
+| **Total** | **9** | **3,866** |
+
+**Note:** Excludes Phase 1 MES implementation code (~2,600 lines in 21 new files)
 
 ---
 
@@ -283,19 +289,28 @@ When reporting issues, include:
 - **2026-07-31:** Architecture review completed
 - **2026-07-31:** Project timeline proposed
 
-### Proposed Timeline (Pending Approval) 📅
+### Phase 1 MES Architecture ✅ COMPLETE
 
-**See [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) for detailed schedule**
+**Implementation Status:** Architecture implemented, ready for configuration & testing
 
-- **Phase 0:** Architecture Freeze (2-3 days) - *For approval*
-- **Phase 1:** Core Engine Development (5-6 days)
-- **Phase 2:** Configuration Layer (3 days)
-- **Phase 3:** Diagnostics & Traceability (2-3 days)
-- **Phase 4:** Internal Validation (3-4 days)
-- **Phase 5:** UAT Preparation (1-2 days)
-- **Customer UAT:** 3-5 days
+**Completed (2026-07-31):**
+- ✅ Service-Oriented Architecture restructuring
+- ✅ Execution Engine (central MES orchestrator)
+- ✅ Material Readiness Engine (source-agnostic validation)
+- ✅ Dependency Engine (previous operation validation)
+- ✅ Diagnostics Engine (clear operator messages)
+- ✅ Service Layer (reusable business logic)
+- ✅ API Layer (client-side integration)
+- ✅ Configuration Framework (Manufacturing Settings)
 
-**Total:** 16-21 working days (3-4 weeks)
+**Remaining:**
+- 🔄 Manufacturing Settings doctype (UI)
+- 🔄 Warehouse configuration
+- 🔄 Unit tests
+- 🔄 Internal testing with UAT data
+- 🔄 Second customer UAT
+
+**See [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) for implementation details**
 
 ### Planned 📋 (Post-UAT)
 
@@ -307,10 +322,23 @@ When reporting issues, include:
 ## 🔖 Bookmarks
 
 ### Essential Reading
-- [README.md](./README.md) - **Must read**
-- [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Timeline for approval**
-- [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) - **Architecture design**
+
+**For Everyone:**
+- [README.md](./README.md) - **Project overview**
+- [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) - **Phase 1 architecture**
+
+**For Customers:**
+- [TIMELINE_SUMMARY_FOR_CUSTOMER.md](./TIMELINE_SUMMARY_FOR_CUSTOMER.md) - **Executive summary**
+- [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Detailed timeline**
+
+**For Developers:**
+- [PHASE1_MES_ARCHITECTURE.md](./PHASE1_MES_ARCHITECTURE.md) - **Implementation guide**
+- [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) - **Architecture decisions**
 - [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) - **Technical details**
+
+**For Project Managers:**
+- [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Master timeline**
+- [SESSION_SUMMARY_20260731.md](./SESSION_SUMMARY_20260731.md) - **Session records**
 
 ### Reference Material
 - [DEVELOPMENT_SUMMARY.md](./DEVELOPMENT_SUMMARY.md) - Historical context
