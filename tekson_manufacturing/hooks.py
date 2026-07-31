@@ -6,7 +6,15 @@ app_email = "developer@osduotech.com"
 app_license = "mit"
 
 doc_events = {
+    "Job Card": {
+        "on_submit": "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
+        "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
+    },
+    "Stock Entry": {
+        "on_submit": "tekson_manufacturing.execution.execution_engine.on_stock_entry_submit",
+        "on_cancel": "tekson_manufacturing.execution.execution_engine.on_stock_entry_cancel",
     }
+}
 
 override_doctype_class = {
     "Job Card": "tekson_manufacturing.manufacturing.custom_job_card.TeksonJobCard"
