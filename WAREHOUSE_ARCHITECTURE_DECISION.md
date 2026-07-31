@@ -7,9 +7,9 @@
 
 ---
 
-## Decision: Department-Centric Warehouse Model
+## Decision: Department-Centric Warehouse Model with Teksons Structure
 
-The Tekson MES will use a **department-centric warehouse model** leveraging ERPNext's standard Plant Floor hierarchy, rather than operation-specific WIP warehouses.
+The Tekson MES will use a **department-centric warehouse model** leveraging ERPNext's Warehouse Group feature and Plant Floor hierarchy, with Teksons-specific naming convention.
 
 ---
 
@@ -55,49 +55,125 @@ Single Warehouse: CNC Department Store
 
 ## Warehouse Hierarchy
 
+### Teksons Warehouse Structure (Using ERPNext Warehouse Groups)
+
+```
+Work In Progress Stores (Warehouse Group)
+├── WIP-W
+├── WIP-RA
+├── WIP-RP
+├── WIP-CNC
+├── WIP-Ralu Weld
+└── WIP-Ralu In
+
+Stores (Warehouse Group)
+├── Raw Materials Stores
+└── BOF Stores
+
+Receipt and Dispatch Stores (Warehouse Group)
+├── Incoming Quality Hold Stores
+└── Incoming Quality Rejected Stores
+
+Finished Goods (Standalone Warehouse)
+
+Rejected Stores (Standalone Warehouse)
+
+Scrap Stores (Standalone Warehouse)
+```
+
 ### ERPNext Standard Mapping
 
 | ERPNext Object | Tekson Usage | Purpose |
 |----------------|--------------|---------|
-| **Plant Floor** | Manufacturing Department | CNC, W, Ralu In, Ralu Weld, RP, Assembly, Testing, Painting |
-| **Warehouse** (on Workstation) | Department WIP Store | CNC Department Store, W Department Store, etc. |
+| **Plant Floor** | Manufacturing Department | W, RA, RP, CNC, Ralu Weld, Ralu In |
+| **Warehouse** (on Workstation) | WIP Warehouse | WIP-W, WIP-RA, WIP-RP, WIP-CNC, WIP-Ralu Weld, WIP-Ralu In |
 | **Workstation Type** | Capability Group | Groups workstations that can perform same operation |
 | **Workstation** | Actual Machine/Station | Tube Expander-01, Brazing Station-01, etc. |
 | **Operation** | Standard Operation | Cutting, Drilling, Brazing, etc. |
 | **Job Card** | Execution Record | Links to Workstation and Operation |
 
+**Note:** Department and Plant Floor are the same in Teksons context.
+
+### Department to Warehouse Mapping
+
+| Plant Floor (Department) | Warehouse | Parent Group |
+|--------------------------|-----------|--------------|
+| W | WIP-W | Work In Progress Stores |
+| RA | WIP-RA | Work In Progress Stores |
+| RP | WIP-RP | Work In Progress Stores |
+| CNC | WIP-CNC | Work In Progress Stores |
+| Ralu Weld | WIP-Ralu Weld | Work In Progress Stores |
+| Ralu In | WIP-Ralu In | Work In Progress Stores |
+
 ### Material Flow
 
+#### Incoming Material Flow (Receipt and Dispatch)
+
 ```
-Incoming Quality
+Supplier Delivery
         │
-        ├── RM Store (Raw Materials)
-        └── BOF Parts Store (Bought-out Parts)
-                 │
-        Material Transfer for Manufacture
-                 │
-        CNC Department Store
-                 │
-        [All CNC Job Cards: JC-10 → JC-20 → JC-30]
-                 │
-        Department Transfer
-                 │
-        Ralu Weld Department Store
-                 │
-        [All Ralu Weld Job Cards]
-                 │
-        Department Transfer
-                 │
-        Assembly Department Store
-                 │
-        [Final Assembly Job Cards]
-                 │
-        Manufacture Stock Entry
-                 │
-        Finished Goods Store
+        ▼
+Receipt and Dispatch Stores
+        │
+        ▼
+Incoming Quality Hold Stores
+        │
+    Inspection
+        │
+    ┌───┴─────────────┐
+    │                 │
+Accepted          Rejected
+    │                 │
+    ▼                 ▼
+┌───┴───────┐    Incoming Quality
+│           │    Rejected Stores
+Raw Materials  (under Receipt and
+Stores       Dispatch Stores)
+    │
+BOF Stores
+(under Stores)
 ```
 
-**Key Principle:** Materials move between **departments**, not between individual operations.
+#### Production Material Flow
+
+```
+Raw Materials Stores / BOF Stores
+        │
+        ▼
+Material Transfer for Manufacture
+        │
+        ▼
+WIP-CNC (for CNC Department)
+        │
+        ▼
+[All CNC Job Cards]
+        │
+        ▼
+Department Transfer
+        │
+        ▼
+WIP-Ralu Weld (for Ralu Weld Department)
+        │
+        ▼
+[All Ralu Weld Job Cards]
+        │
+        ▼
+Department Transfer
+        │
+        ▼
+WIP-Assembly
+        │
+        ▼
+[Final Assembly Job Cards]
+        │
+        ▼
+Manufacture Stock Entry
+        │
+        ▼
+Finished Goods
+```
+
+**Key Principle:** Materials move between **departments** (WIP warehouses), not between individual operations.
 
 ---
 
@@ -114,21 +190,37 @@ Workstation: Tube Expander-01
 └── Warehouse: CNC Department Store
 ```
 
-### Department Structure
+### Teksons Department Structure
 
 ```
-CNC Department (Plant Floor)
-├── Workstation: Tube Expander-01 → CNC Department Store
-├── Workstation: Tube Expander-02 → CNC Department Store
-├── Workstation: Lathe-01 → CNC Department Store
-└── Workstation: Lathe-02 → CNC Department Store
-
 W Department (Plant Floor)
-├── Workstation: Press-01 → W Department Store
-└── Workstation: Press-02 → W Department Store
+├── Workstation: Press-01 → WIP-W
+└── Workstation: Press-02 → WIP-W
+
+RA Department (Plant Floor)
+├── Workstation: Station-01 → WIP-RA
+└── Workstation: Station-02 → WIP-RA
+
+RP Department (Plant Floor)
+├── Workstation: Station-01 → WIP-RP
+└── Workstation: Station-02 → WIP-RP
+
+CNC Department (Plant Floor)
+├── Workstation: Tube Expander-01 → WIP-CNC
+├── Workstation: Tube Expander-02 → WIP-CNC
+├── Workstation: Lathe-01 → WIP-CNC
+└── Workstation: Lathe-02 → WIP-CNC
+
+Ralu Weld Department (Plant Floor)
+├── Workstation: Brazing-01 → WIP-Ralu Weld
+└── Workstation: Brazing-02 → WIP-Ralu Weld
+
+Ralu In Department (Plant Floor)
+├── Workstation: Station-01 → WIP-Ralu In
+└── Workstation: Station-02 → WIP-Ralu In
 ```
 
-All workstations within same department point to same warehouse.
+All workstations within same department point to same WIP warehouse.
 
 ---
 

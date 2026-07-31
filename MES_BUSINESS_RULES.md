@@ -414,37 +414,55 @@ Action: [Actionable step]
 
 ## Warehouse & Inventory Rules
 
-### WH-001: Warehouse Type Classification
+### WH-001: Warehouse Type Classification (Teksons Structure)
 
-**Rule:** Warehouses must be classified by type to match physical factory structure.
+**Rule:** Warehouses must use ERPNext Warehouse Group feature with parent-child hierarchy matching Teksons factory structure.
 
-**Types:**
-- **Incoming Stores:**
-  - RM Store (Raw Materials: sheets, tubes, copper, steel)
-  - BOF Parts Store (Bought-out Parts)
-- **Department Stores:** Department WIP warehouses
-  - CNC Department Store
-  - W Department Store
-  - Ralu In Department Store
-  - Ralu Weld Department Store
-  - RP Department Store
-  - Assembly Department Store
-  - Testing Department Store
-  - Painting Department Store
-- **Finished Goods Store:** Completed products
-- **Quality Stores:**
-  - Rework Store
-  - Reject Store
+**Warehouse Hierarchy:**
 
-**Rationale:** Department stores reflect actual shop-floor movement. Materials move between departments, not between every operation.
+```
+Work In Progress Stores (Warehouse Group)
+├── WIP-W
+├── WIP-RA
+├── WIP-RP
+├── WIP-CNC
+├── WIP-Ralu Weld
+└── WIP-Ralu In
+
+Stores (Warehouse Group)
+├── Raw Materials Stores
+└── BOF Stores
+
+Receipt and Dispatch Stores (Warehouse Group)
+├── Incoming Quality Hold Stores
+└── Incoming Quality Rejected Stores
+
+Finished Goods (Standalone Warehouse)
+
+Rejected Stores (Standalone Warehouse)
+
+Scrap Stores (Standalone Warehouse)
+```
+
+**Department to Warehouse Mapping:**
+| Department (Plant Floor) | Warehouse |
+|--------------------------|-----------|
+| W | WIP-W |
+| RA | WIP-RA |
+| RP | WIP-RP |
+| CNC | WIP-CNC |
+| Ralu Weld | WIP-Ralu Weld |
+| Ralu In | WIP-Ralu In |
+
+**Rationale:** Warehouse groups provide organizational structure. Materials move between departments, not between every operation.
 
 ---
 
-### WH-002: Department-Centric Warehouse Model
+### WH-002: Department-to-Warehouse Mapping
 
-**Rule:** Warehouse configuration follows ERPNext standard hierarchy using Plant Floor.
+**Rule:** Each department (Plant Floor) maps to its corresponding WIP warehouse under Work In Progress Stores group.
 
-**Hierarchy:**
+**Mapping:**
 ```
 Plant Floor (Department)
         │
@@ -452,35 +470,35 @@ Plant Floor (Department)
 Workstation Type
         │
         ▼
-Workstation → Warehouse (inherits from Plant Floor)
+Workstation → Warehouse
         │
         ▼
 Job Card
 ```
 
-**ERPNext Standard Mapping:**
-| ERPNext Object | Tekson Usage |
-|----------------|--------------|
-| Plant Floor | Manufacturing Department (CNC, W, Ralu In, Ralu Weld, RP, Assembly, Testing, Painting) |
-| Warehouse | Department WIP Store |
-| Workstation Type | Capability group (same operation) |
-| Workstation | Actual machine or station |
-| Operation | Standard ERPNext manufacturing operation |
-| Job Card | Execution record |
+**Teksons Mapping Table:**
+| Plant Floor (Department) | Warehouse | Parent Group |
+|--------------------------|-----------|--------------|
+| W | WIP-W | Work In Progress Stores |
+| RA | WIP-RA | Work In Progress Stores |
+| RP | WIP-RP | Work In Progress Stores |
+| CNC | WIP-CNC | Work In Progress Stores |
+| Ralu Weld | WIP-Ralu Weld | Work In Progress Stores |
+| Ralu In | WIP-Ralu In | Work In Progress Stores |
 
 **Configuration:**
-- Plant Floor defines the manufacturing department
-- Workstation.Warehouse points to Department Store
+- Plant Floor = Department (W, RA, RP, CNC, Ralu Weld, Ralu In)
+- Workstation.Warehouse = Corresponding WIP warehouse
 - All workstations in same department use same warehouse
 - Job Card inherits warehouse from Workstation
 
-**Exception:** If workstation movement between departments becomes frequent, Plant Floor-level warehouse configuration may be added as future enhancement.
+**Note:** Department and Plant Floor are the same in Teksons context.
 
 ---
 
 ### WH-003: Department Warehouse Validation Scope
 
-**Rule:** Job Cards validate materials in their **Department Warehouse**.
+**Rule:** Job Cards validate materials in their **assigned WIP warehouse** based on Plant Floor.
 
 **Logic:**
 ```
@@ -488,87 +506,96 @@ Job Card
     ↓
 Workstation
     ↓
-Plant Floor
+Plant Floor (Department)
     ↓
-Department Warehouse
+WIP Warehouse
 ```
 
 **Material Readiness:**
-- All operations within same department use same warehouse
+- All operations within same department use same WIP warehouse
 - No stock movement between operations in same department
 - Stock moves only when transferring between departments
 
 **Example:**
 ```
-CNC Department (Warehouse: CNC Department Store)
+CNC Department (Warehouse: WIP-CNC)
 ├── Operation 10: Cutting
 ├── Operation 20: Drilling
 └── Operation 30: Deburring
 
 Material Flow:
-RM Store → CNC Department Store → [JC-10 → JC-20 → JC-30] → Ralu Weld Department Store
+Raw Materials Stores → WIP-CNC → [JC-10 → JC-20 → JC-30] → WIP-Ralu Weld
 ```
 
 **Exception:** Common components check global stock across all departments.
 
 ---
 
-### WH-004: Department-to-Department Material Flow
+### WH-004: Incoming Material Flow (Receipt and Dispatch)
 
-**Rule:** Material transfers occur between departments, not between individual operations.
+**Rule:** All incoming materials flow through Receipt and Dispatch Stores with quality inspection.
 
-**Flow:**
+**Incoming Material Flow:**
 ```
-Incoming Quality
+Supplier Delivery
         │
-        ├── RM Store
-        └── BOF Parts Store
-                 │
-        Material Transfer for Manufacture
-                 │
-        CNC Department Store
-                 │
-        [All CNC Job Cards]
-                 │
-        Department Transfer
-                 │
-        Ralu Weld Department Store
-                 │
-        [All Ralu Weld Job Cards]
-                 │
-        Department Transfer
-                 │
-        Assembly Department Store
-                 │
-        [Final Assembly Job Cards]
-                 │
-        Manufacture Stock Entry
-                 │
-        Finished Goods Store
+        ▼
+Receipt and Dispatch Stores
+        │
+        ▼
+Incoming Quality Hold Stores
+        │
+    Inspection
+        │
+    ┌───┴─────────────┐
+    │                 │
+Accepted          Rejected
+    │                 │
+    ▼                 ▼
+┌───┴───────┐    Incoming Quality
+│           │    Rejected Stores
+Raw Materials  (under Receipt and
+Stores       Dispatch Stores)
+    │
+BOF Stores
+(under Stores)
 ```
+
+**Quality Inspection Process:**
+1. Material received in Receipt and Dispatch Stores
+2. Transferred to Incoming Quality Hold Stores for inspection
+3. If accepted:
+   - Raw materials → Raw Materials Stores
+   - BOF parts → BOF Stores
+4. If rejected → Incoming Quality Rejected Stores (under Receipt and Dispatch Stores)
 
 **MES Behavior:**
-- When last Job Card of department completes, MES suggests transfer to next department
-- No unnecessary stock movement between operations within same department
-- Reflects actual physical shop-floor movement
+- Material Readiness Engine checks appropriate store based on material type
+- Only accepted materials in Raw Materials Stores or BOF Stores are available for production
 
 ---
 
-### WH-005: Warehouse Naming Convention
+### WH-005: Teksons Warehouse Naming Convention
 
-**Rule:** Warehouse names must explicitly indicate their purpose.
+**Rule:** Warehouse names must follow Teksons naming convention with parent-child structure.
 
-**Naming Standard:**
-- `[Department Name] Department Store` (e.g., "CNC Department Store")
-- `RM Store` (Raw Material Store)
-- `BOF Parts Store` (Bought-out Parts Store)
-- `FG Store` (Finished Goods Store)
-- `Rework Store`
-- `Reject Store`
+**Warehouse Groups (Parent):**
+- Work In Progress Stores
+- Stores
+- Receipt and Dispatch Stores
 
-**Avoid:** Generic "WIP" naming without department context.
+**Child Warehouses:**
+- **WIP Warehouses:** WIP-W, WIP-RA, WIP-RP, WIP-CNC, WIP-Ralu Weld, WIP-Ralu In
+- **Stores:** Raw Materials Stores, BOF Stores
+- **Receipt and Dispatch:** Incoming Quality Hold Stores, Incoming Quality Rejected Stores
+- **Standalone:** Finished Goods, Rejected Stores, Scrap Stores
 
-**Rationale:** Clear naming helps operators and supervisors understand inventory ownership and location.
+**Naming Pattern:**
+- WIP warehouses: `WIP-[Department]` (e.g., WIP-CNC, WIP-W)
+- Quality warehouses: `Incoming Quality [Status] Stores`
+- Material stores: `[Material Type] Stores`
+
+**Rationale:** Consistent naming aligned with Teksons operational terminology helps operators and supervisors quickly identify warehouse purposes and material locations.
 
 ---
 

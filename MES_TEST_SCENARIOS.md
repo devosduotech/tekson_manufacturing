@@ -280,6 +280,27 @@ This document defines test scenarios for validating the Manufacturing Execution 
 
 ## Warehouse Tests
 
+### TC-WH-000: Incoming Material Flow (Receipt and Dispatch)
+
+**Rule:** WH-004
+
+**Scenario:**
+1. Receive material from supplier
+2. Store in Receipt and Dispatch Stores
+3. Transfer to Incoming Quality Hold Stores
+4. Inspect material
+5a. If accepted: Transfer to Raw Materials Stores or BOF Stores
+5b. If rejected: Transfer to Incoming Quality Rejected Stores
+
+**Expected Result:**
+- ✅ Material flows through Receipt and Dispatch Stores
+- ✅ Quality inspection in Incoming Quality Hold Stores
+- ✅ Accepted materials move to appropriate Stores
+- ✅ Rejected materials move to Incoming Quality Rejected Stores
+- ✅ All under correct warehouse groups
+
+---
+
 ### TC-WH-001: Job Card Inherits Warehouse from Workstation
 
 **Rule:** WH-002
@@ -287,12 +308,13 @@ This document defines test scenarios for validating the Manufacturing Execution 
 **Scenario:**
 - Create Workstation: Tube Expander-01
 - Plant Floor: CNC
-- Warehouse: CNC Department Store
+- Warehouse: WIP-CNC (under Work In Progress Stores)
 - Create Job Card for Tube Expander-01
 
 **Expected Result:**
-- ✅ Job Card warehouse = CNC Department Store
+- ✅ Job Card warehouse = WIP-CNC
 - ✅ Inherited from Workstation configuration
+- ✅ Parent warehouse group = Work In Progress Stores
 
 ---
 
@@ -302,21 +324,22 @@ This document defines test scenarios for validating the Manufacturing Execution 
 
 **Scenario:**
 - CNC Department workstations:
-  - Tube Expander-01 → CNC Department Store
-  - Tube Expander-02 → CNC Department Store
-  - Lathe-01 → CNC Department Store
-  - Lathe-02 → CNC Department Store
+  - Tube Expander-01 → WIP-CNC
+  - Tube Expander-02 → WIP-CNC
+  - Lathe-01 → WIP-CNC
+  - Lathe-02 → WIP-CNC
 - Check all warehouses
 
 **Expected Result:**
-- ✅ All workstations point to CNC Department Store
+- ✅ All workstations point to WIP-CNC
+- ✅ All under Work In Progress Stores group
 - ✅ Consistent configuration
 
 ---
 
 ### TC-WH-003: No Transfer Within Same Department
 
-**Rule:** WH-004
+**Rule:** WH-003
 
 **Scenario:**
 - CNC Department has 3 operations:
@@ -327,14 +350,14 @@ This document defines test scenarios for validating the Manufacturing Execution 
 
 **Expected Result:**
 - ✅ No stock transfer required
-- ✅ Both operations use CNC Department Store
+- ✅ Both operations use WIP-CNC
 - ✅ Material stays in same warehouse
 
 ---
 
 ### TC-WH-004: Transfer Suggested When Leaving Department
 
-**Rule:** WH-004
+**Rule:** WH-003
 
 **Scenario:**
 - Last Job Card in CNC Department completes
@@ -342,8 +365,8 @@ This document defines test scenarios for validating the Manufacturing Execution 
 
 **Expected Result:**
 - ✅ MES suggests transfer
-- ✅ From: CNC Department Store
-- ✅ To: Ralu Weld Department Store
+- ✅ From: WIP-CNC
+- ✅ To: WIP-Ralu Weld
 - ✅ Transfer recommendation shown to user
 
 ---
@@ -357,25 +380,25 @@ This document defines test scenarios for validating the Manufacturing Execution 
 - Check material readiness
 
 **Expected Result:**
-- ✅ Checks CNC Department Store
+- ✅ Checks WIP-CNC
 - ✅ Not operation-specific warehouse
-- ✅ Cumulative transfers to CNC Department Store counted
+- ✅ Cumulative transfers to WIP-CNC counted
 
 ---
 
-### TC-WH-006: Department Warehouse Naming
+### TC-WH-006: Teksons Warehouse Naming Convention
 
 **Rule:** WH-005
 
 **Scenario:**
-- Review all department warehouse names
+- Review all warehouse names in system
 
 **Expected Result:**
-- ✅ CNC Department Store (not "WIP-CNC")
-- ✅ W Department Store
-- ✅ Ralu Weld Department Store
-- ✅ Assembly Department Store
-- ✅ Clear, descriptive naming
+- ✅ WIP warehouses: WIP-W, WIP-RA, WIP-RP, WIP-CNC, WIP-Ralu Weld, WIP-Ralu In
+- ✅ Stores: Raw Materials Stores, BOF Stores
+- ✅ Receipt and Dispatch: Incoming Quality Hold Stores, Incoming Quality Rejected Stores
+- ✅ Standalone: Finished Goods, Rejected Stores, Scrap Stores
+- ✅ All follow Teksons naming convention
 
 ---
 
@@ -515,20 +538,33 @@ This document defines test scenarios for validating the Manufacturing Execution 
 - CC-001: Common Component (Fins)
 - CC-002: Common Component (Turbulators)
 
-### Warehouses (Department Stores)
-- RM-STORE: Raw Material Store
-- BOF-STORE: BOF Parts Store
-- CNC-STORE: CNC Department Store
-- W-STORE: W Department Store
-- RALU-IN-STORE: Ralu In Department Store
-- RALU-WELD-STORE: Ralu Weld Department Store
-- RP-STORE: RP Department Store
-- ASM-STORE: Assembly Department Store
-- TEST-STORE: Testing Department Store
-- PAINT-STORE: Painting Department Store
-- FG-STORE: Finished Goods Store
-- REWORK-STORE: Rework Store
-- REJECT-STORE: Reject Store
+### Warehouses (Teksons Structure)
+
+**Warehouse Groups:**
+- WIP-GROUP: Work In Progress Stores
+- STORES-GROUP: Stores
+- RD-GROUP: Receipt and Dispatch Stores
+
+**WIP Warehouses:**
+- WIP-W: W Department
+- WIP-RA: RA Department
+- WIP-RP: RP Department
+- WIP-CNC: CNC Department
+- WIP-RALU-WELD: Ralu Weld Department
+- WIP-RALU-IN: Ralu In Department
+
+**Stores:**
+- RM-STORES: Raw Materials Stores
+- BOF-STORES: BOF Stores
+
+**Receipt and Dispatch:**
+- IQH-STORES: Incoming Quality Hold Stores
+- IQR-STORES: Incoming Quality Rejected Stores
+
+**Standalone Warehouses:**
+- FG: Finished Goods
+- REJECT: Rejected Stores
+- SCRAP: Scrap Stores
 
 ---
 
