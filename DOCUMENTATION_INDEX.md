@@ -42,7 +42,8 @@ Start here if you're new to the project:
 
 | Document | Purpose | Lines | Status |
 |----------|---------|-------|--------|
-| [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) | UAT findings & new architecture | 838 | ✅ Approved v1.0 |
+| [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) | **Latest architecture decisions** | 586 | ✅ **Current (Post-Review)** |
+| [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) | UAT findings & initial architecture | 838 | ✅ Superseded by updates |
 | [SESSION_SUMMARY_20260731.md](./SESSION_SUMMARY_20260731.md) | 31-Jul session summary | 347 | ✅ Current |
 
 ### Planning & Implementation
@@ -62,7 +63,8 @@ Start here if you're new to the project:
 #### Understand the project
 - 📖 Read [README.md](./README.md) for overview
 - 📖 Read [DEVELOPMENT_SUMMARY.md](./DEVELOPMENT_SUMMARY.md) for history
-- 📖 Review [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) for architecture
+- 📖 Read [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) for **latest architecture**
+- 📖 Review [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) for historical context
 
 #### Install the application
 - 📥 Follow instructions in [README.md](./README.md#installation)
@@ -74,6 +76,7 @@ Start here if you're new to the project:
 #### Understand UAT issues
 - 🔍 Read [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md#4-customer-observations--issues)
 - 📊 Review UAT data in `UAT/` folder
+- 🔧 See [ARCHITECTURE_UPDATES.md](./ARCHITECTURE_UPDATES.md) for resolution approach
 
 #### Understand the timeline
 - 📅 Read [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Master timeline**
