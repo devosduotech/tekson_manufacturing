@@ -1,12 +1,12 @@
 [project]
 name = "tekson_manufacturing"
+version = "1.0.0"
 authors = [
     { name = "OSDuo Tech LLP", email = "developer@osduotech.com"}
 ]
 description = "Teksons Manufacturing Enhancements"
 requires-python = ">=3.10"
 readme = "README.md"
-dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
 ]
