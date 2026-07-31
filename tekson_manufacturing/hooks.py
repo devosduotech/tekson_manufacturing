@@ -5,6 +5,17 @@ app_description = "Teksons Manufacturing Enhancements"
 app_email = "developer@osduotech.com"
 app_license = "mit"
 
+doc_events = {
+    }
+
+override_doctype_class = {
+    "Job Card": "tekson_manufacturing.manufacturing.custom_job_card.TeksonJobCard"
+}
+
+app_include_js = [
+    "/assets/tekson_manufacturing/js/job_card_list.js"
+]
+
 # Apps
 # ------------------
 
