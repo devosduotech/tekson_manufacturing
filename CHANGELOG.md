@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-07-31 (In Development)
+## [In Development] - MES Architecture & Framework
 
-### Added - Phase 1 MES Architecture
+### Added - MES Architecture & Framework Implementation
 
 #### Core MES Engines
 - **Execution Engine** - Central orchestrator for manufacturing execution
@@ -65,10 +65,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical Details
 - New folder structure: `execution/`, `readiness/`, `validation/`, `diagnostics/`, `services/`, `api/`, `settings/`
-- ~2,600 lines of new code
+- ~2,600 lines of framework code implemented
 - 21 new files created
 - 3 files modified
-- Full backward compatibility with v1.0.0
+- Full backward compatibility maintained
+- Architecture frozen - business logic implementation in progress
+
+### Implementation Notes
+- Framework provides structure, interfaces, and orchestration
+- Business logic implementation ongoing (Material Readiness priority)
+- Testing pending completion of core engines
+- Version will be assigned after successful UAT and bug fixes
 
 ---
 
