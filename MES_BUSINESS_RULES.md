@@ -228,14 +228,157 @@ Status: Ready (100 kg cumulative)
 
 ---
 
-### MR-010: Planning vs. Execution Boundary
+### MR-010: Material Transfer from Stores to Production
 
-**Rule:** The source of a material is determined by **ERPNext planning**. The MES only validates **readiness**.
+**Rule:** Production starts only after required materials have been transferred by Stores to the Department Warehouse.
+
+**Business Process:**
+```
+Production Plan
+        │
+Generate Work Orders
+        │
+Planner submits Work Order
+        │
+────────────────────────────────────────
+Stores Responsibility Begins
+────────────────────────────────────────
+        │
+Transfer Material
+RM / BOF Store
+        │
+Department Warehouse (WIP)
+        │
+────────────────────────────────────────
+Production Responsibility Begins
+────────────────────────────────────────
+        │
+Material Readiness Validation
+        │
+Release Job Cards
+        │
+Execute Production
+```
+
+**Ownership:**
+
+| Activity | Department |
+|----------|------------|
+| Production Planning | Planning |
+| Work Order Release | Planning |
+| Material Picking | Stores |
+| Material Transfer to WIP | Stores |
+| Material Availability Validation | MES |
+| Job Card Execution | Production |
+| Production Reporting | Production |
+| Finished Goods Receipt | Production |
+
+**Material Flow:**
+```
+Incoming Inspection
+        │
+───────────────
+RM Store
+───────────────
+        │
+        │
+───────────────
+BOF Store
+───────────────
+        │
+        │
+Material Transfer (By Stores)
+        │
+        ▼
+Department Warehouse (CNC / W / Ralu Weld / RP ...)
+        │
+Material Readiness
+        │
+Job Card Start
+        │
+Manufacturing
+```
+
+**MES Principle:**
+The Material Readiness Engine shall not determine readiness based solely on BOM requirements. Instead, it shall validate that required materials have already been transferred into the **Department Warehouse** assigned to the Work Order. Only then shall the Job Card become eligible for execution.
+
+**Benefits:**
+- Clear separation of responsibilities between Planning, Stores, and Production
+- Stores control inventory issuance and accountability
+- Production focuses solely on manufacturing execution
+- Material Readiness is based on **actual stock available in the production department**, not on planned BOM requirements
+- Aligns MES with physical flow of materials on shop floor
+- Reduces operator workload by eliminating material issue transactions from production process
+
+---
+
+### MR-011: Stores Completeness Rule (Cumulative Availability)
+
+**Rule:** Material Transfer against a Work Order is treated as a **working set**, not necessarily a single transaction.
 
 **Principle:**
-- Planning decides: Internal vs Purchase vs Subcontract
-- Execution checks: Is quantity available?
-- MES does not modify planning decisions
+The MES must evaluate **cumulative material availability** in the Department Warehouse for the Work Order, regardless of whether Stores transfers the material:
+- In a single Stock Entry
+- In multiple partial Stock Entries
+- Over multiple days
+
+**Validation Logic:**
+```
+Required Qty for WO = 100 kg
+
+Transfer 1 = 40 kg (SE-001)
+Transfer 2 = 35 kg (SE-002)
+Transfer 3 = 25 kg (SE-003)
+─────────────────────────────
+Cumulative Available = 100 kg ✅
+
+Material Readiness = Ready
+Job Cards can start
+```
+
+**Rationale for Teksons:**
+- Raw materials and BOF parts may arrive or be issued at different times
+- Common sub-assemblies may be manufactured and transferred in batches
+- Large Work Orders may be supplied in multiple stages
+- Production should begin as soon as required materials for current stage are available
+- Should not depend on a single transfer document
+
+**MES Implementation:**
+The Material Readiness Engine shall validate:
+```
+Sum(all Material Transfer entries to Department Warehouse for WO)
+>=
+Work Order Required Quantity
+```
+
+**Not:**
+```
+Check if single Stock Entry exists for full quantity
+```
+
+**Example:**
+```
+Work Order: WO-2026-001
+Item: Copper Tube
+Required: 100 kg
+
+Stock Entries:
+SE-001: 40 kg (01-Aug)
+SE-002: 35 kg (02-Aug)
+SE-003: 25 kg (03-Aug)
+
+Status after SE-003:
+Cumulative = 100 kg ✅
+Material Readiness = Ready
+Job Cards can start
+```
+
+**Benefits:**
+- Flexibility for Stores to issue materials in stages
+- Production can start as soon as sufficient material is available
+- No artificial dependency on single Stock Entry
+- Reflects real-world material issuance practices
+- Supports partial deliveries and batch transfers
 
 ---
 
