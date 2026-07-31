@@ -49,7 +49,8 @@ Start here if you're new to the project:
 
 | Document | Purpose | Lines | Status |
 |----------|---------|-------|--------|
-| [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) | Phase 1 detailed plan | 399 | ✅ Ready to start |
+| [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) | **Master timeline & roadmap** | 613 | ✅ **For customer approval** |
+| [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) | Phase 1 detailed technical plan | 399 | ✅ Ready to start |
 | [pyproject.toml](./pyproject.toml) | Project configuration | 60 | ✅ v1.0.0 |
 
 ---
@@ -73,6 +74,10 @@ Start here if you're new to the project:
 #### Understand UAT issues
 - 🔍 Read [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md#4-customer-observations--issues)
 - 📊 Review UAT data in `UAT/` folder
+
+#### Understand the timeline
+- 📅 Read [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Master timeline**
+- 📋 Review [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) for technical details
 
 #### Start Phase 1 development
 - 📋 Read [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md)
@@ -167,10 +172,10 @@ tekson_manufacturing/
 | Project Overview | 1 | 140 |
 | Development History | 1 | 445 |
 | Architecture Design | 1 | 838 |
-| Implementation Plans | 1 | 399 |
+| Implementation Plans | 2 | 1,012 |
 | Session Summaries | 1 | 347 |
 | Version History | 1 | 25 |
-| **Total** | **6** | **2,194** |
+| **Total** | **7** | **2,807** |
 
 ---
 
@@ -273,19 +278,26 @@ When reporting issues, include:
 - **2026-07-31:** Session 1 - Initial development & UAT
 - **2026-07-31:** v1.0.0 released
 - **2026-07-31:** Architecture review completed
+- **2026-07-31:** Project timeline proposed
 
-### In Progress 🔄
+### Proposed Timeline (Pending Approval) 📅
 
-- **Phase 1:** Material Readiness Engine (2-3 weeks)
-  - Week 1: Core engines
-  - Week 2: Configuration & diagnostics
-  - Week 3: Testing & UAT prep
+**See [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) for detailed schedule**
 
-### Planned 📋
+- **Phase 0:** Architecture Freeze (2-3 days) - *For approval*
+- **Phase 1:** Core Engine Development (5-6 days)
+- **Phase 2:** Configuration Layer (3 days)
+- **Phase 3:** Diagnostics & Traceability (2-3 days)
+- **Phase 4:** Internal Validation (3-4 days)
+- **Phase 5:** UAT Preparation (1-2 days)
+- **Customer UAT:** 3-5 days
 
-- **Phase 2:** Material Reservations & Planning Rules
-- **Phase 3:** Subcontract Integration
-- **Phase 4:** Dashboards & Analytics
+**Total:** 16-21 working days (3-4 weeks)
+
+### Planned 📋 (Post-UAT)
+
+- **Release 1.2:** Operator Work Queue, Dashboards
+- **Release 2.0:** Advanced Manufacturing, OEE, Analytics
 
 ---
 
@@ -293,8 +305,9 @@ When reporting issues, include:
 
 ### Essential Reading
 - [README.md](./README.md) - **Must read**
-- [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) - **Critical for Phase 1**
-- [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) - **Current focus**
+- [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) - **Timeline for approval**
+- [UAT_REVIEW_ARCHITECTURE.md](./UAT_REVIEW_ARCHITECTURE.md) - **Architecture design**
+- [PHASE1_IMPLEMENTATION_PLAN.md](./PHASE1_IMPLEMENTATION_PLAN.md) - **Technical details**
 
 ### Reference Material
 - [DEVELOPMENT_SUMMARY.md](./DEVELOPMENT_SUMMARY.md) - Historical context
