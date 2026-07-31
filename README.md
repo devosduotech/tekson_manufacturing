@@ -137,7 +137,11 @@ tekson_manufacturing/
 
 ### Architecture Documentation
 
-See [MES_ARCHITECTURE_IMPLEMENTATION.md](./MES_ARCHITECTURE_IMPLEMENTATION.md) for detailed architecture and implementation guide.
+- **[MES_ARCHITECTURE_IMPLEMENTATION.md](./MES_ARCHITECTURE_IMPLEMENTATION.md)** - MES architecture & implementation guide
+- **[MES_BUSINESS_RULES.md](./MES_BUSINESS_RULES.md)** - Business rules specification (70+ rules)
+- **[WAREHOUSE_ARCHITECTURE_DECISION.md](./WAREHOUSE_ARCHITECTURE_DECISION.md)** - Department-centric warehouse model ⭐ NEW
+- **[IMPLEMENTATION_TRACEABILITY.md](./IMPLEMENTATION_TRACEABILITY.md)** - Rule-to-code mapping
+- **[MES_TEST_SCENARIOS.md](./MES_TEST_SCENARIOS.md)** - Test scenarios and UAT checklist
 
 ---
 

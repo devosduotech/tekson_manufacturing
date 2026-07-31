@@ -416,51 +416,159 @@ Action: [Actionable step]
 
 ### WH-001: Warehouse Type Classification
 
-**Rule:** Warehouses must be classified by type.
+**Rule:** Warehouses must be classified by type to match physical factory structure.
 
 **Types:**
-- **Raw Material Store:** Purchased materials (steel, copper, fasteners)
-- **Common Component Store:** Shared manufactured components (fins, turbulators)
-- **Process WIP:** Operation-specific production warehouses
+- **Incoming Stores:**
+  - RM Store (Raw Materials: sheets, tubes, copper, steel)
+  - BOF Parts Store (Bought-out Parts)
+- **Department Stores:** Department WIP warehouses
+  - CNC Department Store
+  - W Department Store
+  - Ralu In Department Store
+  - Ralu Weld Department Store
+  - RP Department Store
+  - Assembly Department Store
+  - Testing Department Store
+  - Painting Department Store
 - **Finished Goods Store:** Completed products
-- **Reject Warehouse:** Scrap/rejected items
-- **Rework Warehouse:** Items requiring rework
-- **Vendor Warehouse:** Subcontracted items
+- **Quality Stores:**
+  - Rework Store
+  - Reject Store
+
+**Rationale:** Department stores reflect actual shop-floor movement. Materials move between departments, not between every operation.
 
 ---
 
-### WH-002: Operation-to-Warehouse Mapping
+### WH-002: Department-Centric Warehouse Model
 
-**Rule:** Each operation should have a default WIP warehouse.
+**Rule:** Warehouse configuration follows ERPNext standard hierarchy using Plant Floor.
+
+**Hierarchy:**
+```
+Plant Floor (Department)
+        │
+        ▼
+Workstation Type
+        │
+        ▼
+Workstation → Warehouse (inherits from Plant Floor)
+        │
+        ▼
+Job Card
+```
+
+**ERPNext Standard Mapping:**
+| ERPNext Object | Tekson Usage |
+|----------------|--------------|
+| Plant Floor | Manufacturing Department (CNC, W, Ralu In, Ralu Weld, RP, Assembly, Testing, Painting) |
+| Warehouse | Department WIP Store |
+| Workstation Type | Capability group (same operation) |
+| Workstation | Actual machine or station |
+| Operation | Standard ERPNext manufacturing operation |
+| Job Card | Execution record |
 
 **Configuration:**
-- Operation.default_wip_warehouse (operation-level override)
-- Manufacturing Settings.default_wip_warehouse (company default)
+- Plant Floor defines the manufacturing department
+- Workstation.Warehouse points to Department Store
+- All workstations in same department use same warehouse
+- Job Card inherits warehouse from Workstation
+
+**Exception:** If workstation movement between departments becomes frequent, Plant Floor-level warehouse configuration may be added as future enhancement.
 
 ---
 
-### WH-003: Warehouse Validation Scope
+### WH-003: Department Warehouse Validation Scope
 
-**Rule:** Operations validate materials only in their **assigned WIP warehouse**.
+**Rule:** Job Cards validate materials in their **Department Warehouse**.
 
-**Exception:** Common components check global stock.
+**Logic:**
+```
+Job Card
+    ↓
+Workstation
+    ↓
+Plant Floor
+    ↓
+Department Warehouse
+```
+
+**Material Readiness:**
+- All operations within same department use same warehouse
+- No stock movement between operations in same department
+- Stock moves only when transferring between departments
+
+**Example:**
+```
+CNC Department (Warehouse: CNC Department Store)
+├── Operation 10: Cutting
+├── Operation 20: Drilling
+└── Operation 30: Deburring
+
+Material Flow:
+RM Store → CNC Department Store → [JC-10 → JC-20 → JC-30] → Ralu Weld Department Store
+```
+
+**Exception:** Common components check global stock across all departments.
 
 ---
 
-### WH-004: Material Transfer Direction
+### WH-004: Department-to-Department Material Flow
 
-**Rule:** Material transfers must follow standard flow.
+**Rule:** Material transfers occur between departments, not between individual operations.
 
 **Flow:**
 ```
-Raw Material Store
-        ↓
-Process WIP (Operation 1)
-        ↓
-Process WIP (Operation 2)
-        ↓
-Finished Goods Store
+Incoming Quality
+        │
+        ├── RM Store
+        └── BOF Parts Store
+                 │
+        Material Transfer for Manufacture
+                 │
+        CNC Department Store
+                 │
+        [All CNC Job Cards]
+                 │
+        Department Transfer
+                 │
+        Ralu Weld Department Store
+                 │
+        [All Ralu Weld Job Cards]
+                 │
+        Department Transfer
+                 │
+        Assembly Department Store
+                 │
+        [Final Assembly Job Cards]
+                 │
+        Manufacture Stock Entry
+                 │
+        Finished Goods Store
 ```
+
+**MES Behavior:**
+- When last Job Card of department completes, MES suggests transfer to next department
+- No unnecessary stock movement between operations within same department
+- Reflects actual physical shop-floor movement
+
+---
+
+### WH-005: Warehouse Naming Convention
+
+**Rule:** Warehouse names must explicitly indicate their purpose.
+
+**Naming Standard:**
+- `[Department Name] Department Store` (e.g., "CNC Department Store")
+- `RM Store` (Raw Material Store)
+- `BOF Parts Store` (Bought-out Parts Store)
+- `FG Store` (Finished Goods Store)
+- `Rework Store`
+- `Reject Store`
+
+**Avoid:** Generic "WIP" naming without department context.
+
+**Rationale:** Clear naming helps operators and supervisors understand inventory ownership and location.
 
 ---
 

@@ -82,10 +82,11 @@ This document provides traceability between business rules (MES_BUSINESS_RULES.m
 
 | Rule | Description | Module | Status | Tested |
 |------|-------------|--------|--------|--------|
-| WH-001 | Warehouse Type Classification | settings/ | ❌ Pending | ❌ No |
-| WH-002 | Operation-to-Warehouse Mapping | settings/ | ❌ Pending | ❌ No |
-| WH-003 | Warehouse Validation Scope | readiness/material_readiness.py | 🔄 In Progress | ❌ No |
-| WH-004 | Material Transfer Direction | ERPNext Standard | ✅ Enforced | ❌ No |
+| WH-001 | Warehouse Type Classification | readiness/ | ✅ Documented | ❌ No |
+| WH-002 | Department-Centric Warehouse Model | ERPNext Standard | ✅ Documented | ❌ No |
+| WH-003 | Department Warehouse Validation Scope | readiness/material_readiness.py | 🔄 In Progress | ❌ No |
+| WH-004 | Department-to-Department Material Flow | execution/ | 🔄 In Progress | ❌ No |
+| WH-005 | Warehouse Naming Convention | Configuration | ❌ Pending | ❌ No |
 
 ---
 
@@ -152,6 +153,11 @@ This document provides traceability between business rules (MES_BUSINESS_RULES.m
 ### settings/manufacturing_settings.py
 **Rules Supported:** CFG-001 (framework), CFG-002 (pending), CFG-003 (pending)  
 **Status:** Framework ready, UI pending  
+**Test Coverage:** 0%
+
+### readiness/material_readiness.py
+**Rules Implemented:** WH-002 (department model), WH-003 (framework)  
+**Status:** Department warehouse logic in progress  
 **Test Coverage:** 0%
 
 ---

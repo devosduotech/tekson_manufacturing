@@ -20,7 +20,8 @@ This document defines test scenarios for validating the Manufacturing Execution 
 3. **Work Order Completion Tests** (TC-WO-001 to TC-WO-010)
 4. **Dependency Validation Tests** (TC-DV-001 to TC-DV-010)
 5. **Diagnostics Tests** (TC-DM-001 to TC-DM-010)
-6. **Integration Tests** (TC-INT-001 to TC-INT-010)
+6. **Warehouse Tests** (TC-WH-001 to TC-WH-006) ⭐ NEW
+7. **Integration Tests** (TC-INT-001 to TC-INT-010)
 
 ---
 
@@ -277,6 +278,107 @@ This document defines test scenarios for validating the Manufacturing Execution 
 
 ---
 
+## Warehouse Tests
+
+### TC-WH-001: Job Card Inherits Warehouse from Workstation
+
+**Rule:** WH-002
+
+**Scenario:**
+- Create Workstation: Tube Expander-01
+- Plant Floor: CNC
+- Warehouse: CNC Department Store
+- Create Job Card for Tube Expander-01
+
+**Expected Result:**
+- ✅ Job Card warehouse = CNC Department Store
+- ✅ Inherited from Workstation configuration
+
+---
+
+### TC-WH-002: All Workstations in Department Use Same Warehouse
+
+**Rule:** WH-002
+
+**Scenario:**
+- CNC Department workstations:
+  - Tube Expander-01 → CNC Department Store
+  - Tube Expander-02 → CNC Department Store
+  - Lathe-01 → CNC Department Store
+  - Lathe-02 → CNC Department Store
+- Check all warehouses
+
+**Expected Result:**
+- ✅ All workstations point to CNC Department Store
+- ✅ Consistent configuration
+
+---
+
+### TC-WH-003: No Transfer Within Same Department
+
+**Rule:** WH-004
+
+**Scenario:**
+- CNC Department has 3 operations:
+  - Operation 10: Cutting
+  - Operation 20: Drilling
+  - Operation 30: Deburring
+- Complete Operation 10, start Operation 20
+
+**Expected Result:**
+- ✅ No stock transfer required
+- ✅ Both operations use CNC Department Store
+- ✅ Material stays in same warehouse
+
+---
+
+### TC-WH-004: Transfer Suggested When Leaving Department
+
+**Rule:** WH-004
+
+**Scenario:**
+- Last Job Card in CNC Department completes
+- Next Job Card is in Ralu Weld Department
+
+**Expected Result:**
+- ✅ MES suggests transfer
+- ✅ From: CNC Department Store
+- ✅ To: Ralu Weld Department Store
+- ✅ Transfer recommendation shown to user
+
+---
+
+### TC-WH-005: Material Readiness Checks Department Warehouse
+
+**Rule:** WH-003
+
+**Scenario:**
+- Job Card in CNC Department
+- Check material readiness
+
+**Expected Result:**
+- ✅ Checks CNC Department Store
+- ✅ Not operation-specific warehouse
+- ✅ Cumulative transfers to CNC Department Store counted
+
+---
+
+### TC-WH-006: Department Warehouse Naming
+
+**Rule:** WH-005
+
+**Scenario:**
+- Review all department warehouse names
+
+**Expected Result:**
+- ✅ CNC Department Store (not "WIP-CNC")
+- ✅ W Department Store
+- ✅ Ralu Weld Department Store
+- ✅ Assembly Department Store
+- ✅ Clear, descriptive naming
+
+---
+
 ## Diagnostics Tests
 
 ### TC-DM-001: Clear Material Shortage Message
@@ -413,12 +515,20 @@ This document defines test scenarios for validating the Manufacturing Execution 
 - CC-001: Common Component (Fins)
 - CC-002: Common Component (Turbulators)
 
-### Warehouses
+### Warehouses (Department Stores)
 - RM-STORE: Raw Material Store
-- CC-STORE: Common Component Store
-- WIP-001: Process WIP (Operation 1)
-- WIP-002: Process WIP (Operation 2)
+- BOF-STORE: BOF Parts Store
+- CNC-STORE: CNC Department Store
+- W-STORE: W Department Store
+- RALU-IN-STORE: Ralu In Department Store
+- RALU-WELD-STORE: Ralu Weld Department Store
+- RP-STORE: RP Department Store
+- ASM-STORE: Assembly Department Store
+- TEST-STORE: Testing Department Store
+- PAINT-STORE: Painting Department Store
 - FG-STORE: Finished Goods Store
+- REWORK-STORE: Rework Store
+- REJECT-STORE: Reject Store
 
 ---
 
