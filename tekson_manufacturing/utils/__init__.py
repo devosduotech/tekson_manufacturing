@@ -165,7 +165,7 @@ def get_department_from_user(user=None):
     employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
     
     if employee:
-        return frappe.db.get_value("Employee", employee, "department")
+        return frappe.db.get_value("Employee", employee, "plant_floor")
     
     return None
 

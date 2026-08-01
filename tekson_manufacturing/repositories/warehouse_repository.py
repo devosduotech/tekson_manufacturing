@@ -216,7 +216,7 @@ class WarehouseRepository:
         if not employee:
             return False
         
-        user_department = frappe.db.get_value("Employee", employee, "department")
+        user_department = frappe.db.get_value("Employee", employee, "plant_floor")
         
         return user_department == wh.custom_department
     
@@ -224,7 +224,7 @@ class WarehouseRepository:
         """Check if Warehouse exists"""
         return frappe.db.exists(self.doctype, name) is not None
     
-    def create(self, wh_dict: Dict) -> frappe.Document:
+    def create(self, wh_dict: Dict) -> Document:
         """
         Create Warehouse
         

@@ -171,12 +171,12 @@ def get_department_wise_production():
             SELECT COUNT(*) as count
             FROM `tabJob Card` jc
             JOIN `tabWorkstation` ws ON jc.workstation = ws.name
-            WHERE ws.department = %s
+            WHERE ws.plant_floor = %s
             AND jc.status != 'Completed'
         """, (dept,), as_dict=True)
         
         result.append({
-            'department': dept,
+            'plant_floor': dept,
             'warehouse': warehouse,
             'active_job_cards': jc_count[0].count if jc_count else 0
         })

@@ -142,7 +142,7 @@ class PermissionService:
         user_department = frappe.db.get_value(
             "Employee",
             {"user_id": user},
-            "department"
+            "plant_floor"
         )
         
         if not user_department:
@@ -176,7 +176,7 @@ class PermissionService:
             return None
         
         # Try to get department from common fields
-        department_fields = ['department', 'plant_floor', 'workstation']
+        department_fields = ['plant_floor', 'plant_floor', 'workstation']
         
         for field in department_fields:
             dept = frappe.db.get_value(doctype, docname, field)
@@ -187,7 +187,7 @@ class PermissionService:
         if doctype == "Job Card":
             workstation = frappe.db.get_value(doctype, docname, "workstation")
             if workstation:
-                return frappe.db.get_value("Workstation", workstation, "department")
+                return frappe.db.get_value("Workstation", workstation, "plant_floor")
         
         # For Work Order, get from Warehouse
         if doctype == "Work Order":

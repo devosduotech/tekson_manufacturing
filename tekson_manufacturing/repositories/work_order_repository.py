@@ -71,14 +71,14 @@ class WorkOrderRepository:
             fields=["name", "production_item", "status", "qty"]
         )
     
-    def create(self, wo_dict: Dict) -> frappe.Document:
+    def create(self, wo_dict: Dict) -> Document:
         """Create Work Order"""
         wo = frappe.new_doc(self.doctype)
         wo.update(wo_dict)
         wo.insert(ignore_permissions=True)
         return wo
     
-    def update(self, name: str, fields: Dict, ignore_permissions: bool = True) -> frappe.Document:
+    def update(self, name: str, fields: Dict, ignore_permissions: bool = True) -> Document:
         """Update Work Order fields"""
         wo = self.get(name)
         
@@ -90,7 +90,7 @@ class WorkOrderRepository:
         
         return wo
     
-    def submit(self, name: str) -> frappe.Document:
+    def submit(self, name: str) -> Document:
         """Submit Work Order"""
         wo = self.get(name)
         
@@ -100,7 +100,7 @@ class WorkOrderRepository:
         wo.submit()
         return wo
     
-    def cancel(self, name: str) -> frappe.Document:
+    def cancel(self, name: str) -> Document:
         """Cancel Work Order"""
         wo = self.get(name)
         

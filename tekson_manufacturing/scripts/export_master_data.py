@@ -78,7 +78,7 @@ def export_master_data():
     print("\n2. Exporting Workstations...")
     try:
         workstations = frappe.get_all('Workstation',
-            filters={'department': ['in', ['W', 'RA', 'RP', 'CNC', 'Ralu Weld', 'Ralu In']]},
+            filters={'plant_floor': ['in', ['W', 'RA', 'RP', 'CNC', 'Ralu Weld', 'Ralu In']]},
             fields=['*'])
         
         with open(f"{export_dir}/workstations.json", 'w') as f:

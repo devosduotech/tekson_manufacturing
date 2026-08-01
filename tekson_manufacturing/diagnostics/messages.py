@@ -174,14 +174,14 @@ class DiagnosticMessages:
             ...     'operation': 'Welding',
             ...     'status': 'Work In Progress',
             ...     'job_card': 'JC-2026-001',
-            ...     'department': 'Welding'
+            ...     'plant_floor': 'Welding'
             ... }
             >>> msg = engine.build_previous_operation_message(details)
         """
         prev_operation = previous_op_details.get('operation', 'Unknown Operation')
         prev_status = previous_op_details.get('status', 'Unknown')
         prev_jc = previous_op_details.get('job_card', 'N/A')
-        department = previous_op_details.get('department', 'N/A')
+        department = previous_op_details.get('plant_floor', 'N/A')
         
         title = "Previous Operation Not Complete"
         
@@ -527,7 +527,7 @@ class DiagnosticMessages:
             dict with context-enhanced message
         """
         user_role = context.get('user_role', 'Operator')
-        department = context.get('department', 'N/A')
+        department = context.get('plant_floor', 'N/A')
         show_technical = context.get('show_technical', False)
         
         enhanced_diagnostic = diagnostic.copy()

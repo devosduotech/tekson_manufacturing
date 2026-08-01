@@ -42,7 +42,7 @@ class TestDiagnosticMessages(unittest.TestCase):
             'operation': 'Welding',
             'status': 'Work In Progress',
             'job_card': 'JC-2026-001',
-            'department': 'Welding'
+            'plant_floor': 'Welding'
         }
         
         self.sample_config_error = {
@@ -373,7 +373,7 @@ class TestDiagnosticMessages(unittest.TestCase):
         diagnostic = self.engine.build_material_shortage_message(self.sample_shortage)
         context = {
             'user_role': 'Operator',
-            'department': 'Welding',
+            'plant_floor': 'Welding',
             'show_technical': True
         }
         
@@ -382,7 +382,7 @@ class TestDiagnosticMessages(unittest.TestCase):
         # Assert context is added
         self.assertIn('context', result)
         self.assertEqual(result['context']['user_role'], 'Operator')
-        self.assertEqual(result['context']['department'], 'Welding')
+        self.assertEqual(result['context']['plant_floor'], 'Welding')
         
         # Assert message includes context
         self.assertIn('Role: Operator', result['message'])

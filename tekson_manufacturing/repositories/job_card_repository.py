@@ -41,7 +41,7 @@ class JobCardRepository:
             return None
     
     def get_by_work_order(self, work_order: str, 
-                         order_by: str = "sequence_id") -> List[frappe.Document]:
+                         order_by: str = "sequence_id") -> List[Document]:
         """
         Get all Job Cards for Work Order
         
@@ -150,7 +150,7 @@ class JobCardRepository:
         
         return next_jc[0] if next_jc else None
     
-    def create(self, jc_dict: Dict) -> frappe.Document:
+    def create(self, jc_dict: Dict) -> Document:
         """
         Create Job Card
         
@@ -164,7 +164,7 @@ class JobCardRepository:
         jc.insert(ignore_permissions=True)
         return jc
     
-    def update(self, name: str, fields: Dict, ignore_permissions: bool = True) -> frappe.Document:
+    def update(self, name: str, fields: Dict, ignore_permissions: bool = True) -> Document:
         """
         Update Job Card fields
         
@@ -185,7 +185,7 @@ class JobCardRepository:
         
         return jc
     
-    def submit(self, name: str) -> frappe.Document:
+    def submit(self, name: str) -> Document:
         """
         Submit Job Card
         
@@ -202,7 +202,7 @@ class JobCardRepository:
         jc.submit()
         return jc
     
-    def cancel(self, name: str) -> frappe.Document:
+    def cancel(self, name: str) -> Document:
         """
         Cancel Job Card
         

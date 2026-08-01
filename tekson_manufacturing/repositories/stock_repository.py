@@ -134,7 +134,7 @@ class StockRepository:
             ORDER BY posting_date, posting_time
         """, (work_order,), as_dict=True)
     
-    def create_stock_entry(self, se_dict: Dict) -> frappe.Document:
+    def create_stock_entry(self, se_dict: Dict) -> Document:
         """
         Create Stock Entry
         
@@ -148,7 +148,7 @@ class StockRepository:
         se.insert(ignore_permissions=True)
         return se
     
-    def submit_stock_entry(self, name: str) -> frappe.Document:
+    def submit_stock_entry(self, name: str) -> Document:
         """Submit Stock Entry"""
         se = self.get_stock_entry(name)
         
@@ -158,7 +158,7 @@ class StockRepository:
         se.submit()
         return se
     
-    def cancel_stock_entry(self, name: str) -> frappe.Document:
+    def cancel_stock_entry(self, name: str) -> Document:
         """Cancel Stock Entry"""
         se = self.get_stock_entry(name)
         

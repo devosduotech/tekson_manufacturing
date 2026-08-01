@@ -57,13 +57,13 @@ def verify_master_data():
     # 3. Verify Workstations have warehouses assigned
     print("\n3. Verifying Workstations...")
     workstations = frappe.db.get_all('Workstation',
-        filters={'department': ['in', required_departments]},
-        fields=['name', 'warehouse', 'department'])
+        filters={'plant_floor': ['in', required_departments]},
+        fields=['name', 'warehouse', 'plant_floor'])
     
     if workstations:
         for ws in workstations[:10]:  # Show first 10
             if ws.warehouse:
-                print(f"  ✅ {ws.name} → {ws.warehouse} ({ws.department})")
+                print(f"  ✅ {ws.name} → {ws.warehouse} ({ws.plant_floor})")
                 verification_results['passed'] += 1
             else:
                 print(f"  ❌ {ws.name} - NO WAREHOUSE ASSIGNED!")

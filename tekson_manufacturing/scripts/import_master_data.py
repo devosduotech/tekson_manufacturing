@@ -171,7 +171,7 @@ def import_master_data(import_dir):
                 w = frappe.get_doc({
                     'doctype': 'Workstation',
                     'workstation_name': ws['workstation_name'],
-                    'department': ws.get('department'),
+                    'plant_floor': ws.get('plant_floor'),
                     'warehouse': ws.get('warehouse'),  # ⚠️ CRITICAL for material transfers
                     'hourly_rate': ws.get('hourly_rate', 0),
                     'company': 'Teksons'
