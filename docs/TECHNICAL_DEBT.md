@@ -22,6 +22,8 @@ This document tracks technical debt items identified during implementation. Each
 **Identified:** Sprint 1  
 **Category:** Performance  
 **Subcategory:** Database  
+**Owner:** Developer A  
+**Target Sprint:** Sprint 7  
 **Status:** ⏳ Deferred
 
 **Description:**

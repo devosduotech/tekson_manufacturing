@@ -175,6 +175,22 @@ bench --site [site_name] execute "print(frappe.get_doc('MES Settings', 'MES Sett
 - [ ] Job Card completion validation works
 - [ ] Work Order completion works
 
+#### MES Functional Verification (Business Rules)
+
+- [ ] MR-010: Stores → Department transfer works
+- [ ] MR-011: Cumulative availability check works
+- [ ] DV-001: Previous operation validation works
+- [ ] DV-002: Sequence validation works
+- [ ] JC-001: Job Card start permission works
+- [ ] JC-002: Job Card completion permission works
+- [ ] JC-003: Material check before start works
+- [ ] JC-004: Auto-refresh on completion works
+- [ ] JC-005: Work Order link validation works
+- [ ] WO-001: Auto-completion trigger works
+- [ ] WO-002: Duplicate Stock Entry prevention works
+- [ ] Department Warehouse stock validation works
+- [ ] Parent/Child Work Order validation works
+
 #### API Endpoints
 
 - [ ] `evaluate_material_readiness()` responds

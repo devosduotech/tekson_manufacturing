@@ -204,32 +204,35 @@ Organize implementation by business rules (MR-010, DV-001, etc.) with traceabili
 
 ---
 
-### Decision 007: No Version Numbering Until UAT
+### Decision 007: Semantic Versioning with Production Release
 
-**Date:** 2026-07-31  
+**Date:** 2026-08-01 (Updated)  
 **Category:** Release Strategy  
 **Status:** Active
 
-**Title:** Version 1.0 Only After Successful UAT
+**Title:** Semantic Versioning During Development, 1.0 for Production
 
 **Context:**
-Premature version numbering creates false expectations.
+Need clear version tracking during development while reserving 1.0 for production-ready release.
 
 **Decision:**
-No version numbers (1.0, 1.1, etc.) until after successful UAT and bug fixes. Use sprint numbers during development.
+Use semantic versioning (1.0.x) during development for sprint milestones. Reserve Version 1.0 (without patch) for first production release after successful UAT.
 
 **Alternatives Considered:**
-- Semantic versioning from start (Rejected: premature)
-- Date-based versioning (Rejected: unclear)
+- No versioning until UAT (Rejected: hard to track progress)
+- Sprint-based versioning only (Rejected: unclear for stakeholders)
 
 **Rationale:**
-- Avoids commitment to untested features
-- Focus on functionality over version numbers
-- Clear "production ready" milestone
+- Clear development milestone tracking
+- Semantic versioning familiar to all stakeholders
+- Version 1.0 still reserved for production-ready
+- Easy to communicate progress (1.0.1, 1.0.2, etc.)
 
 **Impact:**
-- Development versions use sprint numbers
-- Version 1.0 reserved for post-UAT release
+- Development uses 1.0.x versions (1.0.1, 1.0.2, 1.0.3, etc.)
+- Version 1.0 reserved for post-UAT production release
+- Version 1.1+ for post-release enhancements
+- Version 2.0+ for Phase 2
 
 ---
 

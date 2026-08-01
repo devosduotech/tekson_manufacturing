@@ -214,6 +214,30 @@ Change Request Form:
 
 ## Document Lifecycle
 
+```
+Requirement
+        │
+        ▼
+┌───────────────────┐
+│ Frozen Document   │ ← Business/Technical Specification
+│ (Version 1.0)     │
+└─────────┬─────────┘
+          │
+          │ Implementation
+          ▼
+┌───────────────────┐
+│ Living Documents  │ ← Status, Tracking, Issues
+│ (Continuous)      │
+└─────────┬─────────┘
+          │
+          │ Release
+          ▼
+┌───────────────────┐
+│ Production        │ ← Version 1.0 Released
+│ Release           │
+└───────────────────┘
+```
+
 ### Creation
 
 1. **Identify Need:** Determine document category
