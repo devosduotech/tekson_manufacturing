@@ -17,6 +17,7 @@ class StockService:
     Business Rules:
     - MR-010: Stores transfers materials
     - MR-011: Cumulative availability
+    - WH-001 to WH-005: Department transfers
     """
     
     def __init__(self):
@@ -372,6 +373,238 @@ class StockService:
             {"warehouse_group": "Finished Goods", "is_group": 0},
             "name"
         )
+    
+    def create_department_transfer(
+        self,
+        work_order: str,
+        job_card: str,
+        from_department: str,
+        to_department: str
+    ) -> dict:
+        """
+        Create department transfer Stock Entry (WH-004)
+        
+        Business Rules:
+        - WH-004: Department transfer on Job Card completion
+        - WH-003: Department warehouse validation
+        
+        Args:
+            work_order: Work Order name
+            job_card: Job Card name
+            from_department: Source department (Plant Floor)
+            to_department: Target department (Plant Floor)
+        
+        Returns:
+            dict with stock_entry, success, message
+        
+        Example:
+            >>> service = StockService()
+            >>> result = service.create_department_transfer(
+            ...     "WO-2026-001", "JC-2026-001", "W", "RA"
+            ... )
+            >>> result['success']
+            True
+        """
+        try:
+            # Get warehouses from departments
+            from_warehouse = self.get_department_warehouse(from_department)
+            to_warehouse = self.get_department_warehouse(to_department)
+            
+            if not from_warehouse:
+                return {
+                    'success': False,
+                    'error': f"Warehouse not found for department: {from_department}",
+                    'stock_entry': None
+                }
+            
+            if not to_warehouse:
+                return {
+                    'success': False,
+                    'error': f"Warehouse not found for department: {to_department}",
+                    'stock_entry': None
+                }
+            
+            # Get Job Card details
+            jc = frappe.get_doc("Job Card", job_card)
+            wo = frappe.get_doc("Work Order", work_order)
+            
+            # Get items from Job Card or Work Order
+            items = []
+            for item in wo.items:
+                items.append({
+                    'item_code': item.item_code,
+                    'qty': item.transferred_qty or item.required_qty,
+                    'uom': item.stock_uom,
+                    'rate': item.basic_rate,
+                    'amount': item.amount
+                })
+            
+            # Create Stock Entry
+            stock_entry = frappe.get_doc({
+                'doctype': 'Stock Entry',
+                'stock_entry_type': 'Material Transfer',
+                'work_order': work_order,
+                'from_warehouse': from_warehouse,
+                'to_warehouse': to_warehouse,
+                'posting_date': frappe.utils.nowdate(),
+                'posting_time': frappe.utils.nowtime(),
+                'job_card': job_card,
+                'items': items,
+                'remarks': f"Department transfer: {from_department} → {to_department} for {job_card}"
+            })
+            
+            stock_entry.insert()
+            stock_entry.submit()
+            
+            return {
+                'success': True,
+                'stock_entry': stock_entry.name,
+                'message': f"Stock Entry {stock_entry.name} created for department transfer",
+                'from_warehouse': from_warehouse,
+                'to_warehouse': to_warehouse
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                title=_("Department Transfer Error"),
+                message=f"Failed to create department transfer: {str(e)}"
+            )
+            return {
+                'success': False,
+                'error': str(e),
+                'stock_entry': None
+            }
+    
+    def validate_department_transfer(
+        self,
+        from_warehouse: str,
+        to_warehouse: str,
+        items: list
+    ) -> dict:
+        """
+        Validate department transfer (WH-003)
+        
+        Business Rules:
+        - WH-003: Department warehouse validation
+        - WH-001: Warehouse type classification
+        
+        Args:
+            from_warehouse: Source warehouse
+            to_warehouse: Target warehouse
+            items: List of items to transfer
+        
+        Returns:
+            dict with is_valid, message, errors
+        
+        Example:
+            >>> service = StockService()
+            >>> result = service.validate_department_transfer(
+            ...     "WIP-W", "WIP-RA", items
+            ... )
+            >>> result['is_valid']
+            True
+        """
+        errors = []
+        warnings = []
+        
+        # Validate from_warehouse is department warehouse
+        if not self.is_department_warehouse(from_warehouse):
+            errors.append(f"Source warehouse {from_warehouse} is not a department warehouse")
+        
+        # Validate to_warehouse is department warehouse
+        if not self.is_department_warehouse(to_warehouse):
+            errors.append(f"Target warehouse {to_warehouse} is not a department warehouse")
+        
+        # Validate warehouses are different
+        if from_warehouse == to_warehouse:
+            errors.append("Source and target warehouses must be different")
+        
+        # Validate items have sufficient stock
+        for item in items:
+            item_code = item.get('item_code')
+            qty = item.get('qty', 0)
+            
+            actual_qty = self.get_stock_balance(item_code, from_warehouse)
+            
+            if actual_qty < qty:
+                errors.append(
+                    f"Insufficient stock for {item_code}: "
+                    f"Required {qty}, Available {actual_qty}"
+                )
+        
+        return {
+            'is_valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'message': "Validation passed" if len(errors) == 0 else "Validation failed"
+        }
+    
+    def is_department_warehouse(self, warehouse: str) -> bool:
+        """
+        Check if warehouse is a department WIP warehouse
+        
+        Args:
+            warehouse: Warehouse name
+        
+        Returns:
+            True if department warehouse
+        
+        Business Rules:
+        - WH-001: Warehouse type classification
+        """
+        warehouse_group = frappe.db.get_value(
+            "Warehouse",
+            {"name": warehouse},
+            "warehouse_group"
+        )
+        
+        return warehouse_group == "Work In Progress Stores"
+    
+    def get_department_warehouse(self, department: str) -> str:
+        """
+        Get WIP warehouse for department
+        
+        Args:
+            department: Department name (Plant Floor)
+        
+        Returns:
+            Warehouse name
+        
+        Business Rules:
+        - WH-002: Department-to-warehouse mapping
+        """
+        # Mapping table
+        department_mapping = {
+            'W': 'WIP-W',
+            'RA': 'WIP-RA',
+            'RP': 'WIP-RP',
+            'CNC': 'WIP-CNC',
+            'Ralu Weld': 'WIP-Ralu Weld',
+            'Ralu In': 'WIP-Ralu In'
+        }
+        
+        # Try direct mapping first
+        if department in department_mapping:
+            return department_mapping[department]
+        
+        # Try to find warehouse by department name
+        warehouse = frappe.db.get_value(
+            "Warehouse",
+            {"warehouse_name": f"WIP-{department}"},
+            "name"
+        )
+        
+        if warehouse:
+            return warehouse
+        
+        # Fallback: search by warehouse group
+        warehouse = frappe.db.get_value(
+            "Warehouse",
+            {"warehouse_group": "Work In Progress Stores", "is_group": 0},
+            "name"
+        )
+        
+        return warehouse
 
 
 @frappe.whitelist()
@@ -403,6 +636,55 @@ def get_cumulative_transfers(item_code, work_order, warehouse):
     """
     service = StockService()
     return service.get_cumulative_transfers(item_code, work_order, warehouse)
+
+
+@frappe.whitelist()
+def create_department_transfer(work_order, job_card, from_department, to_department):
+    """
+    Whitelisted method to create department transfer (WH-004)
+    
+    Args:
+        work_order: Work Order name
+        job_card: Job Card name
+        from_department: Source department (Plant Floor)
+        to_department: Target department (Plant Floor)
+    
+    Returns: dict with stock_entry, success, message
+    
+    Business Rules:
+    - WH-004: Department transfer on Job Card completion
+    """
+    service = StockService()
+    return service.create_department_transfer(
+        work_order=work_order,
+        job_card=job_card,
+        from_department=from_department,
+        to_department=to_department
+    )
+
+
+@frappe.whitelist()
+def validate_department_transfer(from_warehouse, to_warehouse, items):
+    """
+    Whitelisted method to validate department transfer (WH-003)
+    
+    Args:
+        from_warehouse: Source warehouse
+        to_warehouse: Target warehouse
+        items: JSON string with items list
+    
+    Returns: dict with is_valid, message, errors
+    
+    Business Rules:
+    - WH-003: Department warehouse validation
+    """
+    import json
+    
+    if isinstance(items, str):
+        items = json.loads(items)
+    
+    service = StockService()
+    return service.validate_department_transfer(from_warehouse, to_warehouse, items)
 
 
 @frappe.whitelist()
