@@ -1,124 +1,318 @@
 import frappe
 from frappe import _
+from datetime import datetime
 from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
-from tekson_manufacturing.validation.dependency_engine import DependencyEngine
+from tekson_manufacturing.validation.dependency_engine import DependencyEngine, can_job_card_start as check_dependency_start
 from tekson_manufacturing.diagnostics.messages import DiagnosticMessages
+from tekson_manufacturing.repositories.job_card_repository import JobCardRepository
+from tekson_manufacturing.repositories.work_order_repository import WorkOrderRepository
+from tekson_manufacturing.repositories.stock_repository import StockRepository
+from tekson_manufacturing.utils.exceptions import MESValidationError, MESExecutionError
+from tekson_manufacturing.utils import log_mes_event, get_mes_settings
 
 
 class ExecutionEngine:
     """
     Manufacturing Execution System (MES) Engine
     
-    Central orchestrator for:
-    - Job Card execution
-    - Work Order completion
-    - Validation coordination
-    - Diagnostic generation
+    Business Rules:
+    - JC-001: Job Card Start Permission
+    - JC-002: Job Card Completion Permission
+    - JC-003: Job Card Material Check
+    - JC-004: Job Card Auto-Refresh
+    - JC-005: Job Card Work Order Link
+    - WO-001: Auto-Completion Trigger
+    - WO-002: Duplicate Stock Entry Prevention
+    
+    Dependencies:
+    - MaterialReadinessEngine (MR-010, MR-011)
+    - DependencyEngine (DV-001, DV-002)
+    - JobCardRepository, WorkOrderRepository, StockRepository
+    
+    Performance Target: < 2 seconds
     """
     
     def __init__(self):
         self.material_engine = MaterialReadinessEngine()
         self.dependency_engine = DependencyEngine()
         self.diagnostics = DiagnosticMessages()
+        self.jc_repo = JobCardRepository()
+        self.wo_repo = WorkOrderRepository()
+        self.stock_repo = StockRepository()
+        self.mes_settings = get_mes_settings()
     
     def can_job_card_start(self, job_card):
         """
-        Check if a Job Card can start production
+        Check if Job Card can start (JC-001, JC-003)
+        
+        Business Rules:
+        - JC-001: Job Card cannot start until previous operations are complete
+        - JC-003: Job Card should not start if materials are not available
         
         Args:
-            job_card: Job Card name or object
+            job_card: Job Card name or document
         
-        Returns: dict with can_start, reason, diagnostics
+        Returns: dict with can_start, reason, validations, diagnostics
+        
+        Performance Target: < 2 seconds
+        
+        Example:
+        >>> engine = ExecutionEngine()
+        >>> result = engine.can_job_card_start("JC-2026-001")
+        >>> result['can_start']
+        True
+        
+        Test Case:
+        - test_jc_001_start_permission
+        - test_jc_003_material_check
         """
         if isinstance(job_card, str):
-            jc = frappe.get_doc("Job Card", job_card)
+            jc = self.jc_repo.get(job_card)
         else:
             jc = job_card
+        
+        if not jc:
+            raise MESValidationError(f"Job Card not found")
+        
+        # Start performance timing
+        import time
+        start_time = time.time()
         
         result = {
             'can_start': True,
             'reason': '',
+            'validations': {
+                'jc_001_previous_operation': True,
+                'jc_003_material_readiness': True,
+                'jc_005_work_order_link': True
+            },
             'diagnostics': []
         }
         
-        # Check 1: Previous Operation Validation
-        prev_op_result = self.dependency_engine.validate_previous_operation(jc)
-        
-        if not prev_op_result.get('is_valid'):
+        # JC-005: Job Card must be linked to Work Order
+        if not jc.work_order:
             result['can_start'] = False
-            result['reason'] = prev_op_result.get('reason')
-            result['diagnostics'].append(prev_op_result.get('diagnostic'))
+            result['reason'] = "Job Card not linked to Work Order"
+            result['validations']['jc_005_work_order_link'] = False
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='ERROR',
+                business_rule='JC-005',
+                message=f"Job Card {jc.name} not linked to Work Order",
+                context={'job_card': jc.name}
+            )
+            
             return result
         
-        # Check 2: Material Readiness
-        if jc.work_order:
+        # JC-001: Previous Operation Validation
+        dep_result = check_dependency_start(job_card=jc.name)
+        
+        if not dep_result.get('can_start'):
+            result['can_start'] = False
+            result['reason'] = dep_result.get('reason')
+            result['validations']['jc_001_previous_operation'] = False
+            result['diagnostics'].append(dep_result.get('validation_details', {}).get('diagnostic', {}))
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='WARNING',
+                business_rule='JC-001',
+                message=f"Job Card {jc.name} cannot start: {result['reason']}",
+                context={
+                    'job_card': jc.name,
+                    'work_order': jc.work_order,
+                    'blocked_by': 'JC-001'
+                }
+            )
+            
+            return result
+        
+        # JC-003: Material Readiness Check (only if strict validation enabled)
+        if self.mes_settings and self.mes_settings.enable_strict_validation:
             material_result = self.material_engine.evaluate_material_readiness(jc.work_order)
             
             if not material_result.get('is_ready'):
                 result['can_start'] = False
-                result['reason'] = "Materials not available"
+                result['reason'] = "Materials not available in Department Warehouse"
+                result['validations']['jc_003_material_readiness'] = False
                 
                 # Build detailed diagnostics
                 for shortage in material_result.get('shortage_details', []):
                     diagnostic = self.diagnostics.build_material_shortage_message(shortage)
                     result['diagnostics'].append(diagnostic)
                 
+                log_mes_event(
+                    module='EXECUTION',
+                    level='WARNING',
+                    business_rule='JC-003',
+                    message=f"Job Card {jc.name} blocked: Materials not ready",
+                    context={
+                        'job_card': jc.name,
+                        'work_order': jc.work_order,
+                        'missing_items': material_result.get('missing_items', [])
+                    }
+                )
+                
                 return result
         
         # All checks passed
         result['reason'] = "All validations passed"
+        
+        # Log success
+        execution_time = (time.time() - start_time) * 1000
+        log_mes_event(
+            module='EXECUTION',
+            level='INFO',
+            business_rule='JC-001',
+            message=f"Job Card {jc.name} can start",
+            context={
+                'job_card': jc.name,
+                'work_order': jc.work_order,
+                'execution_time_ms': execution_time
+            }
+        )
+        
         return result
     
     def can_job_card_complete(self, job_card):
         """
-        Check if a Job Card can be completed
+        Check if Job Card can complete (JC-002)
+        
+        Business Rule:
+        - JC-002: Job Card can only be completed if for_quantity has been produced
         
         Args:
-            job_card: Job Card name or object
+            job_card: Job Card name or document
         
-        Returns: dict with can_complete, reason
+        Returns: dict with can_complete, reason, validations
+        
+        Performance Target: < 1 second
+        
+        Example:
+        >>> engine = ExecutionEngine()
+        >>> result = engine.can_job_card_complete("JC-2026-001")
+        >>> result['can_complete']
+        True
+        
+        Test Case:
+        - test_jc_002_completion_permission
         """
         if isinstance(job_card, str):
-            jc = frappe.get_doc("Job Card", job_card)
+            jc = self.jc_repo.get(job_card)
         else:
             jc = job_card
         
+        if not jc:
+            raise MESValidationError(f"Job Card not found")
+        
+        # Start performance timing
+        import time
+        start_time = time.time()
+        
         result = {
             'can_complete': True,
-            'reason': ''
+            'reason': '',
+            'validations': {
+                'jc_002_quantity_check': True
+            }
         }
         
-        # Basic validation: For Quantity should be <= Completed Qty
-        if jc.for_quantity > (jc.total_completed_qty or 0):
+        # JC-002: Quantity validation
+        completed_qty = jc.total_completed_qty or 0
+        required_qty = jc.for_quantity
+        
+        if completed_qty < required_qty:
             result['can_complete'] = False
-            result['reason'] = f"Completed quantity ({jc.total_completed_qty}) is less than required ({jc.for_quantity})"
+            result['reason'] = f"Completed quantity ({completed_qty}) is less than required ({required_qty})"
+            result['validations']['jc_002_quantity_check'] = False
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='WARNING',
+                business_rule='JC-002',
+                message=f"Job Card {jc.name} cannot complete: quantity insufficient",
+                context={
+                    'job_card': jc.name,
+                    'completed_qty': completed_qty,
+                    'required_qty': required_qty
+                }
+            )
+            
+            return result
+        
+        # All checks passed
+        result['reason'] = f"Job Card can complete: {completed_qty} units produced"
+        
+        # Log success
+        execution_time = (time.time() - start_time) * 1000
+        log_mes_event(
+            module='EXECUTION',
+            level='INFO',
+            business_rule='JC-002',
+            message=f"Job Card {jc.name} can complete",
+            context={
+                'job_card': jc.name,
+                'completed_qty': completed_qty,
+                'execution_time_ms': execution_time
+            }
+        )
         
         return result
     
     def complete_work_order(self, work_order):
         """
-        Complete a Work Order automatically
+        Complete Work Order automatically (WO-001, WO-002)
+        
+        Business Rules:
+        - WO-001: When all Job Cards are completed, auto-complete Work Order
+        - WO-002: Do not create duplicate Manufacture Stock Entries
         
         Args:
-            work_order: Work Order name or object
+            work_order: Work Order name or document
         
-        Returns: dict with success, message, stock_entry (if created)
+        Returns: dict with success, message, stock_entry
+        
+        Performance Target: < 3 seconds
+        
+        Example:
+        >>> engine = ExecutionEngine()
+        >>> result = engine.complete_work_order("WO-2026-001")
+        >>> result['success']
+        True
+        
+        Test Case:
+        - test_wo_001_auto_completion
+        - test_wo_002_duplicate_prevention
         """
         if isinstance(work_order, str):
-            wo = frappe.get_doc("Work Order", work_order)
+            wo = self.wo_repo.get(work_order)
         else:
             wo = work_order
+        
+        if not wo:
+            raise MESValidationError(f"Work Order not found")
+        
+        # Start performance timing
+        import time
+        start_time = time.time()
         
         result = {
             'success': False,
             'message': '',
-            'stock_entry': None
+            'stock_entry': None,
+            'validations': {
+                'wo_001_all_jc_completed': False,
+                'wo_001_qty_achieved': False,
+                'wo_002_no_duplicate': True
+            }
         }
         
         # Check if WO is already completed
         if wo.status == "Completed":
             result['success'] = True
             result['message'] = "Work Order already completed"
+            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name, "Manufacture")
             return result
         
         # Check if WO is submitted
@@ -126,30 +320,70 @@ class ExecutionEngine:
             result['message'] = "Work Order is not submitted"
             return result
         
-        # Check 1: All Job Cards completed
+        # WO-001: Check 1 - All Job Cards completed
         jc_check = self.check_all_job_cards_completed(wo)
+        result['validations']['wo_001_all_jc_completed'] = jc_check.get('all_completed', False)
         
         if not jc_check.get('all_completed'):
             result['message'] = jc_check.get('message')
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='INFO',
+                business_rule='WO-001',
+                message=f"Work Order {wo.name} cannot auto-complete: pending Job Cards",
+                context={
+                    'work_order': wo.name,
+                    'pending_count': jc_check.get('pending_count', 0)
+                }
+            )
+            
             return result
         
-        # Check 2: Production quantity achieved
+        # WO-001: Check 2 - Production quantity achieved
         qty_check = self.check_production_quantity(wo)
+        result['validations']['wo_001_qty_achieved'] = qty_check.get('qty_achieved', False)
         
         if not qty_check.get('qty_achieved'):
             result['message'] = qty_check.get('message')
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='WARNING',
+                business_rule='WO-001',
+                message=f"Work Order {wo.name} quantity not achieved",
+                context={
+                    'work_order': wo.name,
+                    'completed_qty': qty_check.get('completed_qty', 0),
+                    'required_qty': wo.qty
+                }
+            )
+            
             return result
         
-        # Check 3: No duplicate stock entry
-        existing_se = self.check_existing_stock_entry(wo)
+        # WO-002: Check 3 - No duplicate stock entry
+        existing_se = self.stock_repo.count_entries_by_work_order(wo.name, "Manufacture")
         
-        if existing_se:
+        if existing_se > 0:
             result['success'] = True
-            result['message'] = f"Stock Entry already exists: {existing_se}"
-            result['stock_entry'] = existing_se
+            result['message'] = "Manufacture Stock Entry already exists"
+            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name, "Manufacture")[0]
+            result['validations']['wo_002_no_duplicate'] = False  # Duplicate exists
             
             # Update WO status
             self.update_work_order_status(wo.name)
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='INFO',
+                business_rule='WO-002',
+                message=f"Work Order {wo.name} duplicate Stock Entry prevented",
+                context={
+                    'work_order': wo.name,
+                    'existing_se': result['stock_entry']
+                }
+            )
+            
             return result
         
         # Create Stock Entry
@@ -163,10 +397,33 @@ class ExecutionEngine:
             # Update WO status
             self.update_work_order_status(wo.name)
             
-            frappe.db.commit()
+            # Log success
+            execution_time = (time.time() - start_time) * 1000
+            log_mes_event(
+                module='EXECUTION',
+                level='INFO',
+                business_rule='WO-001',
+                message=f"Work Order {wo.name} completed successfully",
+                context={
+                    'work_order': wo.name,
+                    'stock_entry': se.name,
+                    'execution_time_ms': execution_time
+                }
+            )
             
         except Exception as e:
             result['message'] = f"Error creating Stock Entry: {str(e)}"
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='ERROR',
+                business_rule='WO-001',
+                message=f"Work Order {wo.name} completion failed: {str(e)}",
+                context={
+                    'work_order': wo.name,
+                    'error': str(e)
+                }
+            )
         
         return result
     
@@ -248,9 +505,82 @@ class ExecutionEngine:
         
         return stock_entry
     
+    def refresh_job_card_status(self, job_card):
+        """
+        Refresh Job Card status after dependent operation completes (JC-004)
+        
+        Business Rule:
+        - JC-004: When a Job Card is submitted, dependent Job Cards must be refreshed
+        
+        Args:
+            job_card: Job Card name or document
+        
+        Returns: dict with success, refreshed_cards
+        
+        Performance Target: < 1 second
+        
+        Test Case:
+        - test_jc_004_auto_refresh
+        """
+        if isinstance(job_card, str):
+            jc = self.jc_repo.get(job_card)
+        else:
+            jc = job_card
+        
+        if not jc or not jc.work_order or not jc.sequence_id:
+            return {'success': False, 'message': 'Invalid Job Card'}
+        
+        # Find next Job Card
+        next_jc = self.jc_repo.get_next_operation(jc.name)
+        
+        if not next_jc:
+            return {'success': True, 'message': 'No dependent Job Cards', 'refreshed_cards': []}
+        
+        refreshed = []
+        
+        # Refresh next Job Card status
+        next_jc_doc = self.jc_repo.get(next_jc['name'])
+        
+        if next_jc_doc:
+            # Update custom_start_status
+            if next_jc_doc.status == "Completed":
+                next_jc_doc.custom_start_status = "Completed"
+            else:
+                # Check if previous is now complete
+                prev_result = self.dependency_engine.validate_previous_operation(next_jc_doc)
+                
+                if prev_result.get('is_valid'):
+                    next_jc_doc.custom_start_status = "Ready to Start"
+                else:
+                    next_jc_doc.custom_start_status = "Awaiting Previous Operation"
+            
+            next_jc_doc.custom_last_refreshed = datetime.now()
+            next_jc_doc.custom_refreshed_by = frappe.session.user
+            next_jc_doc.save(ignore_permissions=True)
+            
+            refreshed.append(next_jc['name'])
+            
+            log_mes_event(
+                module='EXECUTION',
+                level='INFO',
+                business_rule='JC-004',
+                message=f"Job Card {next_jc['name']} status refreshed",
+                context={
+                    'job_card': next_jc['name'],
+                    'triggered_by': jc.name,
+                    'new_status': next_jc_doc.custom_start_status
+                }
+            )
+        
+        return {'success': True, 'message': 'Job Cards refreshed', 'refreshed_cards': refreshed}
+    
     def update_work_order_status(self, work_order):
         """Update Work Order status based on completion"""
-        wo = frappe.get_doc("Work Order", work_order)
+        wo = self.wo_repo.get(work_order)
+        
+        if not wo:
+            return
+        
         wo.reload()
         
         # Update produced quantity
@@ -269,29 +599,91 @@ class ExecutionEngine:
 @frappe.whitelist()
 def can_start_job_card(job_card):
     """
-    Whitelisted method to check if Job Card can start
+    Whitelisted API to check if Job Card can start (JC-001, JC-003, JC-005)
     
     Args:
         job_card: Job Card name
     
-    Returns: dict with validation result
+    Returns: dict with can_start, reason, validations, diagnostics
+    
+    Example:
+    >>> result = can_start_job_card("JC-2026-001")
+    >>> result['can_start']
+    True
+    
+    Test Case:
+    - test_jc_001_api
+    - test_jc_003_api
     """
     engine = ExecutionEngine()
     return engine.can_job_card_start(job_card)
 
 
 @frappe.whitelist()
+def can_complete_job_card(job_card):
+    """
+    Whitelisted API to check if Job Card can complete (JC-002)
+    
+    Args:
+        job_card: Job Card name
+    
+    Returns: dict with can_complete, reason, validations
+    
+    Example:
+    >>> result = can_complete_job_card("JC-2026-001")
+    >>> result['can_complete']
+    True
+    
+    Test Case:
+    - test_jc_002_api
+    """
+    engine = ExecutionEngine()
+    return engine.can_job_card_complete(job_card)
+
+
+@frappe.whitelist()
 def complete_work_order_api(work_order):
     """
-    Whitelisted method to complete Work Order
+    Whitelisted API to complete Work Order (WO-001, WO-002)
     
     Args:
         work_order: Work Order name
     
-    Returns: dict with completion result
+    Returns: dict with success, message, stock_entry, validations
+    
+    Example:
+    >>> result = complete_work_order_api("WO-2026-001")
+    >>> result['success']
+    True
+    
+    Test Case:
+    - test_wo_001_api
+    - test_wo_002_api
     """
     engine = ExecutionEngine()
     return engine.complete_work_order(work_order)
+
+
+@frappe.whitelist()
+def refresh_job_card_status_api(job_card):
+    """
+    Whitelisted API to refresh Job Card status (JC-004)
+    
+    Args:
+        job_card: Job Card name
+    
+    Returns: dict with success, refreshed_cards
+    
+    Example:
+    >>> result = refresh_job_card_status_api("JC-2026-001")
+    >>> result['refreshed_cards']
+    ['JC-2026-002']
+    
+    Test Case:
+    - test_jc_004_api
+    """
+    engine = ExecutionEngine()
+    return engine.refresh_job_card_status(job_card)
 
 
 # =================================================================
