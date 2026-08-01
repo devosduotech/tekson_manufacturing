@@ -21,6 +21,7 @@ This document tracks technical debt items identified during implementation. Each
 **Priority:** Medium  
 **Identified:** Sprint 1  
 **Category:** Performance  
+**Subcategory:** Database  
 **Status:** ⏳ Deferred
 
 **Description:**
