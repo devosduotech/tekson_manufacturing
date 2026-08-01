@@ -333,6 +333,65 @@ Requirement
 
 ---
 
+## Documentation Freeze Policy (Sprint 4+)
+
+**Effective:** Sprint 4 commencement (2026-08-01)
+
+### Frozen Documents (Sprint 4+)
+
+**No updates except:**
+- Typographical corrections
+- Documentation errors
+- Approved Change Requests (CR)
+- Major version upgrades (2.0+)
+
+**Frozen Document Categories:**
+- Business Rules Specification
+- Architecture Documents
+- Service Interfaces
+- Repository Interfaces
+- Event Registry
+- Security Matrix
+- Exception Handling Rules
+
+**Enforcement:**
+- Git branch protection on `develop` branch
+- Code review blocks changes to frozen docs without CR
+- Technical Lead approval required for all frozen doc changes
+
+### Controlled Documents (Sprint 4+)
+
+**Updates only at sprint completion:**
+- VERSION_ROADMAP.md
+- RELEASE_CHECKLIST.md
+- DECISION_LOG.md
+- MES_INTEGRATION_MATRIX.md (structure)
+
+**Process:**
+1. Updates made during sprint review
+2. Technical Lead approval
+3. Version increment
+4. Changelog entry
+
+### Living Documents (Sprint 4+)
+
+**Updated continuously:**
+- PHASE1_STATUS_REPORT.md (after each sprint)
+- CHANGELOG.md (after each sprint)
+- TECHNICAL_DEBT.md (as identified)
+- KNOWN_LIMITATIONS.md (as identified)
+- MES_IMPLEMENTATION_MATRIX.md (status fields only)
+- RISK_REGISTER.md (as needed)
+- UAT_ACCEPTANCE_MATRIX.md (during UAT)
+
+**Process:**
+1. Update after sprint completion
+2. Version increment (patch)
+3. Git commit with sprint reference
+4. No approval required
+
+---
+
 ## Violations & Enforcement
 
 ### Violations
@@ -342,6 +401,7 @@ Requirement
 - Not updating version numbers
 - Missing revision history
 - Unauthorized changes
+- Updating controlled documents mid-sprint
 
 ### Enforcement
 
