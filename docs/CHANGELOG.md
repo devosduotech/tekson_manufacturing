@@ -192,14 +192,51 @@ Complete design and architecture documentation for Phase 1 MES implementation.
 
 ---
 
-## Planned Versions
+## Released Versions
 
-### Version 1.0.5 - Sprint 4 Complete (Planned)
+### Version 1.0.5 - Sprint 4 Complete
 
+**Date:** 2026-08-01  
 **Sprint:** 4  
 **Focus:** Diagnostics & Messages  
 **Business Rules:** DM-001 to DM-004  
-**Expected Date:** Week 3-4
+**Status:** ✅ Complete
+
+### Code Delivered
+
+**New Modules:**
+- `diagnostics/messages.py` (~650 lines)
+  - `DiagnosticMessages` class
+  - `DiagnosticCategory` enum (8 categories)
+  - `SeverityLevel` enum (5 levels)
+  - Message builders (6 types)
+  - UI formatting methods
+  - Context-aware messaging
+  - Diagnostic logging
+
+**APIs Delivered:**
+- `get_diagnostic_message()` - Build diagnostic messages
+- `format_diagnostics_for_ui()` - Format for UI display
+- `log_diagnostic_message()` - Log diagnostics
+
+**Tests Delivered:**
+- `test_diagnostics.py` (11 tests)
+  - DM-001 tests (4 tests)
+  - DM-002 tests (6 tests)
+  - DM-003 tests (6 tests)
+  - DM-004 tests (5 tests)
+  - Integration tests
+
+### Business Rules Delivered
+
+- ✅ DM-001: Clear Operator Messages (6 message types)
+- ✅ DM-002: Diagnostic Categories (8 categories)
+- ✅ DM-003: Severity Levels (5 levels)
+- ✅ DM-004: UI-Friendly Formatting (color coding, context)
+
+---
+
+## Planned Versions
 
 ### Version 1.0.6 - Sprint 5 Complete (Planned)
 
