@@ -238,19 +238,96 @@ Complete design and architecture documentation for Phase 1 MES implementation.
 
 ## Planned Versions
 
-### Version 1.0.6 - Sprint 5 Complete (Planned)
+### Version 1.0.6 - Sprint 5 Complete
 
+**Date:** 2026-08-01  
 **Sprint:** 5  
 **Focus:** Department Transfer Integration  
 **Business Rules:** WH-001 to WH-005  
-**Expected Date:** Week 4-5
+**Status:** ✅ Complete
 
-### Version 1.0.7 - Sprint 6 Complete (Planned)
+### Code Delivered
 
+**Enhanced Modules:**
+- `services/stock_service.py` (~250 lines added)
+  - `create_department_transfer()` - WH-004
+  - `validate_department_transfer()` - WH-003
+  - `is_department_warehouse()` - WH-001
+  - `get_department_warehouse()` - WH-002
+  - Department mapping (6 Teksons departments)
+
+**APIs Delivered:**
+- `create_department_transfer()` - Create inter-department transfers
+- `validate_department_transfer()` - Validate transfer parameters
+
+**Tests Delivered:**
+- `test_department_transfer.py` (11 tests)
+  - WH-001: Warehouse classification
+  - WH-002: Department mapping (5 tests)
+  - WH-003: Validation tests (2 tests)
+  - WH-004: Transfer creation tests
+  - WH-005: Naming convention tests
+
+### Business Rules Delivered
+
+- ✅ WH-001: Warehouse Type Classification
+- ✅ WH-002: Department-to-Warehouse Mapping
+- ✅ WH-003: Department Warehouse Validation
+- ✅ WH-004: Department Transfer Creation
+- ✅ WH-005: Teksons Naming Convention
+
+---
+
+### Version 1.0.7 - Sprint 6 Complete
+
+**Date:** 2026-08-01  
 **Sprint:** 6  
 **Focus:** Exception Handling Integration  
-**Business Rules:** EX-* (46 scenarios)  
-**Expected Date:** Week 5-6
+**Business Rules:** 46 scenarios (EX-*)  
+**Status:** ✅ Complete
+
+### Code Delivered
+
+**New Modules:**
+- `diagnostics/exception_handler.py` (~650 lines)
+  - Exception hierarchy (6 categories)
+  - ExceptionHandler class
+  - User-friendly message mapping
+  - Context preservation
+  - Logging integration
+  - 6 convenience raise functions
+
+**Exception Categories:**
+- MaterialException (EX-MAT-001 to EX-MAT-008) - 8 scenarios
+- ProductionException (EX-PROD-001 to EX-PROD-010) - 10 scenarios
+- EquipmentException (EX-EQ-001 to EX-EQ-008) - 8 scenarios
+- QualityException (EX-Q-001 to EX-Q-008) - 8 scenarios
+- CancellationException (EX-CANCEL-001 to EX-CANCEL-006) - 6 scenarios
+- SystemException (EX-SYS-001 to EX-SYS-006) - 6 scenarios
+
+**APIs Delivered:**
+- `handle_exception()` - Central exception handling
+
+**Tests Delivered:**
+- `test_exception_handling.py` (20 tests)
+  - Category classification tests
+  - Material exception tests (3)
+  - Production exception tests (3)
+  - Equipment exception tests (2)
+  - Quality exception tests (2)
+  - Cancellation exception tests (2)
+  - System exception tests (1)
+  - Exception handling tests (3)
+  - Whitelisted method tests (3)
+
+### Business Rules Delivered
+
+- ✅ EX-MAT-* (8): Material exceptions
+- ✅ EX-PROD-* (10): Production exceptions
+- ✅ EX-EQ-* (8): Equipment exceptions
+- ✅ EX-Q-* (8): Quality exceptions
+- ✅ EX-CANCEL-* (6): Cancellation exceptions
+- ✅ EX-SYS-* (6): System exceptions
 
 ### Version 1.0.8 - Sprint 7 Complete (Planned)
 
