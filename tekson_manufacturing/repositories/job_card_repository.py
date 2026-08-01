@@ -8,6 +8,7 @@ No direct frappe.db calls in services or engines.
 import frappe
 from frappe import _
 from typing import Optional, List, Dict, Any
+from frappe.model.document import Document
 
 
 class JobCardRepository:
@@ -21,7 +22,7 @@ class JobCardRepository:
     def __init__(self):
         self.doctype = "Job Card"
     
-    def get(self, name: str) -> Optional[frappe.Document]:
+    def get(self, name: str) -> Optional[Document]:
         """
         Get Job Card by name
         

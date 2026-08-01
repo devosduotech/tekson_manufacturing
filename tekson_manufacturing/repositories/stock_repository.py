@@ -8,6 +8,7 @@ No direct frappe.db calls in services or engines.
 import frappe
 from frappe import _
 from typing import Optional, List, Dict, Any
+from frappe.model.document import Document
 
 
 class StockRepository:
@@ -19,7 +20,7 @@ class StockRepository:
         self.stock_entry_doctype = "Stock Entry"
         self.stock_ledger_doctype = "Stock Ledger Entry"
     
-    def get_stock_entry(self, name: str) -> Optional[frappe.Document]:
+    def get_stock_entry(self, name: str) -> Optional[Document]:
         """Get Stock Entry by name"""
         try:
             return frappe.get_doc(self.stock_entry_doctype, name)

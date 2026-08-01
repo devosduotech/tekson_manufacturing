@@ -8,6 +8,7 @@ No direct frappe.db calls in services or engines.
 import frappe
 from frappe import _
 from typing import Optional, List, Dict, Any
+from frappe.model.document import Document
 
 
 class WorkOrderRepository:
@@ -18,7 +19,7 @@ class WorkOrderRepository:
     def __init__(self):
         self.doctype = "Work Order"
     
-    def get(self, name: str) -> Optional[frappe.Document]:
+    def get(self, name: str) -> Optional[Document]:
         """Get Work Order by name"""
         try:
             return frappe.get_doc(self.doctype, name)

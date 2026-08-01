@@ -8,6 +8,7 @@ No direct frappe.db calls in services or engines.
 import frappe
 from frappe import _
 from typing import Optional, List, Dict, Any
+from frappe.model.document import Document
 
 
 class WarehouseRepository:
@@ -18,14 +19,14 @@ class WarehouseRepository:
     def __init__(self):
         self.doctype = "Warehouse"
     
-    def get(self, name: str) -> Optional[frappe.Document]:
+    def get(self, name: str) -> Optional[Document]:
         """Get Warehouse by name"""
         try:
             return frappe.get_doc(self.doctype, name)
         except frappe.DoesNotExistError:
             return None
     
-    def get_by_department(self, department: str) -> Optional[frappe.Document]:
+    def get_by_department(self, department: str) -> Optional[Document]:
         """
         Get warehouse for department
         
@@ -42,7 +43,7 @@ class WarehouseRepository:
         
         return self.get(name) if name else None
     
-    def get_by_plant_floor(self, plant_floor: str) -> Optional[frappe.Document]:
+    def get_by_plant_floor(self, plant_floor: str) -> Optional[Document]:
         """
         Get warehouse for plant floor
         
