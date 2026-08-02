@@ -495,6 +495,48 @@ class MaterialReadinessEngine:
         
         return actual_qty or 0.0
     
+    def get_cumulative_transferred_qty(self, item_code, work_order, warehouse):
+        """
+        Get cumulative quantity transferred to Department Warehouse
+        
+        Business Rule: MR-011 - Cumulative Availability Check
+        
+        This method sums ALL Material Transfer entries for the item and work order,
+        regardless of whether they were transferred in single or multiple Stock Entries.
+        
+        Args:
+            item_code: Item code
+            work_order: Work Order name
+            warehouse: Department warehouse name
+        
+        Returns: float - Cumulative transferred quantity
+        
+        Dependencies:
+        - Stock Entry
+        - Stock Entry Detail
+        
+        Example:
+        >>> self.get_cumulative_transferred_qty("ITEM-001", "WO-2026-001", "WIP-CNC")
+        100.0
+        
+        Test Case:
+        - test_mr_011_cumulative_availability_check
+        """
+        transfers = frappe.db.sql("""
+            SELECT 
+                SUM(sed.qty) as qty,
+                COUNT(DISTINCT se.name) as entry_count
+            FROM `tabStock Entry Detail` sed
+            INNER JOIN `tabStock Entry` se ON sed.parent = se.name
+            WHERE sed.item_code = %s
+            AND se.work_order = %s
+            AND se.purpose = 'Material Transfer for Manufacture'
+            AND se.docstatus = 1
+            AND sed.t_warehouse = %s
+        """, (item_code, work_order, warehouse), as_dict=True)
+        
+        return transfers[0].qty if transfers and transfers[0].qty else 0.0
+    
     def get_transfer_entries(self, item_code, work_order, warehouse):
         """
         Get details of all Stock Entries that transferred material to Department Warehouse
