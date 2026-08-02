@@ -70,15 +70,15 @@ def is_raw_material_or_bof(item_code):
         'Raw Material',
         'Consumables',
         'BOF MC',
-        'BOF Fabrication'
+        'BOF Fabrication',
+        'To Group'  # Items waiting to be grouped - treat as raw material
     ]
     
     # Sub-assemblies are in these groups
     sub_assembly_groups = [
         'Sub Assembly',
         'Sub Assemblies',
-        'Child Component',
-        'To Group'
+        'Child Component'
     ]
     
     if item_group in raw_material_groups:
@@ -86,11 +86,11 @@ def is_raw_material_or_bof(item_code):
     elif item_group in sub_assembly_groups:
         return False
     else:
-        # Check if item is manufactured or purchased
+        # For other groups, check purchase/manufactured flags
         # Purchased items are raw materials, manufactured are sub-assemblies
-        if item.is_purchase_item and not item.is_manufactured:
+        if item.get('is_purchase_item') and not item.get('is_manufactured'):
             return True
-        elif item.is_manufactured:
+        elif item.get('is_manufactured'):
             return False
         else:
             # Default: treat as raw material
