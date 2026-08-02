@@ -38,7 +38,7 @@ class WorkOrderService:
             'name': wo.name,
             'production_item': wo.production_item,
             'qty': wo.qty,
-            'completed_qty': wo.completed_qty or 0,
+            'produced_qty': wo.produced_qty or 0,
             'status': wo.status,
             'source_warehouse': wo.source_warehouse,
             'wip_warehouse': wo.wip_warehouse,
@@ -82,7 +82,7 @@ class WorkOrderService:
         job_cards = frappe.get_all(
             'Job Card',
             filters={'work_order': work_order_name, 'docstatus': 1},
-            fields=['name', 'status', 'operation', 'completed_qty']
+            fields=['name', 'status', 'operation']
         )
         
         # Get Stock Entry status
