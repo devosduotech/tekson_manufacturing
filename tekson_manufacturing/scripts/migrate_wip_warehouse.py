@@ -28,22 +28,17 @@ def get_new_wip_warehouse(work_order_doc):
     Determine the correct new WIP warehouse for a Work Order
     
     Priority:
-    1. custom_plant_floor field
-    2. plant_floor field
-    3. First operation's workstation plant_floor
-    4. Default to WIP-W - TPL
+    1. plant_floor field
+    2. First Job Card's workstation plant_floor
+    3. Default to WIP-W - TPL
     
     Args:
         work_order_doc: Work Order document
     
     Returns: str - New WIP warehouse name
     """
-    # Try custom_plant_floor first
-    plant_floor = work_order_doc.get('custom_plant_floor')
-    
-    # Fallback to plant_floor
-    if not plant_floor:
-        plant_floor = work_order_doc.get('plant_floor')
+    # Try plant_floor first
+    plant_floor = work_order_doc.get('plant_floor')
     
     # Fallback to first Job Card's workstation
     if not plant_floor:
@@ -97,7 +92,7 @@ def migrate_work_order(wo_name, dry_run=True):
                 'message': f'Would migrate to {new_warehouse}',
                 'old_warehouse': wo.wip_warehouse,
                 'new_warehouse': new_warehouse,
-                'plant_floor': wo.get('custom_plant_floor') or wo.get('plant_floor')
+                'plant_floor': wo.get('plant_floor')
             }
         
         # Execute migration
@@ -159,7 +154,7 @@ def run_migration(dry_run=True):
     # Find all Work Orders using old WIP warehouse
     wo_list = frappe.get_all('Work Order',
         filters={'wip_warehouse': OLD_WIP_WAREHOUSE},
-        fields=['name', 'status', 'production_item', 'custom_plant_floor', 'plant_floor'],
+        fields=['name', 'status', 'production_item', 'plant_floor'],
         order_by='creation'
     )
     
