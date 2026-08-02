@@ -382,18 +382,7 @@ class MaterialReadinessEngine:
         plant_floor = work_order.get('custom_plant_floor') or work_order.get('plant_floor')
         
         if not plant_floor:
-            # Fallback: Try to get from production item's default warehouse
-            production_item = work_order.get('production_item')
-            if production_item:
-                default_warehouse = frappe.db.get_value(
-                    "Item", 
-                    production_item, 
-                    'default_warehouse'
-                )
-                if default_warehouse:
-                    return default_warehouse
-            
-            # Last resort: Use first WIP warehouse
+            # Fallback: Use first WIP warehouse
             warehouse = frappe.db.get_value(
                 "Warehouse",
                 {"warehouse_group": "Work In Progress Stores", "is_group": 0},

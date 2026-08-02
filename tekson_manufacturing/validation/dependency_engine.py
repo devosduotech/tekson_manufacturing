@@ -33,8 +33,12 @@ class DependencyEngine:
         self.work_order = work_order
         self.repo = JobCardRepository()
         
-        # Get MES Settings
-        self.mes_settings = frappe.get_doc("MES Settings", "MES Settings") if frappe.db.exists("MES Settings", "MES Settings") else None
+        # Get MES Settings (if DocType exists)
+        try:
+            self.mes_settings = frappe.get_doc("MES Settings", "MES Settings") if frappe.db.exists("MES Settings", "MES Settings") else None
+        except Exception:
+            # MES Settings DocType doesn't exist - use defaults
+            self.mes_settings = None
     
     def validate_previous_operation(self, job_card=None):
         """
