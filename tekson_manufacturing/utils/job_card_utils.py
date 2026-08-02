@@ -19,14 +19,17 @@ def set_wip_warehouse(doc, method=None):
     - Workstation: RP-26_Hydraulic Press (plant_floor: RP)
     - Job Card wip_warehouse: WIP-RP - TPL
     """
-    if doc.workstation and not doc.wip_warehouse:
+    if doc.workstation:
         # Get workstation's plant floor
         plant_floor = frappe.db.get_value('Workstation', doc.workstation, 'plant_floor')
         
         if plant_floor:
             # Set WIP warehouse based on plant floor
-            doc.wip_warehouse = f"WIP-{plant_floor} - TPL"
+            expected_warehouse = f"WIP-{plant_floor} - TPL"
+            
+            # Update if different or not set
+            if doc.wip_warehouse != expected_warehouse:
+                doc.wip_warehouse = expected_warehouse
             
             # Also set custom_plant_floor for reference
-            if not doc.get('custom_plant_floor'):
-                doc.custom_plant_floor = plant_floor
+            doc.custom_plant_floor = plant_floor
