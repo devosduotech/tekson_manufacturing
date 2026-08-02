@@ -72,10 +72,23 @@ def run_review():
         order_by='name'
     )
     
-    # Get default_warehouse separately (might be custom field)
+    # Get default_warehouse from item_defaults child table
     for item in items:
         item_doc = frappe.get_doc('Item', item.name)
-        item.default_warehouse = item_doc.get('default_warehouse') or item_doc.get('custom_default_warehouse')
+        default_warehouse = None
+        
+        # Check item_defaults child table
+        if item_doc.item_defaults:
+            for item_default in item_doc.item_defaults:
+                if item_default.default_warehouse:
+                    default_warehouse = item_default.default_warehouse
+                    break
+        
+        # Fallback to direct field
+        if not default_warehouse:
+            default_warehouse = item_doc.get('default_warehouse') or item_doc.get('custom_default_warehouse')
+        
+        item.default_warehouse = default_warehouse
     
     print(f"Total Items: {len(items)}")
     print()
@@ -301,7 +314,21 @@ def update_item(item_code, default_warehouse):
             return {'success': False, 'error': f"Warehouse not found: {default_warehouse}"}
         
         item = frappe.get_doc('Item', item_code)
-        item.default_warehouse = default_warehouse
+        
+        # Update in item_defaults child table (ERPNext V15 standard)
+        if item.item_defaults:
+            # Update existing item_defaults
+            for item_default in item.item_defaults:
+                item_default.default_warehouse = default_warehouse
+                break  # Update first one
+        else:
+            # Create new item_defaults entry
+            company = frappe.db.get_single_value('Global Defaults', 'default_company') or 'Teksons Pvt Ltd'
+            item.append('item_defaults', {
+                'company': company,
+                'default_warehouse': default_warehouse
+            })
+        
         item.save()
         frappe.db.commit()
         
