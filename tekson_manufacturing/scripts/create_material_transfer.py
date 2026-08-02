@@ -111,7 +111,7 @@ def create_transfer(work_order, raw_materials=None, submit=True):
         'from_warehouse': None,  # Will be set per item
         'to_warehouse': correct_wip,
         'posting_date': frappe.utils.today(),
-        'posting_time': frappe.utils.now_time(),
+        'posting_time': frappe.utils.nowtime(),
         'items': []
     })
     
