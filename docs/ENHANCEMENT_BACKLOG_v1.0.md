@@ -370,7 +370,7 @@ Proactive alerts when Material Readiness identifies shortages.
 | EH-001 | Stores Picking List | HIGH | 3-5 days |
 | EH-002 | Consolidated Material Issue | HIGH | 4-6 days |
 | EH-003 | Department Replenishment Dashboard | MEDIUM | 5-7 days |
-| EH-011 | WIP Return to Stores | MEDIUM | 4-6 days |
+| EH-011 | WIP Return to Stores | LOW | 4-6 days |
 | EH-012 | Material Shortage Alerts | HIGH | 3-5 days |
 
 **Total Phase 1.1 Effort:** 19-29 days
@@ -415,9 +415,10 @@ Effort  │           │  EH-012   │
 
 **Quick Wins (Low Effort, High Impact):**
 - EH-003: Department Replenishment Dashboard
-- EH-011: WIP Return to Stores
 - EH-010: Management Priority Override
 - EH-004: Barcode Material Issue (Medium effort)
+
+**Note:** EH-011 (WIP Return) moved to Phase 2, LOW priority - not a quick win for Phase 1.1.
 
 ---
 
@@ -426,9 +427,9 @@ Effort  │           │  EH-012   │
 | Phase | Enhancements | Approval Required | Target Date |
 |-------|--------------|-------------------|-------------|
 | Phase 1.1 | EH-001, EH-002, EH-003, EH-012 | Project Manager | Post-UAT |
-| Phase 2 | EH-004 to EH-011, EH-013 to EH-025 | Customer + PM | Q4 2026 |
+| Phase 2 | EH-004, EH-005, EH-006, EH-007, EH-008, EH-009, EH-010, EH-011 | Customer + PM | Q4 2026 |
 
-**Note:** EH-011 downgraded to LOW priority and moved to Phase 2 based on OD-012.
+**Note:** EH-011 downgraded to LOW priority and moved to Phase 2 based on OD-012. Phase 1.1 focuses on 4 high-value operational efficiency enhancements.
 
 ---
 
