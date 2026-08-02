@@ -368,9 +368,10 @@ class MaterialReadinessEngine:
     
     def get_department_warehouse(self, work_order):
         """
-        Get Department Warehouse for Work Order based on Plant Floor
+        Get Department Warehouse for Work Order from Job Card
         
         Business Rule: WH-002 - Department Warehouse Mapping
+        Business Rule: MR-014 - Department WIP as Source of Truth
         
         Args:
             work_order: Work Order document
@@ -378,48 +379,51 @@ class MaterialReadinessEngine:
         Returns: str - Department warehouse name
         
         Dependencies:
-        - Work Order (plant_floor field)
-        - Warehouse (custom_plant_floor field)
+        - Job Card (wip_warehouse field)
+        - Warehouse
         
         Example:
         >>> self.get_department_warehouse(wo)
-        'WIP-CNC'
+        'WIP-Ralu In - TPL'
         """
-        # Get Plant Floor from Work Order
-        plant_floor = work_order.get('custom_plant_floor') or work_order.get('plant_floor')
-        
-        if not plant_floor:
-            # Fallback: Use first WIP warehouse (by name pattern)
-            warehouse = frappe.db.get_value(
-                "Warehouse",
-                {"name": ["like", "WIP-%"], "is_group": 0},
-                "name"
-            )
-            return warehouse
-        
-        # Map Plant Floor to Warehouse
-        # Teksons naming: W → WIP-W - TPL, RA → WIP-RA - TPL, etc.
-        warehouse = frappe.db.get_value(
-            "Warehouse",
-            {
-                "name": ["like", f"WIP-{plant_floor}%"],
-                "is_group": 0
-            },
-            "name"
+        # Get WIP Warehouse from Job Card (not Work Order)
+        # Job Card has the correct wip_warehouse assigned during creation
+        job_card = frappe.db.get_value(
+            "Job Card",
+            {"work_order": work_order.name},
+            "wip_warehouse"
         )
         
-        if not warehouse:
-            # Fallback: Try with custom_plant_floor field
+        if job_card:
+            return job_card
+        
+        # Fallback: Try Work Order's wip_warehouse
+        if work_order.get('wip_warehouse'):
+            return work_order.get('wip_warehouse')
+        
+        # Fallback: Get Plant Floor from Work Order
+        plant_floor = work_order.get('custom_plant_floor') or work_order.get('plant_floor')
+        
+        if plant_floor:
+            # Map Plant Floor to Warehouse
             warehouse = frappe.db.get_value(
                 "Warehouse",
-                {"custom_plant_floor": plant_floor, "is_group": 0},
+                {
+                    "name": ["like", f"WIP-{plant_floor}%"],
+                    "is_group": 0
+                },
                 "name"
             )
+            
+            if warehouse:
+                return warehouse
         
-        if not warehouse:
-            frappe.throw(
-                _("Warehouse not found for Plant Floor: {0}. Please configure Warehouse with Plant Floor '{0}' under Work In Progress Stores.").format(plant_floor)
-            )
+        # Final fallback: Use first WIP warehouse
+        warehouse = frappe.db.get_value(
+            "Warehouse",
+            {"name": ["like", "WIP-%"], "is_group": 0},
+            "name"
+        )
         
         return warehouse
     
