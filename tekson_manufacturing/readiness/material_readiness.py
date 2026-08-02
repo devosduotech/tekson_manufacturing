@@ -86,18 +86,23 @@ class MaterialReadinessEngine:
             item_code = material.get('item_code')
             required_qty = material.get('qty')
             
-            # MR-010: Get cumulative transferred qty to Department Warehouse
+            # MR-014: Get available stock in Department WIP (Source of Truth)
+            # This checks actual stock, not just transfers against this WO
+            # Department WIP is shared operational inventory
+            available_qty = self.get_available_stock_in_wip(
+                item_code,
+                department_warehouse
+            )
+            
+            # Get current stock for reference
+            current_stock = available_qty  # Same as available (no reservation)
+            
+            # For tracking purposes, check how much was transferred against this WO
             cumulative_transferred = self.get_cumulative_transferred_qty(
                 item_code, 
                 work_order, 
                 department_warehouse
             )
-            
-            # Get current stock in Department Warehouse
-            current_stock = self.get_actual_stock(item_code, department_warehouse)
-            
-            # MR-011: Use cumulative transferred qty for availability check
-            available_qty = cumulative_transferred
             
             # Determine transfer status
             transfer_status = self.determine_transfer_status(
@@ -451,48 +456,44 @@ class MaterialReadinessEngine:
         
         return stock_balance[0].qty if stock_balance and stock_balance[0].qty else 0.0
     
-    def get_cumulative_transferred_qty(self, item_code, work_order, warehouse):
+    def get_available_stock_in_wip(self, item_code, warehouse):
         """
-        Get cumulative quantity transferred to Department Warehouse
+        Get available stock in Department WIP warehouse
         
-        Business Rule: MR-011 - Cumulative Availability Check
+        Business Rule: MR-014 - Department WIP as Source of Truth
+        Business Rule: OD-006 - Material Readiness Based on WIP Availability
         
-        This method sums ALL Material Transfer entries for the item and work order,
-        regardless of whether they were transferred in single or multiple Stock Entries.
+        This method checks ACTUAL STOCK in the Department WIP warehouse,
+        regardless of which Work Order transferred it.
+        
+        Department WIP is operational inventory shared across Work Orders.
+        Material Readiness evaluates current stock, not transfer history.
         
         Args:
             item_code: Item code
-            work_order: Work Order name
             warehouse: Department warehouse name
         
-        Returns: float - Cumulative transferred quantity
+        Returns: float - Available stock quantity
         
         Dependencies:
-        - Stock Entry
-        - Stock Entry Detail
+            - Bin (stock balance)
+            - Stock Ledger Entry
         
         Example:
-        >>> self.get_cumulative_transferred_qty("ITEM-001", "WO-2026-001", "WIP-CNC")
-        100.0
+        >>> self.get_available_stock_in_wip("ITEM-001", "WIP-CNC - TPL")
+        150.5
         
         Test Case:
-        - test_mr_011_cumulative_availability_check
+        - test_mr_014_department_wip_source_of_truth
         """
-        # MR-011: Sum all Material Transfer entries to Department Warehouse
-        transfers = frappe.db.sql("""
-            SELECT 
-                SUM(sed.qty) as qty,
-                COUNT(DISTINCT se.name) as entry_count
-            FROM `tabStock Entry Detail` sed
-            INNER JOIN `tabStock Entry` se ON sed.parent = se.name
-            WHERE sed.item_code = %s
-            AND se.work_order = %s
-            AND se.purpose = 'Material Transfer for Manufacture'
-            AND se.docstatus = 1
-            AND sed.t_warehouse = %s
-        """, (item_code, work_order, warehouse), as_dict=True)
+        # MR-014: Get actual stock from Bin (real-time availability)
+        actual_qty = frappe.db.get_value(
+            "Bin",
+            {"item_code": item_code, "warehouse": warehouse},
+            "actual_qty"
+        )
         
-        return transfers[0].qty if transfers and transfers[0].qty else 0.0
+        return actual_qty or 0.0
     
     def get_transfer_entries(self, item_code, work_order, warehouse):
         """
