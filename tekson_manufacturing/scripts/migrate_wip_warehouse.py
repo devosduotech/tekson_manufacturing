@@ -28,35 +28,29 @@ def get_new_wip_warehouse(work_order_doc):
     Determine the correct new WIP warehouse for a Work Order
     
     Priority:
-    1. plant_floor field
-    2. First Job Card's workstation plant_floor
-    3. Default to WIP-W - TPL
+    1. First Job Card's workstation plant_floor
+    2. Default to WIP-W - TPL
     
     Args:
         work_order_doc: Work Order document
     
     Returns: str - New WIP warehouse name
     """
-    # Try plant_floor first
-    plant_floor = work_order_doc.get('plant_floor')
+    # Get first Job Card's workstation plant_floor
+    job_cards = frappe.get_all('Job Card',
+        filters={'work_order': work_order_doc.name},
+        fields=['workstation'],
+        order_by='creation'
+    )
     
-    # Fallback to first Job Card's workstation
-    if not plant_floor:
-        job_cards = frappe.get_all('Job Card',
-            filters={'work_order': work_order_doc.name},
-            fields=['workstation'],
-            order_by='creation'
-        )
-        if job_cards and job_cards[0].workstation:
-            plant_floor = frappe.db.get_value('Workstation', 
-                job_cards[0].workstation, 'plant_floor')
+    if job_cards and job_cards[0].workstation:
+        plant_floor = frappe.db.get_value('Workstation', 
+            job_cards[0].workstation, 'plant_floor')
+        if plant_floor:
+            return f"WIP-{plant_floor} - TPL"
     
     # Default fallback
-    if not plant_floor:
-        plant_floor = 'W'
-    
-    # Format: WIP-{plant_floor} - TPL
-    return f"WIP-{plant_floor} - TPL"
+    return "WIP-W - TPL"
 
 
 def migrate_work_order(wo_name, dry_run=True):
@@ -86,13 +80,16 @@ def migrate_work_order(wo_name, dry_run=True):
         new_warehouse = get_new_wip_warehouse(wo)
         
         if dry_run:
+            # Get plant floor for display
+            plant_floor = new_warehouse.replace('WIP-', '').replace(' - TPL', '')
+            
             return {
                 'work_order': wo_name,
                 'status': 'pending',
                 'message': f'Would migrate to {new_warehouse}',
                 'old_warehouse': wo.wip_warehouse,
                 'new_warehouse': new_warehouse,
-                'plant_floor': wo.get('plant_floor')
+                'plant_floor': plant_floor
             }
         
         # Execute migration
@@ -154,7 +151,7 @@ def run_migration(dry_run=True):
     # Find all Work Orders using old WIP warehouse
     wo_list = frappe.get_all('Work Order',
         filters={'wip_warehouse': OLD_WIP_WAREHOUSE},
-        fields=['name', 'status', 'production_item', 'plant_floor'],
+        fields=['name', 'status', 'production_item'],
         order_by='creation'
     )
     
