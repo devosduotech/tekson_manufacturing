@@ -13,12 +13,12 @@ def populate_job_card_fields(doc, method=None):
     Trigger: Job Card Before Insert
     
     Fields Populated:
-    - custom_item_code: From Work Order production_item
-    - custom_actual_production_item: Quantity to produce
+    - custom_operation_item_code: From Work Order production_item
+    - custom_actual_production_qty: Quantity to produce
     - custom_plant_floor: From Workstation
     """
     # JC-007: Set Item Code
-    if doc.work_order and not doc.get('custom_item_code'):
+    if doc.work_order and not doc.get('custom_operation_item_code'):
         production_item = frappe.db.get_value(
             "Work Order",
             doc.work_order,
@@ -26,16 +26,16 @@ def populate_job_card_fields(doc, method=None):
         )
         
         if production_item:
-            doc.custom_item_code = production_item
+            doc.custom_operation_item_code = production_item
     
     # JC-008: Set Production Quantity
-    if doc.work_order and not doc.get('custom_actual_production_item'):
+    if doc.work_order and not doc.get('custom_actual_production_qty'):
         wo = frappe.get_doc("Work Order", doc.work_order)
         
         if doc.for_quantity:
-            doc.custom_actual_production_item = doc.for_quantity
+            doc.custom_actual_production_qty = doc.for_quantity
         else:
-            doc.custom_actual_production_item = wo.qty
+            doc.custom_actual_production_qty = wo.qty
 
 
 def allocate_workstation(doc, method=None):
