@@ -5,31 +5,30 @@ from tekson_manufacturing.execution.execution_engine import ExecutionEngine
 
 def auto_create_manufacture_entry(doc, method=None):
     """
-    Auto-create Manufacture Stock Entry when Work Order is completed
+    SAFETY NET: Trigger Execution Engine when Work Order status changes to Completed
     
-    Business Rule: WO-003 - Auto-manufacture on WO complete
+    Business Rule: WO-003 (Safety Net Only)
     
     Trigger: Work Order Before Save
+    
+    IMPORTANT: This is NOT the primary logic owner.
+    - Primary Owner: Execution Engine (triggered by Job Card submit)
+    - This hook: Safety net for manual WO status changes
+    
+    Architecture:
+    - Hook detects status change → Delegates to Execution Engine
+    - Execution Engine validates: All JCs complete, quantities achieved, no duplicates
+    - Hook never creates Stock Entry directly
     
     Args:
         doc: Work Order document
         method: Event method name (optional)
-    
-    Note:
-    This is a backup to the Job Card submit trigger.
-    Handles cases where WO status is manually set to "Completed".
-    
-    Logic:
-    - Check if WO is submitted and status is "Completed"
-    - Check if Manufacture Stock Entry already exists
-    - If not, use Execution Engine to create one
-    - Show confirmation message
     """
     if (
         doc.docstatus == 1
         and doc.status == "Completed"
     ):
-        # Check if Stock Entry already exists
+        # Check if Stock Entry already exists (quick check before calling engine)
         existing = frappe.db.exists(
             "Stock Entry",
             {
@@ -41,28 +40,27 @@ def auto_create_manufacture_entry(doc, method=None):
         
         if not existing:
             try:
-                # Use Execution Engine to create
+                # Delegate to Execution Engine (primary owner)
                 engine = ExecutionEngine()
                 result = engine.complete_work_order(doc.name)
                 
-                if result.get('success') and result.get('stock_entry'):
-                    frappe.msgprint(
-                        _("Manufacture Stock Entry Created: {0}").format(result['stock_entry']),
-                        alert=True
-                    )
-                elif result.get('message'):
-                    frappe.msgprint(
-                        _("Work Order completion note: {0}").format(result['message']),
-                        alert=True
-                    )
+                # Log result for audit trail
+                if result.get('success'):
+                    if result.get('stock_entry'):
+                        frappe.log_error(
+                            title=_("WO Safety Net: Manufacture Entry Created"),
+                            message=f"WO: {doc.name}\nSE: {result['stock_entry']}"
+                        )
+                    else:
+                        frappe.log_error(
+                            title=_("WO Safety Net: Already Complete"),
+                            message=f"WO: {doc.name}\nNote: {result.get('message', 'No message')}"
+                        )
                     
             except Exception as e:
                 frappe.log_error(
-                    title=_("Work Order Auto-Manufacture Error"),
+                    title=_("WO Safety Net: Error"),
                     message=f"WO: {doc.name}\nError: {str(e)}"
                 )
-                # Don't throw - allow WO to save anyway
-                frappe.msgprint(
-                    _("Note: Could not auto-create Manufacture Entry. Please create manually."),
-                    alert=True
-                )
+                # Don't throw - safety net should not block WO save
+                # The primary flow (JC submit) should still work
