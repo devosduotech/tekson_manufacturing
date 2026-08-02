@@ -62,6 +62,8 @@ class MaterialReadinessEngine:
         if not work_order:
             frappe.throw(_("Work Order is required"))
         
+        # Store work_order in instance for later use
+        self.work_order = work_order
         wo = frappe.get_doc("Work Order", work_order)
         
         # Get Department Warehouse for the Work Order
