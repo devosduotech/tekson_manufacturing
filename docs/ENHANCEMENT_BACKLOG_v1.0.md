@@ -298,17 +298,26 @@ Allow management to manually block/release Job Cards for priority changes.
 
 ### EH-011: WIP Return to Stores Workflow
 
-**Priority:** MEDIUM  
-**Target Phase:** Phase 1.1  
+**Priority:** LOW (Downgraded from MEDIUM)  
+**Target Phase:** Phase 2 (Moved from Phase 1.1)  
 **Status:** Deferred  
 
 **Description:**
 Formalized workflow for returning excess material from Department WIP to Stores.
 
-**Features:**
+**Rationale for Downgrade:**
+Based on operational decision OD-012, material returns require Production initiation and can be handled through standard ERPNext Stock Entry. A dedicated workflow is not required unless UAT demonstrates specific operational need.
+
+**Current Approach (Phase 1):**
+- Production identifies excess material
+- Standard Stock Entry created manually
+- From: Department WIP
+- To: Raw Material Stores
+
+**Future State (if needed):**
 - Return request initiation
 - Approval workflow
-- Stock Entry creation
+- Automated Stock Entry creation
 - Department WIP reduction
 - Stores inventory increase
 
@@ -316,10 +325,13 @@ Formalized workflow for returning excess material from Department WIP to Stores.
 - Better inventory accuracy
 - Excess material recovery
 - Cost reduction
+- Audit trail
 
 **Dependencies:** None  
 **Complexity:** Low  
-**Estimated Effort:** 4-6 days  
+**Estimated Effort:** 4-6 days (if implemented)
+
+**Decision Criteria:** Implement only if UAT shows high volume of returns or operational difficulty with manual process.  
 
 ---
 
@@ -413,8 +425,34 @@ Effort  │           │  EH-012   │
 
 | Phase | Enhancements | Approval Required | Target Date |
 |-------|--------------|-------------------|-------------|
-| Phase 1.1 | EH-001, EH-002, EH-003, EH-011, EH-012 | Project Manager | Post-UAT |
-| Phase 2 | All remaining | Customer + PM | Q4 2026 |
+| Phase 1.1 | EH-001, EH-002, EH-003, EH-012 | Project Manager | Post-UAT |
+| Phase 2 | EH-004 to EH-011, EH-013 to EH-025 | Customer + PM | Q4 2026 |
+
+**Note:** EH-011 downgraded to LOW priority and moved to Phase 2 based on OD-012.
+
+---
+
+## Deferred Topics Register
+
+This register tracks operational decisions and topics that were **intentionally deferred** during Phase 1 design and UAT preparation.
+
+| Topic | Decision | Deferred Until | Rationale | Reference |
+|-------|----------|----------------|-----------|-----------|
+| Stores Picking List | Consolidated picking deferred | Phase 1.1 | Operational efficiency, not MES core | OD-011 |
+| Barcode Material Issue | Barcode scanning deferred | Phase 2 | Requires hardware, manual entry sufficient | OD-023 |
+| Handheld Interface | Mobile interface deferred | Phase 2 | Hardware procurement needed | OD-024 |
+| Planner Production Buckets | Shift-wise planning deferred | Phase 2 | Advanced planning feature | OD-025 |
+| WIP Return Workflow | Formal workflow deferred | Phase 2 | Standard Stock Entry sufficient | OD-012, EH-011 |
+| Scrap Management Workflow | Formal scrap workflow deferred | Phase 2 | Manual process adequate for Phase 1 | OD-016 |
+| Rework Job Card Flow | Rework workflow deferred | Phase 2 | Quality processes need analysis | OD-017 |
+| Management Priority Override | Override status deferred | Phase 2 | Handled verbally in Phase 1 | OD-014 |
+| Stock Reservation | Reservation NOT implemented | Closed - Not Required | First-come, first-consume model chosen | OD-004 |
+| Department Replenishment Dashboard | Dashboard deferred | Phase 1.1 | Operational enhancement | EH-003 |
+| Consolidated Material Issue | Multi-WO issue deferred | Phase 1.1 | Operational efficiency | EH-002 |
+| Material Shortage Alerts | Alert system deferred | Phase 1.1 | Manual communication sufficient | EH-012 |
+| Dynamic WO Consolidation | Auto-consolidation deferred | Phase 2 | Advanced planning feature | OD-007 |
+
+**Total Deferred Topics:** 13
 
 ---
 
@@ -432,6 +470,7 @@ Effort  │           │  EH-012   │
 - Only by Project Manager approval
 - Must document rationale
 - Update this document
+- Add to Deferred Topics Register if applicable
 
 ---
 

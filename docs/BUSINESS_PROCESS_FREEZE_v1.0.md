@@ -1,6 +1,6 @@
-# Phase 1 MES Business Process Freeze
+# Phase 1 MES Functional Scope Freeze
 
-**Document ID:** MES-PH1-FP-001  
+**Document ID:** MES-PH1-FS-001  
 **Version:** 1.0  
 **Date:** August 2, 2026  
 **Status:** ✅ **FROZEN**  
@@ -10,13 +10,22 @@
 
 ## Executive Summary
 
-This document formally declares the **Phase 1 MES Business Process as FROZEN**. No new business enhancements will be introduced until Internal Integration Testing, Internal UAT, Customer UAT, and feedback review are complete.
+This document formally declares the **Phase 1 MES Functional Scope as FROZEN**. No new business enhancements will be introduced until Internal Integration Testing, Internal UAT, Customer UAT, and feedback review are complete.
 
 **Freeze Rationale:**
-- ✅ Business process has converged to stable model
+- ✅ Functional scope has converged to stable model
 - ✅ All major architectural decisions made
 - ✅ Risk of analysis paralysis identified
 - ✅ Implementation must begin for empirical validation
+
+**Important Note:**
+The term "Functional Scope Frozen" is used deliberately. The business process itself may evolve slightly during UAT based on real manufacturing observations. What is frozen includes:
+- ✅ Functional Scope
+- ✅ Architecture
+- ✅ Business Rules
+- ✅ Interfaces
+
+Bug fixes and small workflow refinements discovered during UAT are still allowed and expected.
 
 ---
 
@@ -101,7 +110,7 @@ If Finished Good
 | MR-010 | Stores transfers materials to Department WIP before production starts | ✅ FROZEN |
 | MR-011 | Cumulative availability check across multiple Stock Entries | ✅ FROZEN |
 | MR-012 | Department WIP Balance evaluation | ✅ FROZEN |
-| MR-013 | Department WIP Allocation (no reservation) | ✅ FROZEN |
+| MR-013 | Department WIP Live Availability Evaluation | ✅ FROZEN |
 | MR-014 | Department WIP as Source of Truth | ✅ FROZEN |
 | MR-015 | Live evaluation at Job Card start | ✅ FROZEN |
 | MR-016 | Partial Production Readiness | ✅ FROZEN |
@@ -177,6 +186,28 @@ If Finished Good
 | Consumption Logic | **STANDARD ERPNext** | BOM explosion on Manufacture Entry |
 
 **Status:** ✅ **FROZEN** - No ERPNext configuration changes
+
+---
+
+## 4.1 Architectural Principle
+
+**PRINCIPLE-001: MES Augments ERPNext, Does Not Replace**
+
+> **The MES shall augment ERPNext Manufacturing, not replace it.**
+
+**Implementation:**
+- ✅ Use: Standard Work Orders, Job Cards, Stock Entries, BOM Explosion, Backflush
+- ✅ Custom: Material Readiness, Dependency Validation, Diagnostics, Department Workflow
+- ❌ Avoid: Custom WO/JC doctypes, custom consumption logic, custom inventory movements
+
+**Rationale:**
+- Leverage ERPNext's standard manufacturing capabilities
+- Add only execution intelligence that Teksons needs
+- Minimize customizations for easier upgrades
+- Maintain compatibility with ERPNext V16+
+
+**Owner:** Technical Lead  
+**Status:** ✅ **FUNDAMENTAL PRINCIPLE**
 
 ---
 

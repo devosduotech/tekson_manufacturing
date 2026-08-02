@@ -37,7 +37,14 @@ Aug 8:     Customer UAT Kickoff
 Aug 8-22:  Customer UAT Execution
 Aug 25-30: Phase 1 Sign-off
 Sep 1-7:   Phase 1.1 Planning
+Sep 8-30:  Phase 1.1 Execution (Sprint 11-12)
+Oct 1-15:  Testing & Deployment Prep (Sprint 13)
+Oct 16-31: Customer Production Observation (30 days)
+Nov 1-15:  Stabilization & Enhancement Review
+Nov 16-30: Phase 2 Planning
 ```
+
+**Key Milestone Added:** Customer Production Observation (30 days) before Phase 2 planning to ensure enhancement decisions are based on real production experience.
 
 ---
 
@@ -211,6 +218,8 @@ Validate end-to-end manufacturing flow before customer UAT.
 ### 2.1 Enhancement Backlog Review
 
 **Current Backlog:** 12 items (see `ENHANCEMENT_BACKLOG_v1.0.md`)
+
+**Important:** Enhancement prioritization will be conducted AFTER 30-day customer production observation period to ensure decisions are based on real operational experience, not assumptions.
 
 #### Phase 1.1 Candidates (High Priority)
 
