@@ -382,31 +382,30 @@ class MaterialReadinessEngine:
         plant_floor = work_order.get('custom_plant_floor') or work_order.get('plant_floor')
         
         if not plant_floor:
-            # Fallback: Use first WIP warehouse
+            # Fallback: Use first WIP warehouse (by name pattern)
             warehouse = frappe.db.get_value(
                 "Warehouse",
-                {"warehouse_group": "Work In Progress Stores", "is_group": 0},
+                {"name": ["like", "WIP-%"], "is_group": 0},
                 "name"
             )
             return warehouse
         
         # Map Plant Floor to Warehouse
-        # Teksons naming: W → WIP-W, RA → WIP-RA, etc.
+        # Teksons naming: W → WIP-W - TPL, RA → WIP-RA - TPL, etc.
         warehouse = frappe.db.get_value(
             "Warehouse",
             {
-                "warehouse_group": "Work In Progress Stores",
-                "custom_plant_floor": plant_floor,
+                "name": ["like", f"WIP-{plant_floor}%"],
                 "is_group": 0
             },
             "name"
         )
         
         if not warehouse:
-            # Fallback: Try with warehouse name pattern
+            # Fallback: Try with custom_plant_floor field
             warehouse = frappe.db.get_value(
                 "Warehouse",
-                {"name": ["like", f"WIP-{plant_floor}"]},
+                {"custom_plant_floor": plant_floor, "is_group": 0},
                 "name"
             )
         
