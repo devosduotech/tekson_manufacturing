@@ -447,13 +447,14 @@ This register tracks operational decisions and topics that were **intentionally 
 | Scrap Management Workflow | Formal scrap workflow deferred | Phase 2 | Manual process adequate for Phase 1 | OD-016 |
 | Rework Job Card Flow | Rework workflow deferred | Phase 2 | Quality processes need analysis | OD-017 |
 | Management Priority Override | Override status deferred | Phase 2 | Handled verbally in Phase 1 | OD-014 |
-| Stock Reservation | Reservation NOT implemented | Closed - Not Required | First-come, first-consume model chosen | OD-004 |
+| Stock Reservation | Reservation NOT implemented | Closed – Not Required | First-come, first-consume model chosen | OD-004 |
 | Department Replenishment Dashboard | Dashboard deferred | Phase 1.1 | Operational enhancement | EH-003 |
 | Consolidated Material Issue | Multi-WO issue deferred | Phase 1.1 | Operational efficiency | EH-002 |
 | Material Shortage Alerts | Alert system deferred | Phase 1.1 | Manual communication sufficient | EH-012 |
 | Dynamic WO Consolidation | Auto-consolidation deferred | Phase 2 | Advanced planning feature | OD-007 |
+| **WO Daily Planning** | **Per-day WO creation required** | **Pre-UAT Fix** | **Planner needs daily visibility** | **NEW** |
 
-**Total Deferred Topics:** 13
+**Total Deferred Topics:** 14
 
 ---
 
