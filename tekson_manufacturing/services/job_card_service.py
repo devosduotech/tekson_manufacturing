@@ -107,30 +107,111 @@ class JobCardService:
         frappe.db.commit()
     
     def update_start_status(self, job_card):
-        """Update custom_start_status field"""
-        # This can be enhanced with actual logic
+        """
+        Update custom_start_status field based on UAT requirements
+        
+        Status Values:
+        - Awaiting
+        - Awaiting Previous Operation
+        - Awaiting Material
+        - Material Available
+        - Ready to Start
+        - In Progress
+        - Completed
+        """
         if job_card.status == "Completed":
             job_card.custom_start_status = "Completed"
         elif job_card.status == "Work In Progress":
             job_card.custom_start_status = "In Progress"
         else:
-            # Check dependencies
+            # Check dependencies first
             prev_op_result = self.get_previous_operation_status(job_card)
             
             if prev_op_result and prev_op_result.get('status') != "Completed":
                 job_card.custom_start_status = "Awaiting Previous Operation"
+                return
+            
+            # Check material availability
+            if job_card.work_order:
+                from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+                
+                engine = MaterialReadinessEngine(work_order=job_card.work_order)
+                readiness = engine.evaluate_material_readiness()
+                
+                if not readiness['is_ready']:
+                    job_card.custom_start_status = "Awaiting Material"
+                else:
+                    job_card.custom_start_status = "Material Available"
             else:
-                job_card.custom_start_status = "Ready to Start"
+                job_card.custom_start_status = "Awaiting"
     
     def update_dependency_status(self, job_card):
-        """Update custom dependency status"""
-        # Placeholder for dependency status logic
-        pass
+        """
+        Update custom_dependency_check and custom_can_start_operation
+        
+        Business Rules:
+        - custom_dependency_check: 1 if all previous operations complete
+        - custom_can_start_operation: 1 if ready to start
+        """
+        # Check previous operations
+        prev_op_result = self.get_previous_operation_status(job_card)
+        
+        if not prev_op_result or prev_op_result.get('status') == "Completed":
+            job_card.custom_dependency_check = 1
+        else:
+            job_card.custom_dependency_check = 0
+        
+        # Can start if dependency check passed AND materials available
+        if job_card.custom_dependency_check == 1:
+            # Check material availability
+            if job_card.work_order:
+                from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+                
+                engine = MaterialReadinessEngine(work_order=job_card.work_order)
+                readiness = engine.evaluate_material_readiness()
+                
+                if readiness['is_ready']:
+                    job_card.custom_can_start_operation = 1
+                else:
+                    job_card.custom_can_start_operation = 0
+            else:
+                job_card.custom_can_start_operation = 1
+        else:
+            job_card.custom_can_start_operation = 0
     
     def update_material_status(self, job_card):
-        """Update custom material status fields"""
-        # Placeholder for material status logic
-        pass
+        """
+        Update custom_material_available_for_operation and custom_material_status_details
+        
+        Business Rules:
+        - custom_material_available_for_operation: 1 if materials available
+        - custom_material_status_details: Detailed status message
+        """
+        if not job_card.work_order:
+            job_card.custom_material_available_for_operation = 0
+            job_card.custom_material_status_details = "Work Order not linked"
+            return
+        
+        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+        
+        engine = MaterialReadinessEngine(work_order=job_card.work_order)
+        readiness = engine.evaluate_material_readiness()
+        
+        if readiness['is_ready']:
+            job_card.custom_material_available_for_operation = 1
+            job_card.custom_material_status_details = "Material available in WIP"
+        else:
+            job_card.custom_material_available_for_operation = 0
+            
+            # Build detailed message
+            missing_items = readiness.get('missing_items', [])
+            
+            if missing_items:
+                job_card.custom_material_status_details = "Missing: " + ", ".join(missing_items[:3])
+                if len(missing_items) > 3:
+                    job_card.custom_material_status_details += f" (+{len(missing_items) - 3} more)"
+            else:
+                job_card.custom_material_status_details = "Material shortage"
 
 
 class WorkOrderService:

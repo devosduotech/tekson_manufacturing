@@ -7,9 +7,16 @@ app_license = "mit"
 
 doc_events = {
     "Job Card": {
+        "before_insert": [
+            "tekson_manufacturing.utils.job_card_utils.populate_job_card_fields",
+            "tekson_manufacturing.utils.job_card_utils.allocate_workstation",
+        ],
         "validate": "tekson_manufacturing.utils.job_card_utils.set_wip_warehouse",
         "on_submit": "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
+    },
+    "Work Order": {
+        "before_save": "tekson_manufacturing.services.work_order_service.auto_create_manufacture_entry",
     },
     "Stock Entry": {
         "on_submit": "tekson_manufacturing.execution.execution_engine.on_stock_entry_submit",

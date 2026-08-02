@@ -1,102 +1,68 @@
 import frappe
 from frappe import _
+from tekson_manufacturing.execution.execution_engine import ExecutionEngine
 
 
-class WorkOrderService:
+def auto_create_manufacture_entry(doc, method=None):
     """
-    Work Order Service Layer
+    Auto-create Manufacture Stock Entry when Work Order is completed
     
-    Business Rules:
-    - WO-001: Work Order creation validation
-    - WO-002: Warehouse structure validation
-    - WO-003: Status management
+    Business Rule: WO-003 - Auto-manufacture on WO complete
+    
+    Trigger: Work Order Before Save
+    
+    Args:
+        doc: Work Order document
+        method: Event method name (optional)
+    
+    Note:
+    This is a backup to the Job Card submit trigger.
+    Handles cases where WO status is manually set to "Completed".
+    
+    Logic:
+    - Check if WO is submitted and status is "Completed"
+    - Check if Manufacture Stock Entry already exists
+    - If not, use Execution Engine to create one
+    - Show confirmation message
     """
-    
-    def __init__(self):
-        self.repo = self._get_repository()
-    
-    def _get_repository(self):
-        """Get Work Order Repository"""
-        from tekson_manufacturing.repositories.work_order_repository import WorkOrderRepository
-        return WorkOrderRepository()
-    
-    def get_work_order_details(self, work_order_name):
-        """
-        Get Work Order details with warehouse structure
-        
-        Args:
-            work_order_name: Work Order name
-        
-        Returns: dict with WO details
-        """
-        wo = self.repo.get(work_order_name)
-        
-        if not wo:
-            frappe.throw(_("Work Order {0} not found").format(work_order_name))
-        
-        return {
-            'name': wo.name,
-            'production_item': wo.production_item,
-            'qty': wo.qty,
-            'produced_qty': wo.produced_qty or 0,
-            'status': wo.status,
-            'source_warehouse': wo.source_warehouse,
-            'wip_warehouse': wo.wip_warehouse,
-            'fg_warehouse': wo.fg_warehouse,
-            'custom_plant_floor': wo.get('custom_plant_floor') or wo.get('plant_floor'),
-            'bom_no': wo.bom_no,
-            'company': wo.company
-        }
-    
-    def complete(self, work_order_name):
-        """
-        Complete Work Order
-        
-        Args:
-            work_order_name: Work Order name
-        
-        Returns: dict with success message
-        """
-        wo = frappe.get_doc('Work Order', work_order_name)
-        
-        if wo.status != 'Completed':
-            frappe.throw(_("Work Order {0} is not in Completed status").format(work_order_name))
-        
-        return {
-            'success': True,
-            'message': _("Work Order {0} completed successfully").format(work_order_name)
-        }
-    
-    def refresh_status(self, work_order_name):
-        """
-        Refresh Work Order status based on Job Cards and Stock Entries
-        
-        Args:
-            work_order_name: Work Order name
-        
-        Returns: dict with updated status
-        """
-        wo = frappe.get_doc('Work Order', work_order_name)
-        
-        # Get Job Card status
-        job_cards = frappe.get_all(
-            'Job Card',
-            filters={'work_order': work_order_name, 'docstatus': 1},
-            fields=['name', 'status', 'operation']
+    if (
+        doc.docstatus == 1
+        and doc.status == "Completed"
+    ):
+        # Check if Stock Entry already exists
+        existing = frappe.db.exists(
+            "Stock Entry",
+            {
+                "work_order": doc.name,
+                "purpose": "Manufacture",
+                "docstatus": 1
+            }
         )
         
-        # Get Stock Entry status
-        stock_entries = frappe.get_all(
-            'Stock Entry',
-            filters={'work_order': work_order_name, 'docstatus': 1},
-            fields=['name', 'stock_entry_type', 'posting_date']
-        )
-        
-        return {
-            'work_order': work_order_name,
-            'current_status': wo.status,
-            'job_cards_count': len(job_cards),
-            'stock_entries_count': len(stock_entries),
-            'job_cards': job_cards,
-            'stock_entries': stock_entries
-        }
+        if not existing:
+            try:
+                # Use Execution Engine to create
+                engine = ExecutionEngine()
+                result = engine.complete_work_order(doc.name)
+                
+                if result.get('success') and result.get('stock_entry'):
+                    frappe.msgprint(
+                        _("Manufacture Stock Entry Created: {0}").format(result['stock_entry']),
+                        alert=True
+                    )
+                elif result.get('message'):
+                    frappe.msgprint(
+                        _("Work Order completion note: {0}").format(result['message']),
+                        alert=True
+                    )
+                    
+            except Exception as e:
+                frappe.log_error(
+                    title=_("Work Order Auto-Manufacture Error"),
+                    message=f"WO: {doc.name}\nError: {str(e)}"
+                )
+                # Don't throw - allow WO to save anyway
+                frappe.msgprint(
+                    _("Note: Could not auto-create Manufacture Entry. Please create manually."),
+                    alert=True
+                )
