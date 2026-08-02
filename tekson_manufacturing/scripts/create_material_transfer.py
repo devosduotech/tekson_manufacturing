@@ -51,17 +51,64 @@ def get_correct_wip_warehouse(work_order_name):
         return wo.wip_warehouse
 
 
-def create_transfer(work_order, raw_materials=None, submit=True):
+def is_raw_material_or_bof(item_code):
+    """
+    Check if item is a Raw Material or BOF purchased item (not sub-assembly)
+    
+    Args:
+        item_code: Item code
+    
+    Returns: True if raw material/BOF, False if sub-assembly
+    """
+    item = frappe.get_doc('Item', item_code)
+    
+    # Check Item Group
+    item_group = item.item_group
+    
+    # Raw materials and BOF items are typically in these groups
+    raw_material_groups = [
+        'Raw Material',
+        'Consumables',
+        'BOF MC',
+        'BOF Fabrication'
+    ]
+    
+    # Sub-assemblies are in these groups
+    sub_assembly_groups = [
+        'Sub Assembly',
+        'Sub Assemblies',
+        'Child Component',
+        'To Group'
+    ]
+    
+    if item_group in raw_material_groups:
+        return True
+    elif item_group in sub_assembly_groups:
+        return False
+    else:
+        # Check if item is manufactured or purchased
+        # Purchased items are raw materials, manufactured are sub-assemblies
+        if item.is_purchase_item and not item.is_manufactured:
+            return True
+        elif item.is_manufactured:
+            return False
+        else:
+            # Default: treat as raw material
+            return True
+
+
+def create_transfer(work_order, raw_materials=None, submit=True, skip_sub_assemblies=True):
     """
     Create Material Transfer Stock Entry for a Work Order
     
-    Uses correct WIP warehouse from Job Cards, not Work Order
+    Uses correct WIP warehouse from Job Cards (not Work Order)
     
     Args:
         work_order: Work Order name
         raw_materials: List of dicts with item_code, qty, from_warehouse (optional)
                       If None, uses BOM items
         submit: Whether to submit the Stock Entry
+        skip_sub_assemblies: If True, only transfer raw materials & BOF items
     
     Returns: Stock Entry document
     """
@@ -84,8 +131,15 @@ def create_transfer(work_order, raw_materials=None, submit=True):
     if not raw_materials:
         bom = frappe.get_doc('BOM', wo.bom_no)
         raw_materials = []
+        skipped_count = 0
         
         for item in bom.items:
+            # Skip sub-assemblies if flag is set
+            if skip_sub_assemblies and not is_raw_material_or_bof(item.item_code):
+                print(f"Skipping sub-assembly: {item.item_code}")
+                skipped_count += 1
+                continue
+            
             item_doc = frappe.get_doc('Item', item.item_code)
             
             # Get default warehouse from item
@@ -102,6 +156,10 @@ def create_transfer(work_order, raw_materials=None, submit=True):
                 'qty': item.qty,
                 'from_warehouse': from_wh
             })
+        
+        if skipped_count > 0:
+            print(f"Skipped {skipped_count} sub-assemblies")
+        print()
     
     # Create Stock Entry
     se = frappe.get_doc({
