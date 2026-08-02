@@ -55,46 +55,26 @@ def is_raw_material_or_bof(item_code):
     """
     Check if item is a Raw Material or BOF purchased item (not sub-assembly)
     
+    Uses BOM existence check:
+    - Item has BOM → Sub-Assembly (will have own WO/JC)
+    - Item has no BOM → Raw Material (needs transfer)
+    
     Args:
         item_code: Item code
     
     Returns: True if raw material/BOF, False if sub-assembly
     """
-    item = frappe.get_doc('Item', item_code)
+    # Check if item has its own BOM
+    item_bom = frappe.db.get_value('BOM', 
+        {'item': item_code, 'is_active': 1, 'docstatus': 1}, 
+        'name')
     
-    # Check Item Group
-    item_group = item.item_group
-    
-    # Raw materials and BOF items are typically in these groups
-    raw_material_groups = [
-        'Raw Material',
-        'Consumables',
-        'BOF MC',
-        'BOF Fabrication',
-        'To Group'  # Items waiting to be grouped - treat as raw material
-    ]
-    
-    # Sub-assemblies are in these groups
-    sub_assembly_groups = [
-        'Sub Assembly',
-        'Sub Assemblies',
-        'Child Component'
-    ]
-    
-    if item_group in raw_material_groups:
-        return True
-    elif item_group in sub_assembly_groups:
+    # If item has BOM, it's a sub-assembly (skip)
+    if item_bom:
         return False
-    else:
-        # For other groups, check purchase/manufactured flags
-        # Purchased items are raw materials, manufactured are sub-assemblies
-        if item.get('is_purchase_item') and not item.get('is_manufactured'):
-            return True
-        elif item.get('is_manufactured'):
-            return False
-        else:
-            # Default: treat as raw material
-            return True
+    
+    # No BOM means it's a raw material (include)
+    return True
 
 
 def create_transfer(work_order, raw_materials=None, submit=True, skip_sub_assemblies=True):
