@@ -306,5 +306,56 @@ def validate_department_transfers(wo_name):
         traceback.print_exc()
 
 
+def test_new_work_order(work_order='WO/260801/0001'):
+    """
+    Test material readiness for a new Work Order
+    
+    Usage:
+        bench execute tekson_manufacturing.tests.sprint_10_validation.test_new_work_order --kwargs '{"work_order": "WO/260801/0001"}'
+    """
+    from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+    
+    print('=' * 60)
+    print(f'MATERIAL READINESS: {work_order}')
+    print('=' * 60)
+    
+    try:
+        wo = frappe.get_doc('Work Order', work_order)
+        print(f'Item: {wo.production_item}')
+        print(f'Qty: {wo.qty}')
+        print(f'WIP Warehouse: {wo.wip_warehouse}')
+        print(f'Source Warehouse: {wo.source_warehouse}')
+        print(f'FG Warehouse: {wo.fg_warehouse}')
+        print()
+        
+        engine = MaterialReadinessEngine()
+        result = engine.evaluate_material_readiness(work_order)
+        
+        print(f'Is Ready: {result["is_ready"]}')
+        print(f'Department Warehouse: {result.get("transfer_summary", {}).get("department_warehouse")}')
+        print(f'Total Items Required: {result.get("transfer_summary", {}).get("total_items_required")}')
+        print()
+        
+        if result['missing_items']:
+            print('Missing Items:')
+            for item in result['missing_items']:
+                print(f'  - {item}')
+            print()
+        
+        if result['transferred_items']:
+            print('Transferred Items:')
+            for item in result['transferred_items']:
+                print(f'  - {item["item_code"]}: {item["transfer_status"]} ({item["transfer_percent"]}%)')
+            print()
+        
+        print('=' * 60)
+        print('✅ Test completed successfully')
+        
+    except Exception as e:
+        print(f'❌ Error: {str(e)}')
+        import traceback
+        traceback.print_exc()
+
+
 if __name__ == '__main__':
     run_validation()
