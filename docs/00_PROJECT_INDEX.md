@@ -1,10 +1,11 @@
 # Tekson Manufacturing MES - Documentation Index
 
 **Document Type:** Navigation Guide  
-**Version:** 1.0  
-**Date:** 2026-08-01  
-**Status:** Active  
+**Version:** 2.0  
+**Date:** 2026-08-02  
+**Status:** ✅ **READY FOR TESTING**  
 **Project:** Tekson Manufacturing MES  
+**Phase:** Testing (UAT Preparation)
 
 ---
 
@@ -12,12 +13,27 @@
 
 **New to the project?** Start here:
 
-1. Read **01_PROJECT_OVERVIEW.md** (5 min) - Understand what we're building
-2. Read **MES_ARCHITECTURE_OVERVIEW.md** (15 min) - Understand the architecture
-3. Read **BUSINESS_RULES_SPECIFICATION.md** (30 min) - Understand the business rules
-4. Read **SPRINT_DEFINITION_OF_DONE.md** (10 min) - Understand completion criteria
-5. Read **PYTHON_CODING_STANDARDS.md** (15 min) - Understand coding conventions
-6. Start coding! 🚀
+1. **📊 PROJECT_STATUS_REPORT_Aug2_2026.md** (10 min) - Current project status
+2. **BUSINESS_PROCESS_FREEZE_v1.0.md** (15 min) - Frozen business process
+3. **01_PROJECT_OVERVIEW.md** (5 min) - Understand what we're building
+4. **MES_ARCHITECTURE_IMPLEMENTATION.md** (15 min) - Understand the architecture
+5. **MES_BUSINESS_RULES.md** (30 min) - 24 frozen business rules
+6. **UAT/UAT_TEST_PLAN_FULL_CYCLE.md** (20 min) - UAT test scenarios
+7. Start testing! 🚀
+
+---
+
+## 🔥 Latest Documents (Aug 2, 2026)
+
+| Document | Purpose | Priority |
+|----------|---------|----------|
+| [PROJECT_STATUS_REPORT_Aug2_2026.md](PROJECT_STATUS_REPORT_Aug2_2026.md) | Current status report | 🔴 HIGH |
+| [BUSINESS_PROCESS_FREEZE_v1.0.md](BUSINESS_PROCESS_FREEZE_v1.0.md) | Business process freeze | 🔴 HIGH |
+| [ENHANCEMENT_BACKLOG_v1.0.md](ENHANCEMENT_BACKLOG_v1.0.md) | Deferred enhancements | 🔴 HIGH |
+| [UAT/GAP_ANALYSIS_SERVER_SCRIPTS.md](../UAT/GAP_ANALYSIS_SERVER_SCRIPTS.md) | Server script comparison | 🟡 MEDIUM |
+| [UAT/JOB_CARD_CUSTOM_FIELDS_IMPLEMENTATION.md](../UAT/JOB_CARD_CUSTOM_FIELDS_IMPLEMENTATION.md) | Custom fields guide | 🟡 MEDIUM |
+| [UAT/SERVER_SCRIPT_RETIREMENT_MATRIX.md](../UAT/SERVER_SCRIPT_RETIREMENT_MATRIX.md) | Script retirement plan | 🟡 MEDIUM |
+| [UAT/CUSTOM_FIELDS_CATEGORIZATION.md](../UAT/CUSTOM_FIELDS_CATEGORIZATION.md) | Field categorization | 🟡 MEDIUM |
 
 ---
 
