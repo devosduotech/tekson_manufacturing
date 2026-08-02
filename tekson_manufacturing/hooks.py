@@ -7,6 +7,7 @@ app_license = "mit"
 
 doc_events = {
     "Job Card": {
+        "validate": "tekson_manufacturing.utils.job_card_utils.set_wip_warehouse",
         "on_submit": "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
     },
