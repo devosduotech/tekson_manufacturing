@@ -68,9 +68,14 @@ def run_review():
     
     # Get all items
     items = frappe.get_all('Item',
-        fields=['name', 'item_name', 'item_group', 'default_warehouse', 'stock_uom'],
+        fields=['name', 'item_name', 'item_group', 'stock_uom'],
         order_by='name'
     )
+    
+    # Get default_warehouse separately (might be custom field)
+    for item in items:
+        item_doc = frappe.get_doc('Item', item.name)
+        item.default_warehouse = item_doc.get('default_warehouse') or item_doc.get('custom_default_warehouse')
     
     print(f"Total Items: {len(items)}")
     print()
@@ -166,12 +171,21 @@ def auto_assign_warehouses(dry_run=True):
     print(f"Mode: {'DRY RUN' if dry_run else 'EXECUTION'}")
     print()
     
-    # Get items without default warehouse
+    # Get all items (filter in code)
     items = frappe.get_all('Item',
-        filters={'default_warehouse': ['is', 'not set']},
         fields=['name', 'item_name', 'item_group'],
         order_by='name'
     )
+    
+    # Filter items without warehouse
+    items_without = []
+    for item in items:
+        item_doc = frappe.get_doc('Item', item.name)
+        default_wh = item_doc.get('default_warehouse') or item_doc.get('custom_default_warehouse')
+        if not default_wh:
+            items_without.append(item)
+    
+    items = items_without
     
     print(f"Found {len(items)} items without default warehouse")
     print()
@@ -381,9 +395,14 @@ def export_items(file_path):
     print()
     
     items = frappe.get_all('Item',
-        fields=['name', 'item_name', 'item_group', 'default_warehouse', 'stock_uom', 'description'],
+        fields=['name', 'item_name', 'item_group', 'stock_uom', 'description'],
         order_by='name'
     )
+    
+    # Get default_warehouse for each item
+    for item in items:
+        item_doc = frappe.get_doc('Item', item.name)
+        item.default_warehouse = item_doc.get('default_warehouse') or item_doc.get('custom_default_warehouse')
     
     print(f"Exporting {len(items)} items...")
     
