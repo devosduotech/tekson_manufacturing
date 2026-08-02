@@ -523,7 +523,7 @@ class MaterialReadinessEngine:
                 se.posting_time,
                 sed.qty,
                 sed.uom,
-                se.user
+                se.owner as user
             FROM `tabStock Entry Detail` sed
             INNER JOIN `tabStock Entry` se ON sed.parent = se.name
             WHERE sed.item_code = %s
