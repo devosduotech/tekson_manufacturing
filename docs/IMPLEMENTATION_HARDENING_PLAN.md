@@ -27,6 +27,111 @@ For every implementation decision, ask:
 
 ---
 
+## ERPNext vs MES Responsibility Matrix
+
+| Responsibility | ERPNext | MES | Notes |
+|----------------|---------|-----|-------|
+| **Inventory Management** | ✅ | ❌ | ERPNext owns all stock transactions |
+| **Costing & Valuation** | ✅ | ❌ | ERPNext standard costing |
+| **Backflush Consumption** | ✅ | ❌ | ERPNext consumes BOM qty from WIP |
+| **Stock Ledger Entries** | ✅ | ❌ | Never modify SLE directly |
+| **Bin Quantities** | ✅ | ❌ | Never modify Bin directly |
+| **GL Entries** | ✅ | ❌ | Never create GL entries |
+| **Material Readiness** | ❌ | ✅ | MES evaluates WIP availability |
+| **Dependency Validation** | ❌ | ✅ | MES validates operation sequence |
+| **Production Sequencing** | ❌ | ✅ | MES controls JC start workflow |
+| **Department Visibility** | ❌ | ✅ | MES provides shop-floor intelligence |
+| **Diagnostics** | ❌ | ✅ | MES provides production messages |
+| **Shop Floor UI** | ❌ | ✅ | MES provides operator interface |
+| **Work Order Lifecycle** | ✅ | ❌ | ERPNext status auto-updates |
+| **Manufacture Entry** | ✅ | ❌ | ERPNext creates Stock Entry |
+
+**Key Principle:** MES = Business Intelligence Layer, NOT Inventory Engine
+
+---
+
+## ERPNext Boundaries (Never Override)
+
+The MES **must NEVER**:
+
+- ❌ Modify Stock Ledger Entries directly
+- ❌ Calculate valuation or costing
+- ❌ Modify Bin quantities directly
+- ❌ Create GL Entries
+- ❌ Bypass ERPNext manufacturing validation
+- ❌ Override ERPNext Work Order status logic
+- ❌ Create custom inventory tracking parallel to ERPNext
+
+**When inventory operations are needed:**
+```
+Call ERPNext standard APIs
+    ↓
+Let ERPNext handle transactions
+    ↓
+MES reads results for intelligence
+```
+
+---
+
+## MES Business Intelligence Layer
+
+The MES provides **information and workflow orchestration**, not inventory ownership:
+
+### Intelligence Provided
+- ✅ Ready to Start status
+- ✅ Awaiting Material alerts
+- ✅ Awaiting Previous Operation status
+- ✅ Material Shortage diagnostics
+- ✅ Transfer suggestions
+- ✅ Supervisor dashboards
+- ✅ Production visibility
+- ✅ Dependency status
+
+### Workflow Orchestration
+- ✅ JC Start validation
+- ✅ JC Complete workflow
+- ✅ Dependency refresh
+- ✅ Material readiness evaluation
+- ✅ Department workflow enforcement
+
+---
+
+## Hook Responsibility Contract
+
+All hooks follow this pattern:
+
+```
+ERPNext Hook
+    ↓
+Receive Event (before_insert, validate, on_submit, etc.)
+    ↓
+Call Service (single line delegation)
+    ↓
+Exit (no business logic in hook)
+```
+
+**Hook Implementation Rules:**
+- ❌ No SQL queries in hooks
+- ❌ No business rules in hooks
+- ❌ No calculations in hooks
+- ❌ No inventory logic in hooks
+- ✅ Only delegate to Service layer
+- ✅ Keep hooks under 10 lines of code
+
+**Example:**
+```python
+def validate_job_card_start(doc, method=None):
+    """Hook: Job Card validate event"""
+    if doc.is_new() or doc.flags.ignore_validate:
+        return
+    
+    # Delegate to service (no logic here)
+    from tekson_manufacturing.utils.job_card_utils import validate_job_card_start
+    validate_job_card_start(doc)
+```
+
+---
+
 ## Executive Summary
 
 The Phase 1 MES has completed feature development and validated the core architecture. This document defines the transition from **feature development** to **implementation hardening** leading to Customer UAT.
@@ -284,7 +389,7 @@ Ready: 23.55 kg available
 ---
 
 **Exit Criteria:**
-- ✅ All 4 workflows pass
+- ✅ All 6 workflows pass
 - ✅ Using actual Teksons BOMs (R215 series)
 - ✅ No manual workarounds needed
 - ✅ All diagnostics clear
