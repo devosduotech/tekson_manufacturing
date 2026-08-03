@@ -510,32 +510,41 @@ class ExecutionEngine:
         3. Set t_warehouse to parent department's WIP warehouse
         4. Create and submit Stock Entry
         """
-        from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
-        
         # Check if this is a sub-assembly
         is_sub_assembly = frappe.db.exists(
             "BOM Item",
             {"item_code": work_order.production_item, "docstatus": 1}
         )
         
-        se_dict = make_stock_entry(
-            work_order_id=work_order.name,
-            purpose="Manufacture"
-        )
-        
-        # Override FG warehouse for sub-assemblies
+        # Get target warehouse for sub-assemblies
+        target_warehouse = None
         if is_sub_assembly:
             target_warehouse = self.get_sub_assembly_output_warehouse(work_order)
-            
-            if target_warehouse:
-                # Update the target warehouse in Stock Entry
-                for item in se_dict.get('items', []):
-                    if item.is_finished_item or item.is_scrap_item:
-                        item.t_warehouse = target_warehouse
-                
-                se_dict.to_warehouse = target_warehouse
         
-        stock_entry = frappe.get_doc(se_dict)
+        # Create Stock Entry manually to override warehouse
+        stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.purpose = "Manufacture"
+        stock_entry.work_order = work_order.name
+        stock_entry.from_bom = 1
+        stock_entry.bom_no = work_order.bom_no
+        stock_entry.use_multi_level_bom = 1
+        stock_entry.company = work_order.company
+        
+        # Set target warehouse
+        if target_warehouse:
+            stock_entry.to_warehouse = target_warehouse
+        else:
+            stock_entry.to_warehouse = work_order.fg_warehouse
+        
+        # Get items from BOM
+        stock_entry.get_items()
+        
+        # Override t_warehouse for finished items if sub-assembly
+        if target_warehouse:
+            for item in stock_entry.items:
+                if item.is_finished_item or item.is_scrap_item:
+                    item.t_warehouse = target_warehouse
+        
         stock_entry.insert(ignore_permissions=True)
         stock_entry.submit()
         
