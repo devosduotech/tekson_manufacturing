@@ -77,3 +77,15 @@ class MESExceptionError(frappe.ValidationError):
         raise MESExceptionError("Failed to create exception log")
     """
     pass
+
+
+class MESExecutionError(MESValidationError):
+    """
+    Exception for execution engine errors
+    
+    Use for execution-related errors in Job Card submit/cancel.
+    
+    Example:
+        raise MESExecutionError("Failed to execute Job Card completion logic")
+    """
+    pass
