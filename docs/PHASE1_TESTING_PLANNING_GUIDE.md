@@ -481,7 +481,7 @@ Validate end-to-end manufacturing flow before customer UAT.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | Aug 2, 2026 | AI Assistant | Initial creation |
+| 1.0 | Aug 2, 2026 | Project Team | Initial creation |
 | | | | |
 
 **Next Review:** After Internal Integration Testing (Aug 7)  

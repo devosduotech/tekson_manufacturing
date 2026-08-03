@@ -788,8 +788,8 @@ After Customer UAT sign-off:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | Aug 3, 2026 | AI Assistant | Initial implementation hardening plan |
-| 1.1 | Aug 3, 2026 | AI Assistant | Added 10 refinements, gates, workflows, metrics |
+| 1.0 | Aug 3, 2026 | Project Team | Initial implementation hardening plan |
+| 1.1 | Aug 3, 2026 | Project Team | Added 10 refinements, gates, workflows, metrics |
 | | | | |
 
 **Next Review:** After Wave 2 (Workflow Integration & Validation)  

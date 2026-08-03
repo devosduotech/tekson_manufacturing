@@ -670,7 +670,7 @@ If concurrent starts become a practical issue during production:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | Aug 2, 2026 | AI Assistant | Initial creation |
+| 1.0 | Aug 2, 2026 | Project Team | Initial creation |
 | | | | |
 
 ---

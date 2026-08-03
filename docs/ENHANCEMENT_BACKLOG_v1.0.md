@@ -511,7 +511,7 @@ This register tracks operational decisions and topics that were **intentionally 
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | Aug 2, 2026 | AI Assistant | Initial backlog creation |
+| 1.0 | Aug 2, 2026 | Project Team | Initial backlog creation |
 | | | | |
 
 ---
