@@ -529,6 +529,10 @@ class ExecutionEngine:
         stock_entry.bom_no = work_order.bom_no
         stock_entry.use_multi_level_bom = 1
         stock_entry.company = work_order.company
+        stock_entry.fg_warehouse = work_order.fg_warehouse
+        
+        # Set manufactured quantity
+        stock_entry.fg_completed_qty = work_order.produced_qty or work_order.qty
         
         # Set target warehouse
         if target_warehouse:
@@ -685,8 +689,9 @@ class ExecutionEngine:
         except Exception:
             pass
         
-        # Set status
-        wo.set_status()
+        # ERPNext Work Order doesn't have set_status() method
+        # Status is auto-updated by ERPNext when Manufacture Entry is created
+        # Just save to trigger any hooks
         wo.save(ignore_permissions=True)
         
         frappe.db.commit()
