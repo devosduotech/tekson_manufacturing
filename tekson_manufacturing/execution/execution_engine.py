@@ -543,11 +543,27 @@ class ExecutionEngine:
         # Get items from BOM
         stock_entry.get_items()
         
-        # Override t_warehouse for finished items if sub-assembly
-        if target_warehouse:
-            for item in stock_entry.items:
-                if item.is_finished_item or item.is_scrap_item:
-                    item.t_warehouse = target_warehouse
+        # Override source warehouse from BOM Item if set
+        bom_items = {item.item_code: item.source_warehouse for item in bom.items if item.source_warehouse}
+        
+        # Get last completed JC's WIP warehouse (where finished goods are located)
+        last_jc = frappe.db.get_value('Job Card', 
+            {'work_order': work_order.name, 'docstatus': 1},
+            'wip_warehouse',
+            order_by='modified desc')
+        
+        for item in stock_entry.items:
+            # Set source warehouse from BOM Item
+            if item.item_code in bom_items:
+                item.s_warehouse = bom_items[item.item_code]
+            
+            # For finished goods, source = last JC's WIP warehouse
+            if item.is_finished_item and last_jc:
+                item.s_warehouse = last_jc
+            
+            # Override t_warehouse for finished items if sub-assembly
+            if target_warehouse and (item.is_finished_item or item.is_scrap_item):
+                item.t_warehouse = target_warehouse
         
         stock_entry.insert(ignore_permissions=True)
         stock_entry.submit()

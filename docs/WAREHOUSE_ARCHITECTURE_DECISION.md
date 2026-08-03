@@ -1,447 +1,568 @@
 # Warehouse Architecture Decision
 
 **Document Type:** Architecture Decision Record  
-**Date:** 2026-07-31  
-**Status:** Approved for Implementation  
+**Date:** 2026-08-03  
+**Status:** Approved for UAT  
+**Version:** 2.0  
 **Related Rules:** WH-001, WH-002, WH-003, WH-004, WH-005
 
 ---
 
-## Decision: Department-Centric Warehouse Model with Teksons Structure
+## Executive Summary
 
-The Tekson MES will use a **department-centric warehouse model** leveraging ERPNext's Warehouse Group feature and Plant Floor hierarchy, with Teksons-specific naming convention.
+The Tekson MES uses a **logical production holding warehouse** model where:
+- Material is transferred **once** from Stores to Department WIP at production start
+- Intermediate department movement is tracked via **Job Cards**, not Stock Entries
+- Backflush consumes from WIP Warehouse and produces to FG Warehouse
+- BOM defines **what** is made and **where** it goes (Target FG Warehouse)
+- Process Plan defines **how** it's made (first operation determines WIP Warehouse)
+
+This reduces stock entries from potentially 10+ per WO to **exactly 2**, while maintaining full production traceability through Job Cards.
+
+---
+
+## Decision: Logical WIP Warehouse with Cached Status
+
+### Core Principle
+
+The Work Order `wip_warehouse` represents a **logical production holding warehouse**, not a physical location tied to a specific department throughout production.
+
+**Material Flow:**
+```
+Stores
+    ↓ (Material Transfer - 1x)
+WIP Warehouse (First Department)
+    ↓ (Production tracked by Job Cards, NOT stock movements)
+[Operation 1] → [Operation 2] → [Operation 3] → ...
+    ↓ (Manufacture Entry - 1x, backflush)
+FG Warehouse
+```
+
+**Total Stock Entries per WO:** 2 (Transfer + Manufacture)
 
 ---
 
 ## Context
 
-### Initial Approach (Rejected)
+### Initial Approach (V1.0 - Department Transfers)
 
-Originally, the MES design considered operation-specific warehouses:
-
+Originally implemented with inter-department transfers:
 ```
-Operation 10 → WIP-Operation-10
-Operation 20 → WIP-Operation-20
-Operation 30 → WIP-Operation-30
+Stores → WIP-CNC → WIP-Ralu Weld → WIP-Assembly → FG
 ```
 
-**Problems:**
-- Excessive stock transfers between operations
-- Doesn't match physical shop-floor reality
-- Complex configuration
-- Difficult to maintain
+**Problems Identified:**
+- Excessive stock entries (4-6 per WO)
+- Complex transfer logic between departments
+- Operators confused about "where" material physically is
+- System overhead for tracking each transfer
+- Doesn't match how supervisors think about production
 
-### Revised Approach (Adopted)
+### Revised Approach (V2.0 - Logical Holding)
 
-Department-based warehouses matching physical factory layout:
-
+Single WIP warehouse with Job Card tracking:
 ```
-CNC Department
-├── Operation 10: Cutting
-├── Operation 20: Drilling
-└── Operation 30: Deburring
-↓
-Single Warehouse: CNC Department Store
+Stores → WIP-Ralu In (logical holding)
+    ↓
+[All Operations tracked by Job Cards]
+    ↓
+FG Warehouse
 ```
 
 **Benefits:**
-- Matches actual material flow
-- Reduces unnecessary transfers
-- Simpler configuration
-- Enables department-level reporting
-- Leverages ERPNext standard fields
+- Only 2 stock entries per WO
+- Production progress visible via Job Card status
+- Matches supervisor mental model ("in production" vs "in warehouse")
+- Simpler configuration and maintenance
+- ERPNext standard backflush works without customization
 
 ---
 
 ## Warehouse Hierarchy
 
-### Teksons Warehouse Structure (Using ERPNext Warehouse Groups)
+### Teksons Warehouse Structure
 
 ```
 Work In Progress Stores (Warehouse Group)
-├── WIP-W
-├── WIP-RA
-├── WIP-RP
-├── WIP-CNC
-├── WIP-Ralu Weld
-└── WIP-Ralu In
+├── WIP-Ralu In - TPL
+├── WIP-Ralu Weld - TPL
+├── WIP-CNC - TPL
+├── WIP-RP - TPL
+├── WIP-RA - TPL
+└── WIP-W - TPL
 
 Stores (Warehouse Group)
-├── Raw Materials Stores
-└── BOF Stores
+├── Raw Material Stores - TPL
+└── BOF Stores - TPL
 
 Receipt and Dispatch Stores (Warehouse Group)
-├── Incoming Quality Hold Stores
-└── Incoming Quality Rejected Stores
+├── Incoming Quality Hold Stores - TPL
+└── Incoming Quality Rejected Stores - TPL
 
-Finished Goods (Standalone Warehouse)
+Finished Goods Stores - TPL (Standalone)
 
-Rejected Stores (Standalone Warehouse)
+Rejected Stores - TPL (Standalone)
 
-Scrap Stores (Standalone Warehouse)
+Scrap Stores - TPL (Standalone)
 ```
 
 ### ERPNext Standard Mapping
 
 | ERPNext Object | Tekson Usage | Purpose |
 |----------------|--------------|---------|
-| **Plant Floor** | Manufacturing Department | W, RA, RP, CNC, Ralu Weld, Ralu In |
-| **Warehouse** (on Workstation) | WIP Warehouse | WIP-W, WIP-RA, WIP-RP, WIP-CNC, WIP-Ralu Weld, WIP-Ralu In |
-| **Workstation Type** | Capability Group | Groups workstations that can perform same operation |
-| **Workstation** | Actual Machine/Station | Tube Expander-01, Brazing Station-01, etc. |
-| **Operation** | Standard Operation | Cutting, Drilling, Brazing, etc. |
-| **Job Card** | Execution Record | Links to Workstation and Operation |
-
-**Note:** Department and Plant Floor are the same in Teksons context.
-
-### Department to Warehouse Mapping
-
-| Plant Floor (Department) | Warehouse | Parent Group |
-|--------------------------|-----------|--------------|
-| W | WIP-W | Work In Progress Stores |
-| RA | WIP-RA | Work In Progress Stores |
-| RP | WIP-RP | Work In Progress Stores |
-| CNC | WIP-CNC | Work In Progress Stores |
-| Ralu Weld | WIP-Ralu Weld | Work In Progress Stores |
-| Ralu In | WIP-Ralu In | Work In Progress Stores |
-
-### Material Flow
-
-#### Incoming Material Flow (Receipt and Dispatch)
-
-```
-Supplier Delivery
-        │
-        ▼
-Receipt and Dispatch Stores
-        │
-        ▼
-Incoming Quality Hold Stores
-        │
-    Inspection
-        │
-    ┌───┴─────────────┐
-    │                 │
-Accepted          Rejected
-    │                 │
-    ▼                 ▼
-┌───┴───────┐    Incoming Quality
-│           │    Rejected Stores
-Raw Materials  (under Receipt and
-Stores       Dispatch Stores)
-    │
-BOF Stores
-(under Stores)
-```
-
-#### Production Material Flow
-
-```
-Raw Materials Stores / BOF Stores
-        │
-        ▼
-Material Transfer for Manufacture
-        │
-        ▼
-WIP-CNC (for CNC Department)
-        │
-        ▼
-[All CNC Job Cards]
-        │
-        ▼
-Department Transfer
-        │
-        ▼
-WIP-Ralu Weld (for Ralu Weld Department)
-        │
-        ▼
-[All Ralu Weld Job Cards]
-        │
-        ▼
-Department Transfer
-        │
-        ▼
-WIP-Assembly
-        │
-        ▼
-[Final Assembly Job Cards]
-        │
-        ▼
-Manufacture Stock Entry
-        │
-        ▼
-Finished Goods
-```
-
-**Key Principle:** Materials move between **departments** (WIP warehouses), not between individual operations.
+| **Plant Floor** | Manufacturing Department | Ralu In, Ralu Weld, CNC, RP, RA, W |
+| **Warehouse** (on Workstation) | Department WIP | WIP-Ralu In, WIP-CNC, etc. |
+| **Work Order.wip_warehouse** | Logical Production Holding | First department WIP |
+| **Work Order.fg_warehouse** | Final Destination | FG Stores or next stage WIP |
+| **Work Order.source_warehouse** | Raw Material Source | Raw Material Stores |
 
 ---
 
-## Configuration Model
+## Warehouse Resolution Logic
 
-### Workstation Configuration
-
-Each Workstation in ERPNext is configured with:
+### FG Warehouse Priority
 
 ```
-Workstation: Tube Expander-01
-├── Workstation Type: Tube Expansion
-├── Plant Floor: CNC
-└── Warehouse: CNC Department Store
+1. Production Plan FG Warehouse (override)
+        ↓
+2. BOM Target FG Warehouse (mandatory field)
+        ↓
+3. Manufacturing Settings Default FG
 ```
 
-### Teksons Department Structure
+**Configuration:**
+- BOM Custom Field: `target_fg_warehouse` (Mandatory)
+- Examples:
+  - Core Assembly BOM → `WIP-Ralu Weld - TPL`
+  - Tank Assembly BOM → `WIP-Ralu Weld - TPL`
+  - Final Radiator BOM → `Finished Goods Stores - TPL`
+
+### WIP Warehouse Priority
 
 ```
-W Department (Plant Floor)
-├── Workstation: Press-01 → WIP-W
-└── Workstation: Press-02 → WIP-W
-
-RA Department (Plant Floor)
-├── Workstation: Station-01 → WIP-RA
-└── Workstation: Station-02 → WIP-RA
-
-RP Department (Plant Floor)
-├── Workstation: Station-01 → WIP-RP
-└── Workstation: Station-02 → WIP-RP
-
-CNC Department (Plant Floor)
-├── Workstation: Tube Expander-01 → WIP-CNC
-├── Workstation: Tube Expander-02 → WIP-CNC
-├── Workstation: Lathe-01 → WIP-CNC
-└── Workstation: Lathe-02 → WIP-CNC
-
-Ralu Weld Department (Plant Floor)
-├── Workstation: Brazing-01 → WIP-Ralu Weld
-└── Workstation: Brazing-02 → WIP-Ralu Weld
-
-Ralu In Department (Plant Floor)
-├── Workstation: Station-01 → WIP-Ralu In
-└── Workstation: Station-02 → WIP-Ralu In
+1. Production Plan WIP Warehouse (override)
+        ↓
+2. First Operation's Department WIP (from Process Plan)
+        ↓
+3. Manufacturing Settings Default WIP
 ```
 
-All workstations within same department point to same WIP warehouse.
+**Logic:**
+```python
+# Get first operation's workstation
+first_op = work_order.operations[0]
+workstation = frappe.get_doc('Workstation', first_op.workstation)
+department = workstation.department
+
+# Build WIP warehouse name
+wip_warehouse = f'WIP-{department.split("-")[0]} - TPL'
+```
 
 ---
 
-## MES Logic
+## BOM Configuration
 
-### Material Readiness Engine
+### Required Fields
 
-When checking material readiness for a Job Card:
+| Field | Type | Mandatory | Purpose |
+|-------|------|-----------|---------|
+| `target_fg_warehouse` | Link (Warehouse) | Yes | Final destination of finished goods |
+| `operations` | Table (BOM Operation) | Yes | Defines process plan / routing |
+
+### Example Configuration
+
+**BOM: R215 Radiator Core Assembly**
+```yaml
+Item: R215 Radiator Core
+target_fg_warehouse: WIP-Ralu Weld - TPL
+Operations:
+  - Operation: Tube Cutting
+    Workstation: CNC-01 (Department: Ralu In)
+  - Operation: Core Assembly
+    Workstation: Assembly-01 (Department: Ralu In)
+  - Operation: Brazing
+    Workstation: Brazing-01 (Department: Ralu Weld)
+```
+
+**Result:**
+- `WO.wip_warehouse` = `WIP-Ralu In - TPL` (from first operation)
+- `WO.fg_warehouse` = `WIP-Ralu Weld - TPL` (from BOM)
+
+---
+
+## Production Plan Overrides
+
+Production Plan can override BOM defaults when needed:
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `fg_warehouse` | Override destination | Export FG Stores instead of regular FG |
+| `for_warehouse` | Override WIP | Special project WIP |
+
+**Priority:** Production Plan > BOM > Manufacturing Settings
+
+---
+
+## Work Order Configuration
+
+### Auto-Populated Fields
 
 ```python
-def get_job_card_warehouse(job_card):
-    workstation = frappe.get_doc("Workstation", job_card.workstation)
-    return workstation.warehouse  # Department Store
-
-def check_material_readiness(job_card):
-    warehouse = get_job_card_warehouse(job_card)
-    # Check availability in department warehouse
-    return check_cumulative_transfers(item_code, warehouse)
+Work Order (after creation):
+├── source_warehouse = Raw Material Stores - TPL
+├── wip_warehouse = WIP-Ralu In - TPL (from first operation)
+└── fg_warehouse = WIP-Ralu Weld - TPL (from BOM)
 ```
 
-### Department Transfer Logic
+### Validation Rules
 
-When last Job Card of a department completes:
-
-```python
-def on_department_completion(job_card):
-    if is_last_job_card_in_department(job_card):
-        next_department = get_next_department(job_card.work_order)
-        suggest_transfer(
-            from_warehouse = job_card.warehouse,
-            to_warehouse = next_department.warehouse
-        )
-```
+Before WO submission:
+1. ✅ `wip_warehouse` must exist and not be a group node
+2. ✅ `fg_warehouse` must exist and not be a group node
+3. ✅ `source_warehouse` must exist (if specified)
+4. ✅ All warehouses must belong to same company
 
 ---
 
-## Benefits
+## Stock Entry Flow
 
-### Operational Benefits
+### 1. Material Transfer for Manufacture
 
-1. **Reflects Physical Reality**
-   - Matches actual shop-floor material movement
-   - Operators understand "CNC Department Store" intuitively
+**Trigger:** After WO submission, before production starts
 
-2. **Reduced Transactions**
-   - No stock transfers between operations in same department
-   - Only department-to-department transfers
+```python
+Stock Entry:
+├── purpose = "Material Transfer for Manufacture"
+├── from_warehouse = Raw Material Stores - TPL
+├── to_warehouse = WIP-Ralu In - TPL (WO.wip_warehouse)
+└── work_order = WO-001
+```
 
-3. **Simplified Configuration**
-   - One warehouse per department
-   - Easy to understand and maintain
+**Validation:**
+- Material available in source warehouse
+- WIP warehouse exists
+- WO is submitted
 
-### Reporting Benefits
+### 2. Manufacture (Backflush)
 
-Enables department-level analytics:
-- Department-wise WIP inventory
-- Department production queues
-- Department supervisor dashboards
-- Department capacity planning
-- Department efficiency reports
-- Department-level scheduling
-- Workstation utilization within department
+**Trigger:** When last Job Card is completed
 
-### MES Benefits
+```python
+Stock Entry:
+├── purpose = "Manufacture"
+├── from_warehouse = WIP-Ralu In - TPL (WO.wip_warehouse)
+├── to_warehouse = WIP-Ralu Weld - TPL (WO.fg_warehouse)
+├── work_order = WO-001
+└── bom_no = BOM-001
+```
 
-1. **Simpler Validation Logic**
-   ```
-   Job Card → Workstation → Plant Floor → Department Warehouse
-   ```
-   Instead of maintaining operation-to-warehouse mappings
+**Backflush Logic:**
+- Consumes raw materials from `wip_warehouse` (BOM quantity)
+- Produces finished goods to `fg_warehouse`
+- Excess material remains in `wip_warehouse` for next WO
 
-2. **Natural Department Grouping**
-   - All operations in CNC use CNC Department Store
-   - Automatic inheritance through Workstation
+---
 
-3. **Future-Ready**
-   - Department dashboards map naturally
-   - Department capacity monitoring
-   - Department-wise scheduling
+## Material Readiness & Caching
+
+### Cached Status Architecture
+
+**WO Submit = Production Release (Not Just Planning)**
+
+When the planner submits a Work Order, it is **released to production**. The Job Card Readiness Engine evaluates **current WIP stock immediately**.
+
+**Key Principle:** Material may already be in WIP (transferred earlier or excess from previous WO).
+
+**WO Submit (Production Release):**
+```
+WO Submitted
+    ↓
+Create Job Cards
+    ↓
+Job Card Readiness Engine
+    ↓
+Evaluate CURRENT WIP Stock
+    ↓
+Update Custom Fields:
+  - custom_material_status = "Material Available" / "Waiting for Material" / "Shortage"
+  - custom_readiness_status = "Ready to Start" / "Waiting for Previous Operation" / "Blocked"
+  - custom_dependency_last_updated = Now()
+```
+
+**Material Transfer (Additional Stock):**
+```
+Material Transfer Submitted
+    ↓
+WIP Stock Updated
+    ↓
+Job Card Readiness Engine
+    ↓
+Refresh WO's Job Cards Only
+    ↓
+Update Custom Fields with new stock status
+```
+
+**Operation Completion:**
+```
+Job Card Completed
+    ↓
+Refresh Downstream JCs Only
+    ↓
+Update dependency status (material check optional)
+```
+
+### Event-Driven Refresh Triggers
+
+| Event | Action | Material Check | Scope |
+|-------|--------|----------------|-------|
+| WO Submit | Create JCs + Run Readiness Engine | ✅ Yes (current WIP) | All JCs in WO |
+| Material Transfer Submit | Refresh Job Cards | ✅ Yes | All JCs in WO (from SE.work_order) |
+| Material Return | Refresh Job Cards | ✅ Yes | All JCs in WO |
+| Operation Complete | Refresh Downstream JCs | Optional | Downstream JCs only |
+| Stock Reconciliation (WIP) | Refresh Affected JCs | ✅ Yes | Affected JCs only |
+| Manual Refresh | On-demand | ✅ Yes | Selected JCs |
+
+**Key Principles:**
+1. Work Order is **immutable** after submission (Cancel & Amend for changes)
+2. Material Transfer refreshes **only that WO's JCs** (via SE.work_order link)
+3. Operation Complete refreshes **downstream JCs only** (efficiency)
+
+### Start Button Validation
+
+**Lightweight check (< 100ms):**
+```python
+def start_job_card(jc_name):
+    jc = frappe.get_doc('Job Card', jc_name)
+    
+    # Check cached readiness status (instant)
+    if jc.custom_readiness_status != "Ready to Start":
+        frappe.throw(f"Cannot start: {jc.custom_readiness_status} - {jc.custom_blocked_by}")
+    
+    # Quick validation (protect against changes since last refresh)
+    if jc.status == 'Work In Progress':
+        frappe.throw("Already in progress")
+    
+    if jc.work_order_status != 'Submitted':
+        frappe.throw("Work Order is not active")
+    
+    # Optional: Quick stock check (only if strict validation enabled)
+    if strict_validation and not quick_bin_check(jc):
+        frappe.throw("Material no longer available in WIP")
+    
+    # Start
+    jc.status = 'Work In Progress'
+    jc.actual_start_date = now
+    jc.save()
+    
+    # No need to refresh - next operation will refresh on JC submit
+```
+
+**Key Principle:** Start button **consumes** cached status, doesn't recalculate it.
+
+---
+
+## Multi-Level BOM Support
+
+### Sub-Assembly Flow
+
+```
+Sub-Assembly BOM (Core)
+├── target_fg_warehouse: WIP-Ralu Weld - TPL
+└── Operations: [Cutting, Assembly]
+
+Parent BOM (Radiator)
+├── target_fg_warehouse: Finished Goods Stores - TPL
+├── Operations: [Final Assembly, Testing]
+└── Items:
+    └── Core Assembly (from sub-assembly WO)
+```
+
+**Result:**
+- Sub-assembly WO produces to `WIP-Ralu Weld - TPL`
+- Parent WO consumes from `WIP-Ralu Weld - TPL`
+- Final production goes to `Finished Goods Stores - TPL`
+
+---
+
+## Department Dashboard
+
+### Production Visibility
+
+Since material location is "WIP Warehouse" throughout production, **Job Card status** becomes the authoritative source for "where is this item?"
+
+**Department Dashboard shows:**
+```
+Pending (Material Available)
+In Progress (Operation X)
+Completed (Waiting for Transfer)
+Blocked (Waiting for Previous Operation)
+Waiting for Material
+```
+
+### Key Reports
+
+1. **WIP Inventory Report**
+   - Shows material in WIP warehouse by WO
+   - Current operation (from Job Card)
+   - Days in production
+
+2. **Production Progress Report**
+   - WO-wise completion %
+   - Operation-wise status
+   - Delayed operations
+
+3. **Material Shortage Report**
+   - JCs blocked due to material
+   - Expected availability date
+
+---
+
+## Exceptions & Edge Cases
+
+### Partial Production
+
+**Scenario:** WO Qty = 100, Produce 40 today, 60 tomorrow
+
+**Handling:**
+- Stock Entry fg_completed_qty = 40 (first time)
+- Remaining qty = 60 (stays in WIP)
+- Next day: fg_completed_qty = 60
+- Backflush proportional to actual production
+
+### Scrap / Rejection
+
+**Scenario:** 100 produced, 5 rejected
+
+**Handling:**
+- Stock Entry with scrap item row
+- Scrap warehouse: `Scrap Stores - TPL`
+- FG warehouse receives 95 good qty
+- Costing adjusts automatically
+
+### Rework
+
+**Scenario:** QC failure, needs rework
+
+**Options:**
+1. **Same WO:** Create additional Job Card for rework operation
+2. **New WO:** For major rework requiring different process
+
+**Decision:** Based on rework complexity (to be finalized in UAT)
 
 ---
 
 ## Alternatives Considered
 
-### Alternative 1: Operation-Specific Warehouses
+### Alternative 1: Inter-Department Transfers
 
-**Approach:** Each operation has dedicated WIP warehouse
+**Approach:** Stock Entry for each department change
+```
+WIP-CNC → WIP-Ralu Weld → WIP-Assembly
+```
 
 **Rejected because:**
-- Excessive stock transfers
+- 4-6 stock entries per WO
+- Complex transfer logic
+- Doesn't match supervisor mental model
+- System overhead
+
+### Alternative 2: Operation-Specific Warehouses
+
+**Approach:** Each operation has dedicated warehouse
+```
+WIP-Op10, WIP-Op20, WIP-Op30
+```
+
+**Rejected because:**
+- Excessive configuration
 - Doesn't match physical layout
-- Complex configuration
-- Difficult reporting
+- Complex reporting
 
-### Alternative 2: Plant Floor-Level Warehouse (Future Enhancement)
+### Alternative 3: No WIP Warehouse (Direct Consumption)
 
-**Approach:** Store warehouse on Plant Floor, workstations inherit automatically
-
-**Logic:**
+**Approach:** Consume directly from Stores
 ```
-if Workstation.warehouse exists:
-    use Workstation.warehouse
-else:
-    use PlantFloor.warehouse
+Stores → FG (skip WIP)
 ```
 
-**Decision:** Defer to future release
-
-**Rationale:**
-- Current workstation configuration is manageable
-- Need to validate frequency of workstation movement
-- ERPNext V16 may provide native support
-- Keep Phase 1 focused on core MES functionality
-
-**Backlog Item:** If workstation movement between departments becomes frequent, implement Plant Floor-level warehouse configuration with workstation override capability.
+**Rejected because:**
+- No material tracking during production
+- Can't handle partial production
+- Doesn't support multi-level BOM
+- ERPNext requires WIP for backflush
 
 ---
 
-## Implementation Impact
+## Implementation Status
 
-### Material Readiness Engine
-
-Must determine warehouse from Job Card's Workstation:
-
-```python
-# readiness/material_readiness.py
-def get_department_warehouse(job_card):
-    workstation = frappe.get_doc("Workstation", job_card.workstation)
-    return workstation.warehouse
-```
-
-### Dependency Engine
-
-No change needed - operates at Job Card level
-
-### Execution Engine
-
-Department completion detection:
-
-```python
-# execution/execution_engine.py
-def is_last_operation_in_department(job_card):
-    current_dept = get_job_card_department(job_card)
-    next_jc = get_next_job_card(job_card)
-    
-    if not next_jc:
-        return True
-    
-    next_dept = get_job_card_department(next_jc)
-    return current_dept != next_dept
-```
-
-### Configuration
-
-Warehouse naming convention:
-- `CNC Department Store`
-- `W Department Store`
-- `Ralu In Department Store`
-- `Ralu Weld Department Store`
-- `RP Department Store`
-- `Assembly Department Store`
-- `Testing Department Store`
-- `Painting Department Store`
-
-Avoid generic "WIP" naming.
+| Component | Status | Version |
+|-----------|--------|---------|
+| Warehouse Hierarchy | ✅ Implemented | v2.0 |
+| BOM Custom Field | ✅ Implemented | v2.0 |
+| WO Hook (set_warehouses) | ✅ Implemented | v2.0 |
+| Material Transfer | ✅ Implemented | v2.0 |
+| Backflush Logic | ✅ Implemented | v2.0 |
+| Cached Status Fields | ⏳ In Progress | v2.0 |
+| Event-Driven Refresh | ⏳ In Progress | v2.0 |
+| Department Dashboard | ⏳ Planned | v2.0 |
 
 ---
 
 ## Testing Implications
 
-Test scenarios must validate:
+### Critical Test Scenarios
 
-1. **Department Warehouse Inheritance**
-   - TC-WH-001: Job Card inherits warehouse from Workstation
-   - TC-WH-002: All workstations in department use same warehouse
+1. **TC-WH-001: Warehouse Resolution**
+   - WO from BOM with target_fg_warehouse
+   - Verify wip_warehouse from first operation
+   - Verify fg_warehouse from BOM
 
-2. **Department Transfer**
-   - TC-WH-003: Transfer suggested when leaving department
-   - TC-WH-004: No transfer within same department
+2. **TC-WH-002: Material Transfer**
+   - Transfer from Stores to WIP
+   - Verify stock ledger entries
+   - Verify bin balances
 
-3. **Material Readiness**
-   - TC-WH-005: Checks department warehouse, not operation warehouse
-   - TC-WH-006: Cumulative transfers to department warehouse
+3. **TC-WH-003: Backflush**
+   - Complete all JCs
+   - Trigger Manufacture Entry
+   - Verify consumption from WIP
+   - Verify production to FG
 
----
+4. **TC-WH-004: Partial Production**
+   - WO Qty = 100
+   - Produce 40, verify remaining 60 in WIP
+   - Produce 60, verify WO complete
 
-## Future Considerations
+5. **TC-WH-005: Multi-Level BOM**
+   - Sub-assembly WO produces to WIP
+   - Parent WO consumes from WIP
+   - Verify warehouse flow
 
-### V16 Evaluation
-
-When migrating to ERPNext V16:
-- Evaluate native Plant Floor warehouse configuration
-- Assess if customization is still needed
-- Consider standard features before customizing
-
-### Enhancement Backlog
-
-If operational experience indicates frequent workstation movement:
-
-**Enhancement:** Plant Floor-level warehouse configuration
-
-```
-Plant Floor: CNC
-├── Default Warehouse: CNC Department Store
-├── Workstation: Tube Expander-01 (inherits)
-├── Workstation: Lathe-01 (inherits)
-└── Workstation: Special Machine-01 (override: Special Store)
-```
-
-**Decision Criteria:**
-- Frequency of workstation reassignment
-- Operational complexity
-- ERPNext V16 capabilities
+6. **TC-WH-006: Production Plan Override**
+   - BOM target = FG Stores
+   - PP override = Export FG
+   - Verify WO uses PP override
 
 ---
 
-## References
+## UAT Acceptance Criteria
 
-- **Business Rules:** WH-001, WH-002, WH-003, WH-004, WH-005
-- **Implementation:** `readiness/material_readiness.py`, `execution/execution_engine.py`
-- **Test Scenarios:** TC-WH-001 through TC-WH-006
+### Must Pass Before UAT
+
+1. ✅ WO creation with correct warehouses
+2. ✅ Material Transfer validation
+3. ✅ Backflush consumes from WIP
+4. ✅ Partial production works
+5. ✅ Multi-level BOM flow
+6. ✅ Department dashboard shows correct status
+7. ✅ Cached status updates on events
+8. ✅ Start button uses lightweight validation
+
+### Nice to Have (Post-UAT)
+
+- Machine utilization reports
+- Advanced analytics
+- Mobile optimization
 
 ---
 
@@ -449,13 +570,29 @@ Plant Floor: CNC
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2026-07-31 | OSDuo Tech LLP | Initial architecture decision |
+| 1.0 | 2026-07-31 | OSDuo Tech LLP | Initial department-centric model |
+| 2.0 | 2026-08-03 | OSDuo Tech LLP | Logical WIP warehouse with cached status |
 
 **Approved By:** ___________________  
 **Date:** ___________________
 
-**Next Review:** During ERPNext V16 migration planning
+**Next Review:** After UAT completion (v2.1)
 
 ---
 
-*This decision is documented in the architecture and should be referenced when implementing warehouse-related functionality.*
+## References
+
+- **Business Rules:** WH-001, WH-002, WH-003, WH-004, WH-005
+- **Implementation:** 
+  - `services/work_order_service.py` (set_warehouses)
+  - `utils/job_card_utils.py` (cached status)
+  - `execution/execution_engine.py` (backflush)
+- **Test Scenarios:** TC-WH-001 through TC-WH-006
+- **Related Docs:** 
+  - `MES_BUSINESS_RULES.md`
+  - `IMPLEMENTATION_HARDENING_PLAN.md`
+  - `UAT_ACCEPTANCE_MATRIX.md`
+
+---
+
+*This architecture decision separates product definition (BOM) from execution (Process Plan), minimizes stock entries, and uses Job Cards as the authoritative source for production progress tracking.*

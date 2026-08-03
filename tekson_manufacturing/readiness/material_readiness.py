@@ -1,6 +1,9 @@
 import frappe
 from frappe import _
 from datetime import datetime
+from typing import Dict, Any, List
+
+from tekson_manufacturing.mes.dataclasses import MaterialResult, MaterialStatus
 
 
 class MaterialReadinessEngine:
@@ -27,7 +30,7 @@ class MaterialReadinessEngine:
             'transfer_summary': {}
         }
     
-    def evaluate_material_readiness(self, work_order=None):
+    def evaluate_material_readiness(self, work_order=None, job_card=None) -> MaterialResult:
         """
         Evaluate material readiness for a Work Order
         
@@ -37,8 +40,9 @@ class MaterialReadinessEngine:
         
         Args:
             work_order: Work Order name (optional, uses self.work_order if not provided)
+            job_card: Job Card name (optional, for context)
         
-        Returns: dict with is_ready, missing_items, shortage_details, transferred_items, transfer_summary
+        Returns: MaterialResult with is_ready, status, quantities, and details
         
         Dependencies:
         - Work Order
@@ -53,7 +57,7 @@ class MaterialReadinessEngine:
         Example:
         >>> engine = MaterialReadinessEngine(work_order="WO-2026-001")
         >>> result = engine.evaluate_material_readiness()
-        >>> result['is_ready']
+        >>> result.is_ready
         True
         """
         if not work_order:
@@ -62,8 +66,9 @@ class MaterialReadinessEngine:
         if not work_order:
             frappe.throw(_("Work Order is required"))
         
-        # Store work_order in instance for later use
+        # Store in instance for later use
         self.work_order = work_order
+        self.job_card = job_card
         wo = frappe.get_doc("Work Order", work_order)
         
         # Get Department Warehouse for the Work Order
@@ -72,32 +77,70 @@ class MaterialReadinessEngine:
         # Get all required materials from BOM
         required_materials = self.get_required_materials(wo)
         
-        # Initialize transfer summary
-        self.results['transfer_summary'] = {
-            'work_order': work_order,
-            'department_warehouse': department_warehouse,
-            'total_items_required': len(required_materials),
-            'items_fully_transferred': 0,
-            'items_partially_transferred': 0,
-            'items_not_transferred': 0
-        }
+        # Track shortages
+        total_required = 0.0
+        total_available = 0.0
+        shortage_details = []
+        warnings = []
+        errors = []
         
         for material in required_materials:
             item_code = material.get('item_code')
             required_qty = material.get('qty')
+            total_required += required_qty
             
             # MR-014: Get available stock in Department WIP (Source of Truth)
-            # This checks actual stock, not just transfers against this WO
-            # Department WIP is shared operational inventory
             available_qty = self.get_available_stock_in_wip(
                 item_code,
                 department_warehouse
             )
+            total_available += available_qty
             
-            # Get current stock for reference
-            current_stock = available_qty  # Same as available (no reservation)
-            
-            # For tracking purposes, check how much was transferred against this WO
+            # Check for shortage
+            if available_qty < required_qty:
+                shortage_qty = required_qty - available_qty
+                shortage_details.append({
+                    'item_code': item_code,
+                    'item_name': material.get('item_name', ''),
+                    'required_qty': required_qty,
+                    'available_qty': available_qty,
+                    'shortage_qty': shortage_qty,
+                    'warehouse': department_warehouse
+                })
+        
+        # Calculate totals
+        shortage_qty = max(0, total_required - total_available)
+        is_ready = len(shortage_details) == 0
+        
+        # Determine status
+        if is_ready:
+            status = MaterialStatus.AVAILABLE
+            message = _("All materials available")
+        elif total_available > 0:
+            status = MaterialStatus.SHORT
+            message = _("Partial material available. Shortage: {0}").format(shortage_qty)
+        else:
+            status = MaterialStatus.WAITING
+            message = _("Waiting for material transfer")
+        
+        # Build MaterialResult
+        return MaterialResult(
+            is_ready=is_ready,
+            status=status,
+            available_qty=total_available,
+            required_qty=total_required,
+            shortage_qty=shortage_qty,
+            shortage_details=shortage_details,
+            warehouse=department_warehouse,
+            message=message,
+            warnings=warnings,
+            errors=errors
+        )
+        
+        # Legacy: Also populate self.results for backward compatibility
+        self.results['is_ready'] = is_ready
+        self.results['missing_items'] = [d['item_code'] for d in shortage_details]
+        self.results['shortage_details'] = shortage_details
             cumulative_transferred = self.get_cumulative_transferred_qty(
                 item_code, 
                 work_order, 

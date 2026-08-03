@@ -1,9 +1,12 @@
 import frappe
 from frappe import _
 from datetime import datetime
+from typing import Dict, Any, Optional
+
 from tekson_manufacturing.repositories.job_card_repository import JobCardRepository
 from tekson_manufacturing.utils.exceptions import MESDependencyError
 from tekson_manufacturing.utils import log_mes_event
+from tekson_manufacturing.mes.dataclasses import DependencyResult
 
 
 class DependencyEngine:
@@ -40,7 +43,7 @@ class DependencyEngine:
             # MES Settings DocType doesn't exist - use defaults
             self.mes_settings = None
     
-    def validate_previous_operation(self, job_card=None):
+    def validate_previous_operation(self, job_card=None) -> DependencyResult:
         """
         Validate previous operation is complete (DV-001)
         
@@ -50,14 +53,14 @@ class DependencyEngine:
         Args:
             job_card: Job Card name or document (optional, uses self.job_card if not provided)
         
-        Returns: dict with is_valid, message, previous_operation, diagnostic
+        Returns: DependencyResult with can_start, previous_complete, reason, diagnostic
         
         Performance Target: < 1 second
         
         Example:
         >>> engine = DependencyEngine(job_card="JC-2026-002")
         >>> result = engine.validate_previous_operation()
-        >>> result['is_valid']
+        >>> result.can_start
         True
         
         Test Case:
@@ -83,18 +86,8 @@ class DependencyEngine:
         import time
         start_time = time.time()
         
-        result = {
-            'is_valid': True,
-            'message': '',
-            'previous_operation': None,
-            'diagnostic': {}
-        }
-        
         # DV-001: First operation has no previous dependency
         if not jc.sequence_id or jc.sequence_id == 1:
-            result['message'] = "First operation - no previous dependency"
-            result['is_valid'] = True
-            
             # Log
             execution_time = (time.time() - start_time) * 1000
             log_mes_event(
@@ -110,20 +103,20 @@ class DependencyEngine:
                 }
             )
             
-            return result
+            return DependencyResult(
+                can_start=True,
+                previous_complete=True,
+                previous_jc_name=None,
+                reason="First operation - no previous dependency",
+                diagnostic="No dependencies to check",
+                warnings=[],
+                errors=[]
+            )
         
         # Get previous Job Card using repository
         prev_op = self.repo.get_previous_operation(jc.name)
         
         if not prev_op:
-            result['is_valid'] = False
-            result['message'] = "Previous operation Job Card not found"
-            result['diagnostic'] = {
-                'type': 'error',
-                'message': "Cannot find previous operation Job Card",
-                'action': "Check Work Order routing configuration"
-            }
-            
             # Log error
             execution_time = (time.time() - start_time) * 1000
             log_mes_event(
@@ -139,26 +132,18 @@ class DependencyEngine:
                 }
             )
             
-            return result
-        
-        # Store previous operation info
-        result['previous_operation'] = prev_op
+            return DependencyResult(
+                can_start=False,
+                previous_complete=False,
+                previous_jc_name=None,
+                reason="Previous operation Job Card not found",
+                diagnostic="Cannot find previous operation Job Card. Check Work Order routing configuration.",
+                warnings=[],
+                errors=["Previous operation not found"]
+            )
         
         # DV-001: Check if previous operation is completed
         if prev_op.get('status') != "Completed":
-            result['is_valid'] = False
-            result['message'] = f"Previous operation '{prev_op.get('operation')}' is not completed (Status: {prev_op.get('status')})"
-            
-            result['diagnostic'] = {
-                'type': 'warning',
-                'message': f"Operation '{prev_op.get('operation')}' must be completed before starting this operation",
-                'action': f"Complete Job Card {prev_op.get('name')} first",
-                'previous_job_card': prev_op.get('name'),
-                'previous_operation': prev_op.get('operation'),
-                'previous_status': prev_op.get('status'),
-                'previous_sequence': prev_op.get('sequence_id')
-            }
-            
             # Log warning
             execution_time = (time.time() - start_time) * 1000
             log_mes_event(
@@ -194,7 +179,15 @@ class DependencyEngine:
             }
         )
         
-        return result
+        return DependencyResult(
+            can_start=True,
+            previous_complete=True,
+            previous_jc_name=None,
+            reason="Previous operation complete",
+            diagnostic=f"Previous operation '{prev_op.get('operation')}' is complete",
+            warnings=[],
+            errors=[]
+        )
     
     def validate_sequence(self, work_order=None):
         """

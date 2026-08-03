@@ -38,8 +38,11 @@ All code implementations must adhere to these rules.
 - Check sequence_id
 - Find previous Job Card (sequence_id - 1)
 - Verify status = "Completed"
+- Check cached field: `custom_can_start_operation` = 1
 
 **Exception:** First operation (sequence_id = 1) has no previous dependency.
+
+**Implementation Note:** Start permission is pre-calculated when WO is submitted and refreshed on events (material transfer, operation complete). Start button performs lightweight validation only.
 
 ---
 
@@ -57,21 +60,88 @@ All code implementations must adhere to these rules.
 **Rule:** A Job Card should not start if required materials are not available.
 
 **Validation:**
-- Check Material Readiness for parent Work Order
-- All materials must be available or transferred to WIP
+- Check cached field: `custom_material_available` = 1
+- Quick stock verification (< 100ms)
+- Material must be in WO.wip_warehouse
 
 **Severity:** Warning (can be overridden with Strict Validation disabled)
+
+**Implementation Note:** Material availability is evaluated during **Execution Phase** only:
+- **Planning Phase (WO Submit):** Status = "Waiting for Material Transfer"
+- **Execution Phase (Material Transfer):** Evaluate actual WIP stock
+- **Operation Complete:** Refresh downstream JCs (optional stock check)
+
+---
+
+### JC-003A: Job Card Readiness Engine
+
+**Rule:** Job Card readiness is determined by a dedicated engine that evaluates all conditions **immediately on WO submit**.
+
+**WO Submit = Production Release:**
+
+When a Work Order is submitted, it is **released to production** (not just planned). The Readiness Engine:
+1. Creates Job Cards
+2. Evaluates **current WIP stock** immediately
+3. Populates all cached custom fields
+4. Sets status to "Ready to Start" if conditions met
+
+**Material Status vs Readiness Status:**
+
+| Material Status | Readiness Status | Meaning |
+|----------------|------------------|---------|
+| Waiting for Material | Waiting for Material | No stock in WIP yet |
+| Material Available | Ready to Start* | Stock exists, dependencies met |
+| Material Short | Blocked | Insufficient stock in WIP |
+| N/A | Waiting for Previous Operation | Stock available, waiting on prior op |
+| N/A | In Progress | Currently running |
+| N/A | Completed | Already finished |
+
+*Readiness Status = "Ready to Start" only if ALL conditions met:
+- Material Available
+- Previous Operation Complete
+- Work Order Submitted
+- Job Card Not Completed
+- Workstation Available (optional)
+
+**Evaluation Triggers:**
+1. **WO Submit** → Create JCs + Evaluate ALL conditions (including current WIP stock)
+2. **Material Transfer** → Refresh that WO's JCs only (via `SE.work_order` link)
+3. **Operation Complete** → Refresh downstream JCs only (dependency check, material optional)
+4. **Manual Refresh** → On-demand evaluation
+
+**Timestamp Tracking:**
+- `custom_dependency_last_updated` tracks when readiness was last evaluated
+- Provides audit trail and confidence in status accuracy
+
+**Rationale:** WO submission is **production release**, not just planning. Material may already be in WIP (transferred earlier or excess from previous WO). Immediate evaluation provides accurate status from the moment of release.
 
 ---
 
 ### JC-004: Job Card Auto-Refresh
 
-**Rule:** When a Job Card is submitted, dependent Job Cards must be refreshed.
+**Rule:** Job Card readiness status must be refreshed on key execution events.
 
 **Action:**
-- Find next Job Card (sequence_id + 1)
-- Update custom_start_status
-- Trigger diagnostic refresh
+- Trigger Job Card Readiness Engine
+- Update cached fields:
+  - `custom_material_status`
+  - `custom_readiness_status`
+  - `custom_material_shortage_details`
+  - `custom_blocked_by`
+  - `custom_dependency_last_updated`
+
+**Event-Driven Refresh Triggers:**
+
+| Event | Trigger | Scope | Material Check |
+|-------|---------|-------|----------------|
+| WO Submit | Production Release | All JCs in WO | ✅ Yes (Current WIP) |
+| Material Transfer Submit | Inventory Commitment | All JCs in that WO | ✅ Yes |
+| Material Return | Inventory Adjustment | All JCs in that WO | ✅ Yes |
+| Operation Complete | Dependency Change | Downstream JCs only | Optional |
+| Stock Reconciliation (WIP) | Exception | Affected JCs | ✅ Yes |
+| Manual Refresh | User Action | Selected JCs | ✅ Yes |
+
+**Implementation Principle:** Work Order is immutable after submission. No refresh needed for WO edits.
 
 ---
 
@@ -739,6 +809,141 @@ BOF Stores
 - Material stores: `[Material Type] Stores`
 
 **Rationale:** Consistent naming aligned with Teksons operational terminology helps operators and supervisors quickly identify warehouse purposes and material locations.
+
+---
+
+### WH-006: Logical WIP Warehouse Model
+
+**Rule:** The Work Order WIP Warehouse represents a **logical production holding warehouse**, not a physical location for each department.
+
+**Material Flow:**
+```
+Stores
+    ↓ (Material Transfer - 1x)
+WIP Warehouse (First Department)
+    ↓ (Production tracked by Job Cards, NOT stock movements)
+[Operation 1] → [Operation 2] → [Operation 3] → ...
+    ↓ (Manufacture Entry - 1x, backflush)
+FG Warehouse
+```
+
+**Key Principles:**
+1. Material transferred **once** from Stores to WIP at production start
+2. Intermediate department movement tracked via **Job Cards**, not Stock Entries
+3. Backflush consumes from WIP and produces to FG
+4. Total Stock Entries per WO: **2** (Transfer + Manufacture)
+
+**Benefits:**
+- Minimal stock entries (reduced from 4-6 to 2)
+- Production progress visible via Job Card status
+- Matches supervisor mental model ("in production" vs "in warehouse")
+- Simpler configuration and maintenance
+
+---
+
+### WH-007: Warehouse Resolution Priority
+
+**Rule:** Work Order warehouses are auto-populated based on priority hierarchy.
+
+**FG Warehouse Priority:**
+1. Production Plan `fg_warehouse` (override)
+2. BOM `target_fg_warehouse` (mandatory field)
+3. Manufacturing Settings Default FG
+
+**WIP Warehouse Priority:**
+1. Production Plan `for_warehouse` (override)
+2. First Operation's Department WIP (from Process Plan)
+3. Manufacturing Settings Default WIP
+
+**Implementation:**
+```python
+# FG Warehouse
+if production_plan.fg_warehouse:
+    wo.fg_warehouse = production_plan.fg_warehouse
+elif bom.target_fg_warehouse:
+    wo.fg_warehouse = bom.target_fg_warehouse
+else:
+    wo.fg_warehouse = manufacturing_settings.default_fg_warehouse
+
+# WIP Warehouse
+if production_plan.for_warehouse:
+    wo.wip_warehouse = production_plan.for_warehouse
+elif first_operation.workstation:
+    department = workstation.department
+    wo.wip_warehouse = f'WIP-{department.split("-")[0]} - TPL'
+else:
+    wo.wip_warehouse = manufacturing_settings.default_wip_warehouse
+```
+
+---
+
+### WH-008: BOM Target FG Warehouse
+
+**Rule:** Every BOM must specify a Target FG Warehouse (mandatory field).
+
+**Purpose:** Defines where finished goods from this BOM should be transferred upon completion.
+
+**Examples:**
+- Core Assembly BOM → `WIP-Ralu Weld - TPL` (next department)
+- Tank Assembly BOM → `WIP-Ralu Weld - TPL` (next department)
+- Final Radiator BOM → `Finished Goods Stores - TPL` (final destination)
+- Purchased Sub-assembly BOM → `Incoming Quality Hold Stores - TPL` (QC first)
+
+**Configuration:**
+- Custom Field: `target_fg_warehouse` (Link to Warehouse, Mandatory)
+- Location: BOM form, after `fg_warehouse` field
+
+**Rationale:** Separates product definition (BOM) from execution details (Process Plan), allowing process changes without modifying BOMs.
+
+---
+
+### WH-009: Cached Material Status
+
+**Rule:** Job Cards maintain cached material availability status to avoid repeated calculations.
+
+**Custom Fields:**
+- `custom_material_available` (Check) - Is material available?
+- `custom_can_start_operation` (Check) - Can this JC start?
+- `custom_material_status_details` (Text) - Human-readable status
+- `custom_last_evaluated` (Datetime) - When was this calculated
+- `custom_blocked_by` (Data) - Reason if can't start
+
+**Refresh Triggers:**
+1. Work Order submission
+2. Material Transfer completion
+3. Material Return
+4. Operation completion (Job Card submit)
+5. Production quantity change
+
+**Start Button Validation:**
+- Check cached field: `custom_can_start_operation`
+- Quick stock verification (< 100ms)
+- Confirm JC not already running
+
+**Rationale:** Provides immediate feedback to operators without server-side recalculation on every click.
+
+---
+
+### WH-010: Stock Entry Validation
+
+**Rule:** Stock Entries must validate warehouse existence and material availability before submission.
+
+**Material Transfer Validation:**
+- ✅ Material available in source warehouse
+- ✅ WIP warehouse exists and is not a group node
+- ✅ Work Order is submitted
+- ✅ Quantity <= WO required qty
+
+**Manufacture Entry Validation:**
+- ✅ All Job Cards completed
+- ✅ Material available in WIP warehouse
+- ✅ FG warehouse exists and is not a group node
+- ✅ Quantity <= WO pending qty
+
+**Error Messages:**
+- "Material not available in {warehouse}. Required: {qty}, Available: {available_qty}"
+- "Warehouse {warehouse} is a group node. Please select a child warehouse."
+- "Work Order {wo} is not submitted. Please submit before creating Stock Entry."
 
 ---
 
