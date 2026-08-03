@@ -1,6 +1,5 @@
 import frappe
 from tekson_manufacturing.services.job_card_service import JobCardService
-from tekson_manufacturing.services.work_order_service import WorkOrderService
 from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
 
 

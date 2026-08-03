@@ -1,5 +1,5 @@
 import frappe
-from tekson_manufacturing.services.work_order_service import WorkOrderService
+from tekson_manufacturing.execution.execution_engine import ExecutionEngine
 from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
 
 
@@ -13,8 +13,25 @@ def get_work_order_details(work_order):
     
     Returns: dict with Work Order, Job Cards, progress, material readiness
     """
-    service = WorkOrderService()
-    return service.get_work_order_details(work_order)
+    # Return basic WO details (no service needed)
+    wo = frappe.get_doc("Work Order", work_order)
+    
+    # Get Job Cards
+    job_cards = frappe.get_all(
+        "Job Card",
+        filters={"work_order": work_order},
+        fields=["name", "operation", "status", "custom_start_status"]
+    )
+    
+    # Get material readiness
+    engine = MaterialReadinessEngine(work_order=work_order)
+    readiness = engine.evaluate_material_readiness()
+    
+    return {
+        "work_order": wo,
+        "job_cards": job_cards,
+        "material_readiness": readiness
+    }
 
 
 @frappe.whitelist()
@@ -27,8 +44,8 @@ def complete_work_order(work_order):
     
     Returns: dict with completion result
     """
-    service = WorkOrderService()
-    return service.complete(work_order)
+    engine = ExecutionEngine()
+    return engine.complete_work_order(work_order)
 
 
 @frappe.whitelist()
@@ -41,8 +58,8 @@ def refresh_work_order_status(work_order):
     
     Returns: success message
     """
-    service = WorkOrderService()
-    service.refresh_status(work_order)
+    engine = ExecutionEngine()
+    engine.refresh_work_order_status(work_order)
     
     return {"success": True, "message": "Work Order status refreshed"}
 
