@@ -47,6 +47,37 @@ The Phase 1 MES has completed feature development and validated the core archite
 
 ---
 
+## Implementation Gates & Waves
+
+### Gate 1 – Framework Stable
+**Prerequisite for Wave 2**
+
+**Exit Criteria:**
+- ✅ No ImportError exceptions
+- ✅ No hook failures
+- ✅ All services load correctly
+- ✅ All 8 server scripts disabled
+- ✅ Configuration validated
+- ✅ Clean error logs
+
+**Approval:** Technical Lead sign-off required before Wave 2
+
+---
+
+### Gate 2 – Workflow Stable
+**Prerequisite for Wave 3**
+
+**Exit Criteria:**
+- ✅ All 6 workflows pass
+- ✅ No critical defects
+- ✅ Material Readiness working (100% accuracy)
+- ✅ Backflush verified (consumes exact BOM qty)
+- ✅ Excess material reuse validated
+
+**Approval:** Project Manager sign-off required before Wave 3
+
+---
+
 ## Implementation Waves
 
 ### Wave 1 – Stabilization + Server Script Migration + Configuration (2–3 days)
@@ -102,6 +133,35 @@ Checklist:
 **Objective:** Validate complete manufacturing workflows using actual Teksons BOMs, with priority on Material Shortage scenario.
 
 **Workflow Tests (in priority order):**
+
+#### WF-006: Production Priority Change (Validates No-Reservation Model)
+```
+WO-1 Released
+    ↓
+Planner changes priority
+    ↓
+WO-2 Released
+    ↓
+Stores transfers material to WIP
+    ↓
+Production starts WO-2 (higher priority)
+    ↓
+WO-1 remains waiting (Material Readiness = Not Ready)
+    ↓
+Later: WO-1 resumes when material available
+```
+
+**Acceptance:**
+- ✅ Material Readiness reflects current Department WIP (real-time)
+- ✅ No reservation conflicts (first-come, first-consume)
+- ✅ ERPNext Backflush works correctly for both WOs
+- ✅ Priority change handled without system issues
+
+**Rationale:** Validates why we rejected inventory reservation
+
+---
+
+#### WF-002: Material Shortage Flow (CRITICAL - Test First)
 
 #### WF-001: Standard Production Flow
 ```
@@ -257,7 +317,7 @@ Ready: 23.55 kg available
 
 ---
 
-### Wave 5 – Service Boundary Review (1 day)
+### Wave 5 – Internal UAT (2–3 days)
 
 **Objective:** Ensure each service has single, clear responsibility and follows architectural contracts.
 
@@ -339,9 +399,7 @@ For every service method, ask:
 
 ---
 
-### Wave 6 – Internal UAT (2–3 days)
-
-**Objective:** Execute realistic production scenarios with actual Teksons products.
+### Wave 5A – Business Freeze Validation (0.5 day)
 
 **Test Products:**
 - R215 External Fin For CAC
@@ -363,7 +421,33 @@ For every service method, ask:
 
 ---
 
-### Wave 6B – Business Freeze Validation (0.5 day)
+### Wave 6 – Customer UAT Preparation (1 day)
+
+**Validation Checklist:**
+
+#### Business Process Alignment
+- ✅ Planner flow matches BUSINESS_PROCESS_FREEZE_v1.0
+- ✅ Stores flow matches frozen process
+- ✅ Production flow matches frozen process
+- ✅ QC flow matches frozen process
+- ✅ Department WIP model validated
+- ✅ ERPNext Backflush model validated
+
+#### Operational Decisions Compliance
+- ✅ OD-003: Material Transfer for Manufacture
+- ✅ OD-004: Department WIP as Operational Inventory
+- ✅ OD-005: ERPNext Backflush for Consumption
+- ✅ OD-025: WO Status is Informational
+- ✅ OA-001: Concurrent JC Starts assumption accepted
+
+**Exit Criteria:**
+- ✅ All business rules match frozen documentation
+- ✅ No scope drift detected
+- ✅ Architecture principles followed
+
+---
+
+### Wave 6A – Business Freeze Validation (0.5 day)
 
 **Objective:** Confirm no implementation has changed the agreed business process.
 
@@ -425,6 +509,24 @@ For every service method, ask:
 
 ---
 
+## Known Accepted Limitations (Phase 1 Design Choices)
+
+These are **intentional design decisions**, not defects:
+
+| Limitation | Rationale | Target Phase |
+|------------|-----------|--------------|
+| No inventory reservation | First-come, first-consume model matches operations | Phase 2 (if needed) |
+| Concurrent JC starts not synchronized | Operationally rare; ERPNext safety net exists | Phase 2 (if needed) |
+| No Stores Picking List | Operational efficiency, not MES core | Phase 1.1 |
+| No Consolidated Material Issue | Operational efficiency | Phase 1.1 |
+| No barcode scanning | Productivity improvement | Phase 2 |
+| No mobile/handheld UI | Future enhancement | Phase 2 |
+| Limited department transfer automation | Approved workflow only | Phase 2 |
+
+**Note:** These limitations were explicitly deferred to maintain Phase 1 focus and will be evaluated post-UAT.
+
+---
+
 ## Risk Register
 
 | Risk | Probability | Impact | Mitigation |
@@ -434,7 +536,7 @@ For every service method, ask:
 | Backflush not working as expected | Low | High | Already validated (2026-08-03) |
 | Concurrent JC starts cause issues | Low | Medium | Monitor during UAT, enhance if needed |
 | User confusion on terminology | Medium | Low | Clear training materials |
-| Performance issues with large BOMs | Low | Medium | Profile during Wave 6 |
+| Performance issues with large BOMs | Low | Medium | Profile during Wave 5 |
 
 ---
 
@@ -461,6 +563,10 @@ For every service method, ask:
 | Backflush Accuracy | 100% | TBD |
 | Department WIP Balance Accuracy | 100% | TBD |
 | Manual Interventions Required | 0 | TBD |
+| WO Completion Accuracy | 100% | TBD |
+| Parent/Child Synchronization | 100% | TBD |
+| Dependency Validation Accuracy | 100% | TBD |
+| Diagnostic Message Accuracy | 100% | TBD |
 
 ### Internal UAT Pass Criteria
 
@@ -489,12 +595,46 @@ For every service method, ask:
 
 ---
 
+## Phase 1 Architecture Freeze
+
+The following architectural components are **FROZEN** and shall not be modified without approved change request:
+
+- ✅ Repository Pattern
+- ✅ Service Layer
+- ✅ Department WIP Model
+- ✅ ERPNext Backflush
+- ✅ Material Readiness Engine
+- ✅ Dependency Engine
+- ✅ Execution Engine
+- ✅ Diagnostics Framework
+- ✅ ERPNext Inventory Ownership Principle
+
+**Rationale:** Protects the project during implementation and UAT, preventing architectural drift.
+
+---
+
+## Phase 1 Success Definition
+
+Phase 1 is considered **COMPLETE** when:
+
+1. ✅ All workflow validations pass (6/6 workflows)
+2. ✅ Internal UAT passes (all scenarios)
+3. ✅ Customer UAT completes successfully (sign-off received)
+4. ✅ No critical or high-priority defects remain
+5. ✅ The agreed business process is executable without manual workaround
+6. ✅ Customer UAT Readiness Score ≥ 90%
+
+This provides a **single completion criterion** for management.
+
+---
+
 ## Governance
 
 **Change Control:**
 From this point onward, every change must be justified by:
 1. A defect found during internal testing, OR
-2. Feedback received during customer UAT
+2. Feedback received during customer UAT, OR
+3. Formally approved change request
 
 **No new features** will be added until after Customer UAT sign-off.
 
@@ -502,12 +642,53 @@ From this point onward, every change must be justified by:
 - Review Wave progress
 - Identify blockers
 - Update success metrics
+- Verify against Implementation Gates
 
 **Weekly Report:**
 - Wave completion status
 - Defects found/fixed
 - Risk status
 - UAT readiness score
+- Architecture compliance
+
+---
+
+## Phase 1 Closure
+
+After Customer UAT sign-off:
+
+1. **Code Freeze:**
+   - Tag Git Release: `v1.0.0`
+   - Archive implementation documents
+   - Lock develop branch (production only)
+
+2. **Documentation:**
+   - Update Technical Debt register
+   - Prepare Phase 1 Lessons Learned
+   - Archive UAT test results
+
+3. **Transition:**
+   - Open Phase 1 Enhancement Backlog
+   - Start Phase 2 planning
+   - Handover to operations team
+
+4. **Celebration:**
+   - Team recognition
+   - Customer sign-off ceremony
+   - Project closure report
+
+---
+
+## Document Control
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | Aug 3, 2026 | AI Assistant | Initial implementation hardening plan |
+| 1.1 | Aug 3, 2026 | AI Assistant | Added 10 refinements, gates, workflows, metrics |
+| | | | |
+
+**Next Review:** After Wave 2 (Workflow Integration & Validation)  
+**Status:** ✅ **FROZEN** (changes only via approved change request)
 
 ---
 
