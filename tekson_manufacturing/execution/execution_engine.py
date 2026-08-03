@@ -491,19 +491,106 @@ class ExecutionEngine:
         return existing
     
     def create_manufacture_stock_entry(self, work_order):
-        """Create Manufacture Stock Entry"""
+        """
+        Create Manufacture Stock Entry
+        
+        Business Rule: WH-003 - Multi-department flow support
+        
+        For sub-assemblies, output goes to next department's WIP warehouse,
+        not Finished Goods warehouse.
+        
+        Args:
+            work_order: Work Order document
+        
+        Returns: Stock Entry document
+        
+        Logic:
+        1. Check if production item is used as raw material in another BOM (sub-assembly)
+        2. If yes, find parent BOM's first operation department
+        3. Set t_warehouse to parent department's WIP warehouse
+        4. Create and submit Stock Entry
+        """
         from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+        
+        # Check if this is a sub-assembly
+        is_sub_assembly = frappe.db.exists(
+            "BOM Item",
+            {"item_code": work_order.production_item, "docstatus": 1}
+        )
         
         se_dict = make_stock_entry(
             work_order_id=work_order.name,
             purpose="Manufacture"
         )
         
+        # Override FG warehouse for sub-assemblies
+        if is_sub_assembly:
+            target_warehouse = self.get_sub_assembly_output_warehouse(work_order)
+            
+            if target_warehouse:
+                # Update the target warehouse in Stock Entry
+                for item in se_dict.get('items', []):
+                    if item.is_finished_item or item.is_scrap_item:
+                        item.t_warehouse = target_warehouse
+                
+                se_dict.to_warehouse = target_warehouse
+        
         stock_entry = frappe.get_doc(se_dict)
         stock_entry.insert(ignore_permissions=True)
         stock_entry.submit()
         
         return stock_entry
+    
+    def get_sub_assembly_output_warehouse(self, work_order):
+        """
+        Get target WIP warehouse for sub-assembly output
+        
+        Args:
+            work_order: Work Order document
+        
+        Returns: str - WIP warehouse name or None
+        
+        Logic:
+        1. Find parent BOM that uses this item
+        2. Get parent BOM's first operation
+        3. Get workstation's plant floor
+        4. Return WIP-{plant_floor} - TPL
+        """
+        # Find parent BOM item
+        parent_bom_item = frappe.db.get_value(
+            "BOM Item",
+            {"item_code": work_order.production_item, "docstatus": 1},
+            "parent"
+        )
+        
+        if not parent_bom_item:
+            return None
+        
+        # Get parent BOM
+        parent_bom = frappe.get_doc("BOM", parent_bom_item)
+        
+        # Get first operation's workstation
+        if parent_bom.operations and len(parent_bom.operations) > 0:
+            first_op = parent_bom.operations[0]
+            
+            # Get workstation from workstation_type
+            workstation = first_op.workstation or frappe.db.get_value(
+                "Workstation",
+                {"workstation_type": first_op.workstation_type},
+                "name"
+            )
+            
+            if workstation:
+                plant_floor = frappe.db.get_value("Workstation", workstation, "plant_floor")
+                
+                if plant_floor:
+                    target_warehouse = f"WIP-{plant_floor} - TPL"
+                    
+                    # Verify warehouse exists
+                    if frappe.db.exists("Warehouse", target_warehouse):
+                        return target_warehouse
+        
+        return None
     
     def refresh_job_card_status(self, job_card):
         """
