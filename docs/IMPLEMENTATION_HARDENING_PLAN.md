@@ -1,10 +1,29 @@
 # Phase 1 Implementation Hardening Plan
 
 **Document ID:** MES-IHP-001  
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** August 3, 2026  
 **Status:** Active  
 **Owner:** Technical Lead  
+
+---
+
+## Phase 1 Implementation Principle
+
+> **Prefer ERPNext Standard over Custom Code. Customize only where Teksons' manufacturing process cannot be achieved through ERPNext configuration or standard workflows.**
+
+**Rationale:**
+- Leverages ERPNext's proven manufacturing engine
+- Reduces custom code maintenance
+- Ensures upgrade compatibility
+- Maintains Teksons' operational differentiation where it matters
+
+**Decision Framework:**
+For every implementation decision, ask:
+1. Is ERPNext already doing this?
+2. Can we configure ERPNext instead?
+3. Is this business intelligence rather than inventory logic?
+4. Does this justify customization?
 
 ---
 
@@ -16,7 +35,7 @@ The Phase 1 MES has completed feature development and validated the core archite
 - ✅ Business Process Frozen (v1.0)
 - ✅ Architecture Frozen (v1.1)
 - ✅ Core Modules Implemented
-- ✅ Department WIP + Backflush Validated
+- ✅ Department WIP + Backflush Validated (2026-08-03)
 - 🔄 Integration & Stabilization Needed
 
 **Target State:**
@@ -30,55 +49,59 @@ The Phase 1 MES has completed feature development and validated the core archite
 
 ## Implementation Waves
 
-### Wave 1 – Stabilization (1–2 days)
+### Wave 1 – Stabilization + Server Script Migration + Configuration (2–3 days)
 
-**Objective:** Eliminate all implementation regressions.
+**Objective:** Eliminate all implementation regressions, migrate legacy server scripts, and validate configuration.
 
 **Tasks:**
-1. Fix `WorkOrderService` import issues
+
+#### Stabilization
+1. Fix import issues (e.g., `WorkOrderService`)
 2. Remove obsolete imports from Sprint refactoring
 3. Remove dead code from old server script migration
 4. Ensure all service classes instantiate correctly
 5. Validate all hooks execute without errors
 
+#### Server Script Migration
+Replace all legacy server scripts with custom app services:
+
+| Old Server Script | Business Purpose | New Service | Status |
+|-------------------|------------------|-------------|--------|
+| First Operation Initialization | Initialize first JC | `JobCardService.allocate_workstation()` | ✅ Migrated |
+| Job Card Start Validation | Material check | `validate_job_card_start()` hook | ✅ Migrated |
+| Refresh Dependency | Dependency update | `DependencyEngine.refresh()` | ✅ Migrated |
+| WO Completion | Last JC completion | `ExecutionEngine.complete_work_order()` | ✅ Migrated |
+| Material Status | Readiness display | `MaterialReadinessEngine.evaluate_material_readiness()` | ✅ Migrated |
+| Job Card Material Availability | WIP stock check | `MaterialReadinessEngine` | ✅ Migrated |
+| JC Start Control Validation | Previous JC check | `DependencyEngine.validate_previous_operation()` | ✅ Migrated |
+| Allocate Workstation (Round Robin) | Workstation assignment | `JobCardService.allocate_workstation()` | ✅ Migrated |
+
+#### Configuration Validation
+Checklist:
+- ✅ Manufacturing Settings
+- ✅ Company Defaults
+- ✅ Warehouses (6 Department WIP + Stores + FG)
+- ✅ Workstations (with plant_floor)
+- ✅ Plant Floors (CNC, RA, Ralu In, Ralu Weld, RP, W)
+- ✅ BOMs (with operations)
+- ✅ Routing
+- ✅ Item Defaults
+
 **Exit Criteria:**
 - ✅ No ImportError exceptions
 - ✅ No hook failures
 - ✅ All services load correctly
+- ✅ All 8 server scripts disabled
+- ✅ Configuration validated
 - ✅ Clean error logs
 
 ---
 
-### Wave 2 – Server Script Migration (2–3 days)
+### Wave 2 – Workflow Integration & Validation (3–4 days)
 
-**Objective:** Replace all legacy server scripts with custom app services.
+**Objective:** Validate complete manufacturing workflows using actual Teksons BOMs, with priority on Material Shortage scenario.
 
-**Legacy Server Script Traceability Matrix:**
-
-| Old Server Script | Business Purpose | New Service | Status | Verified |
-|-------------------|------------------|-------------|--------|----------|
-| First Operation Initialization | Initialize first JC | `JobCardService.allocate_workstation()` | ✅ Migrated | ⬜ |
-| Job Card Start Validation | Material check | `validate_job_card_start()` hook | ✅ Migrated | ⬜ |
-| Refresh Dependency | Dependency update | `DependencyEngine.refresh()` | ✅ Migrated | ⬜ |
-| WO Completion | Last JC completion | `ExecutionEngine.complete_work_order()` | ✅ Migrated | ⬜ |
-| Material Status | Readiness display | `MaterialReadinessEngine.evaluate_material_readiness()` | ✅ Migrated | ⬜ |
-| Job Card Material Availability | WIP stock check | `MaterialReadinessEngine` | ✅ Migrated | ⬜ |
-| JC Start Control Validation | Previous JC check | `DependencyEngine.validate_previous_operation()` | ✅ Migrated | ⬜ |
-| Allocate Workstation (Round Robin) | Workstation assignment | `JobCardService.allocate_workstation()` | ✅ Migrated | ⬜ |
-
-**Exit Criteria:**
-- ✅ All 8 server scripts disabled
-- ✅ All business rules verified in new services
-- ✅ No functionality lost in migration
-- ✅ Traceability matrix complete
-
----
-
-### Wave 3 – End-to-End Integration (3–5 days)
-
-**Objective:** Validate complete manufacturing workflows using actual Teksons BOMs.
-
-**Workflow Tests:**
+**Workflow Tests (in priority order):**
 
 #### WF-001: Standard Production Flow
 ```
@@ -99,13 +122,12 @@ ERPNext → WO Completed
 
 **Acceptance:**
 - ✅ WO status: Submitted → In Process → Completed
-- ✅ JC Start blocked if WIP insufficient
 - ✅ Backflush consumes exact BOM qty
 - ✅ Excess remains in WIP
 
 ---
 
-#### WF-002: Material Shortage Flow
+#### WF-002: Material Shortage Flow (CRITICAL - Test First)
 ```
 WO Released
     ↓
@@ -175,6 +197,32 @@ WO Status: Completed
 
 ---
 
+#### WF-005: Excess Material Reuse (Validates Inventory Model)
+```
+Stores
+    ↓
+Transfer 30.0 kg to WIP
+    ↓
+WO-1: Produce 30 Fins
+    ↓
+Backflush: Consumes 6.45 kg
+    ↓
+Remaining: 23.55 kg in WIP
+    ↓
+WO-2: Material Readiness Check
+    ↓
+Ready: 23.55 kg available
+```
+
+**Acceptance:**
+- ✅ Remaining WIP stock immediately available for next WO
+- ✅ No material return to Stores required
+- ✅ No reservation required
+- ✅ ERPNext Backflush consumes only BOM qty
+- ✅ Department WIP = operational inventory
+
+---
+
 **Exit Criteria:**
 - ✅ All 4 workflows pass
 - ✅ Using actual Teksons BOMs (R215 series)
@@ -209,9 +257,18 @@ WO Status: Completed
 
 ---
 
-### Wave 5 – Service Review (1 day)
+### Wave 5 – Service Boundary Review (1 day)
 
-**Objective:** Ensure each service has single, clear responsibility.
+**Objective:** Ensure each service has single, clear responsibility and follows architectural contracts.
+
+**Implementation Contract:**
+
+```
+Services may call Repositories
+Repositories must never call Services
+Hooks should call Services only
+No business logic inside Hooks
+```
 
 **Service Boundaries:**
 
@@ -222,7 +279,7 @@ WO Status: Completed
 - What is missing?
 
 **Should NOT:**
-- Track inventory
+- Track inventory (ERPNext responsibility)
 - Create Stock Entries
 - Manage WO status
 
@@ -266,11 +323,19 @@ WO Status: Completed
 
 ---
 
+**ERPNext Boundary Validation:**
+
+For every service method, ask:
+1. Is ERPNext already doing this?
+2. Can we configure ERPNext instead?
+3. Is this business intelligence rather than inventory logic?
+
 **Exit Criteria:**
 - ✅ Each service has single responsibility
 - ✅ Clear delegation between services
 - ✅ No circular dependencies
 - ✅ Service interfaces documented
+- ✅ No ERPNext functionality duplicated
 
 ---
 
@@ -298,6 +363,34 @@ WO Status: Completed
 
 ---
 
+### Wave 6B – Business Freeze Validation (0.5 day)
+
+**Objective:** Confirm no implementation has changed the agreed business process.
+
+**Validation Checklist:**
+
+#### Business Process Alignment
+- ✅ Planner flow matches BUSINESS_PROCESS_FREEZE_v1.0
+- ✅ Stores flow matches frozen process
+- ✅ Production flow matches frozen process
+- ✅ QC flow matches frozen process
+- ✅ Department WIP model validated
+- ✅ ERPNext Backflush model validated
+
+#### Operational Decisions Compliance
+- ✅ OD-003: Material Transfer for Manufacture
+- ✅ OD-004: Department WIP as Operational Inventory
+- ✅ OD-005: ERPNext Backflush for Consumption
+- ✅ OD-025: WO Status is Informational
+- ✅ OA-001: Concurrent JC Starts assumption accepted
+
+**Exit Criteria:**
+- ✅ All business rules match frozen documentation
+- ✅ No scope drift detected
+- ✅ Architecture principles followed
+
+---
+
 ### Wave 7 – Customer UAT Preparation (1 day)
 
 **Objective:** Prepare environment and materials for Customer UAT.
@@ -308,12 +401,27 @@ WO Status: Completed
 3. Prepare user training materials
 4. Set up UAT tracking spreadsheet
 5. Schedule UAT sessions with users
+6. Calculate UAT Readiness Score
+
+**Customer UAT Readiness Scorecard:**
+
+| Area | Weight | Score (0-100) | Weighted |
+|------|--------|---------------|----------|
+| Workflow Validation (5 workflows pass) | 30% | TBD | TBD |
+| Functional Defects (0 critical) | 20% | TBD | TBD |
+| Performance (< 2 sec per operation) | 15% | TBD | TBD |
+| Stability (no crashes in 100 operations) | 15% | TBD | TBD |
+| User Experience (clear messages) | 10% | TBD | TBD |
+| Documentation (complete & accurate) | 10% | TBD | TBD |
+
+**Minimum Score Before Customer UAT:** ≥ 90%
 
 **Exit Criteria:**
 - ✅ Production Mode enabled
 - ✅ Test data ready
 - ✅ Users trained
 - ✅ UAT schedule confirmed
+- ✅ Readiness Score ≥ 90%
 
 ---
 
@@ -332,6 +440,8 @@ WO Status: Completed
 
 ## Success Metrics
 
+### Technical Metrics
+
 | Metric | Target | Current |
 |--------|--------|---------|
 | Python Exceptions | 0 | TBD |
@@ -340,7 +450,27 @@ WO Status: Completed
 | Workflow Tests Pass | 100% | TBD |
 | Code Lines Removed | 500+ | TBD |
 | Service Review Complete | 4 services | TBD |
-| Internal UAT Pass | 5 scenarios | TBD |
+
+### Business Metrics (Critical for UAT)
+
+| Metric | Target | Current |
+|--------|--------|---------|
+| Material Readiness Accuracy | 100% | TBD |
+| False JC Start Approvals | 0 | TBD |
+| False JC Start Blocks | 0 | TBD |
+| Backflush Accuracy | 100% | TBD |
+| Department WIP Balance Accuracy | 100% | TBD |
+| Manual Interventions Required | 0 | TBD |
+
+### Internal UAT Pass Criteria
+
+| Scenario | Target |
+|----------|--------|
+| WF-001: Standard Production | ✅ Pass |
+| WF-002: Material Shortage | ✅ Pass (CRITICAL) |
+| WF-003: Sub-Assembly | ✅ Pass |
+| WF-004: Partial Production | ✅ Pass |
+| WF-005: Excess Material Reuse | ✅ Pass |
 
 ---
 
