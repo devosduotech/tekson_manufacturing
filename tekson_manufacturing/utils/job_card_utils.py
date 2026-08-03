@@ -222,12 +222,17 @@ def validate_job_card_start(doc, method=None):
     - Check Material Readiness
     - Block if materials not available in WIP
     """
+    # DEBUG: Log every call
+    frappe.logger("tekson").error(f"DEBUG: validate_job_card_start called for {doc.name}, status={doc.status}, has_changed={doc.has_value_changed('status')}")
+    
     # Only check when status is changing to "Work In Progress"
     if not doc.has_value_changed("status") or doc.status != "Work In Progress":
+        frappe.logger("tekson").error(f"DEBUG: Skipping - condition not met")
         return
     
     # Skip if document is new
     if doc.is_new():
+        frappe.logger("tekson").error(f"DEBUG: Skipping - is_new")
         return
     
     # Check material readiness
@@ -236,6 +241,8 @@ def validate_job_card_start(doc, method=None):
         
         engine = MaterialReadinessEngine(work_order=doc.work_order)
         readiness = engine.evaluate_material_readiness()
+        
+        frappe.logger("tekson").error(f"DEBUG: is_ready={readiness['is_ready']}, missing={len(readiness['missing_items'])}")
         
         if not readiness['is_ready']:
             # Block the start
@@ -249,4 +256,5 @@ def validate_job_card_start(doc, method=None):
                 for item in shortage_details[:5]:  # Show first 5
                     error_msg += f"- {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
             
+            frappe.logger("tekson").error(f"DEBUG: THROWING ERROR")
             frappe.throw(error_msg, title=_("Material Not Available"))
