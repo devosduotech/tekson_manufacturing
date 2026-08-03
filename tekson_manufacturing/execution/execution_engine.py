@@ -690,6 +690,10 @@ class ExecutionEngine:
         wo.save(ignore_permissions=True)
         
         frappe.db.commit()
+    
+    def refresh_work_order_status(self, work_order):
+        """Alias for update_work_order_status - refreshes WO status"""
+        self.update_work_order_status(work_order)
 
 
 @frappe.whitelist()
@@ -820,11 +824,9 @@ def on_job_card_cancel(doc, method=None):
     if not doc.work_order:
         return
     
-    # Refresh Work Order status
-    from tekson_manufacturing.services.work_order_service import WorkOrderService
-    
-    service = WorkOrderService()
-    service.refresh_status(doc.work_order)
+    # Refresh Work Order status using Execution Engine
+    engine = ExecutionEngine()
+    engine.refresh_work_order_status(doc.work_order)
 
 
 def on_stock_entry_submit(doc, method=None):
@@ -836,11 +838,9 @@ def on_stock_entry_submit(doc, method=None):
     if not doc.work_order:
         return
     
-    # Refresh Work Order status
-    from tekson_manufacturing.services.work_order_service import WorkOrderService
-    
-    service = WorkOrderService()
-    service.refresh_status(doc.work_order)
+    # Refresh Work Order status using Execution Engine
+    engine = ExecutionEngine()
+    engine.refresh_work_order_status(doc.work_order)
 
 
 def on_stock_entry_cancel(doc, method=None):
@@ -852,8 +852,6 @@ def on_stock_entry_cancel(doc, method=None):
     if not doc.work_order:
         return
     
-    # Refresh Work Order status
-    from tekson_manufacturing.services.work_order_service import WorkOrderService
-    
-    service = WorkOrderService()
-    service.refresh_status(doc.work_order)
+    # Refresh Work Order status using Execution Engine
+    engine = ExecutionEngine()
+    engine.refresh_work_order_status(doc.work_order)
