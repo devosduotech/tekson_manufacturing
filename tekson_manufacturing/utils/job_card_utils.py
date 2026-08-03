@@ -205,3 +205,48 @@ def update_job_card_status(doc, method=None):
     
     # Debug: Log the update
     frappe.logger("tekson").info(f"Job Card {doc.name} status updated: {doc.custom_start_status}")
+
+
+def validate_job_card_start(doc, method=None):
+    """
+    Block Job Card start if materials are not available
+    
+    Called on Job Card validate event
+    
+    Business Rules:
+    - JC-003: Job Card should not start if materials are not available
+    - MR-014: Department WIP as Source of Truth
+    
+    Logic:
+    - If status changing to "Work In Progress"
+    - Check Material Readiness
+    - Block if materials not available in WIP
+    """
+    # Only check when status is changing to "Work In Progress"
+    if not doc.has_value_changed("status") or doc.status != "Work In Progress":
+        return
+    
+    # Skip if document is new
+    if doc.is_new():
+        return
+    
+    # Check material readiness
+    if doc.work_order:
+        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+        
+        engine = MaterialReadinessEngine(work_order=doc.work_order)
+        readiness = engine.evaluate_material_readiness()
+        
+        if not readiness['is_ready']:
+            # Block the start
+            missing_items = readiness.get('missing_items', [])
+            shortage_details = readiness.get('shortage_details', [])
+            
+            error_msg = f"Cannot start Job Card: Materials not available in {readiness['transfer_summary'].get('department_warehouse', 'WIP')}.\n\n"
+            
+            if shortage_details:
+                error_msg += "Missing Materials:\n"
+                for item in shortage_details[:5]:  # Show first 5
+                    error_msg += f"- {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
+            
+            frappe.throw(error_msg, title=_("Material Not Available"))
