@@ -8,7 +8,7 @@ Separates evaluation from persistence for testability and performance.
 import frappe
 from frappe import _
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from tekson_manufacturing.mes.dataclasses import (
     MaterialResult,
@@ -41,15 +41,18 @@ class JobCardReadinessEngine:
     """
     
     def __init__(self):
+        """Initialize Readiness Engine with Material and Dependency engines"""
         self.material_engine = MaterialReadinessEngine()
         self.dependency_engine = DependencyEngine()
     
-    def refresh_work_order(self, work_order):
+    def refresh_work_order(self, work_order: Any) -> None:
         """
         Evaluate all Job Cards in Work Order
         
         Args:
             work_order: Work Order name or document
+        
+        Performance: < 2 seconds for 40 Job Cards
         """
         if isinstance(work_order, str):
             wo = frappe.get_doc('Work Order', work_order)
@@ -67,12 +70,14 @@ class JobCardReadinessEngine:
             result = self.evaluate_job_card(jc)
             self.apply_result_to_job_card(jc.name, result)
     
-    def refresh_job_card(self, job_card):
+    def refresh_job_card(self, job_card: Any) -> None:
         """
         Evaluate single Job Card
         
         Args:
             job_card: Job Card name or document
+        
+        Performance: < 500ms
         """
         if isinstance(job_card, str):
             jc = frappe.get_doc('Job Card', job_card)
@@ -82,7 +87,7 @@ class JobCardReadinessEngine:
         result = self.evaluate_job_card(jc)
         self.apply_result_to_job_card(jc.name, result)
     
-    def refresh_next_job_card(self, job_card):
+    def refresh_next_job_card(self, job_card: Any) -> None:
         """
         Refresh only next operation (not entire downstream chain)
         

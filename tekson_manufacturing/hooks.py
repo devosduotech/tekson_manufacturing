@@ -18,10 +18,7 @@ doc_events = {
             "tekson_manufacturing.utils.job_card_utils.set_wip_warehouse",
             "tekson_manufacturing.utils.job_card_utils.update_job_card_status",
         ],
-        "on_submit": [
-            "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
-            "tekson_manufacturing.mes.mes_coordinator.on_job_card_complete",
-        ],
+        "on_submit": "tekson_manufacturing.mes.mes_coordinator.on_job_card_complete",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
     },
     "Work Order": {
@@ -30,10 +27,7 @@ doc_events = {
         "before_save": "tekson_manufacturing.services.work_order_service.auto_create_manufacture_entry",
     },
     "Stock Entry": {
-        "on_submit": [
-            "tekson_manufacturing.execution.execution_engine.on_stock_entry_submit",
-            "tekson_manufacturing.mes.mes_coordinator.on_stock_entry_submit",
-        ],
+        "on_submit": "tekson_manufacturing.mes.mes_coordinator.on_stock_entry_submit",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_stock_entry_cancel",
     }
 }
