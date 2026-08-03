@@ -44,16 +44,17 @@ Planner
 Stores Incharge
     │
     ├─ Review Released WOs
-    ├─ Material Transfer to WIP
+    ├─ Material Transfer for Manufacture
     │  (Raw Material / BOF → Department WIP)
+    │  ⚠️ ERPNext: Sets WO status = "In Process"
     └─ No reservation, no allocation
     │
     ▼
 Department WIP Warehouse
     │
     ├─ Becomes Source of Truth
-    ├─ Operational Inventory
-    └─ Production owns after transfer
+    ├─ Operational Inventory (Production owns after transfer)
+    └─ Excess remains available for future WOs
     │
     ▼
 Material Readiness Engine
@@ -67,6 +68,7 @@ Material Readiness Engine
 Production Engineer / Supervisor
     │
     ├─ Start First Job Card (if material ready)
+    │  ⚠️ MES: Blocked if materials unavailable
     ├─ Execute remaining Job Cards (sequence enforced)
     └─ Decide priority dynamically
     │
@@ -77,6 +79,7 @@ Execution Engine
     ├─ On JC Complete: Refresh material readiness
     ├─ On JC Complete: Update diagnostics
     ├─ On Last JC: Create Manufacture Stock Entry
+    │  ⚠️ ERPNext Backflush: Consumes ONLY BOM qty
     ├─ On Last JC: Update Work Order
     └─ On Last JC: Refresh parent WO readiness
     │
@@ -92,10 +95,16 @@ If Finished Good
     │
     └─ Output to Finished Goods Store
        ↓
-       Work Order Completed
+       Work Order Completed (ERPNext auto)
        ↓
        Production Plan updated
 ```
+
+**Key Validation (Internal Test 2026-08-03):**
+- ✅ Transfer 30.0 kg to WIP
+- ✅ Produce 30 Fins (requires 6.45 kg)
+- ✅ Backflush consumes 6.45 kg
+- ✅ **23.55 kg remains in WIP** (available for next WO)
 
 **Status:** ✅ **FROZEN** - No changes until post-UAT review
 

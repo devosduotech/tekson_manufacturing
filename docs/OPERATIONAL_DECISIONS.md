@@ -62,42 +62,58 @@ Six months from now, someone will ask: *"Why did we decide to do it this way?"* 
 
 ---
 
-### OD-003: Production Owns Department WIP After Transfer
+### OD-003: Material Transfer for Manufacture to Department WIP
 
-**Decision:** Once Stores transfers material to Department WIP, Production assumes ownership and control.
+**Decision:** Stores shall use ERPNext's standard **"Material Transfer for Manufacture"** Stock Entry type to transfer raw materials from Stores to Department WIP warehouses.
 
 **Rationale:**
-- Clear separation of responsibilities
-- Stores supplies, Production consumes
-- Production decides material usage priority
-- Matches organizational structure
+- Maintains ERPNext Work Order lifecycle (WO status → "In Process")
+- Uses standard ERPNext inventory transactions
+- Enables accurate WIP valuation and costing
+- Aligns with ERPNext manufacturing best practices
 
 **Implications:**
-- Stores cannot access Department WIP without Production approval
-- Production decides whether excess remains or returns
-- Material Return requires Production initiation
-- Stores replenishes on request, not by assumption
+- User sees: "Material Transfer to WIP" (simplified terminology)
+- System creates: "Material Transfer for Manufacture" (ERPNext standard)
+- Work Order status automatically changes to "In Process"
+- Stock Entry purpose = "Material Transfer for Manufacture"
+- Department WIP becomes the consumption source for Backflush
 
-**Owner:** Production Manager / Stores Manager  
-**Status:** ✅ **FROZEN**
+**Validation (Internal Test 2026-08-03):**
+- ✅ Transfer to WIP sets WO status = "In Process"
+- ✅ Department WIP correctly configured as consumption source
+- ✅ Backflush consumes from Department WIP warehouse
+
+**Owner:** Stores Manager / Technical Lead  
+**Status:** ✅ **FROZEN** (Validated)
 
 ---
 
-### OD-004: No Stock Reservation in Department WIP
+### OD-004: Department WIP is Operational Inventory
 
-**Decision:** Department WIP stock is NOT reserved for specific Work Orders.
+**Decision:** Department WIP warehouses are treated as **operational inventory owned by Production**, not temporary holding or WO-specific allocation.
 
 **Rationale:**
-- Production priorities change dynamically
-- Management may reprioritize WOs mid-day
-- Physical stock is shared in department
-- First-come, first-consume matches reality
+- Matches real shop floor behavior at Teksons
+- Departments manage their working stock
+- Enables cumulative material availability across WOs
+- Supports multi-WO material sharing in same department
+- Excess from one WO available for next WO
 
 **Implications:**
-- Multiple WOs may show "Ready" simultaneously
-- Production supervisor decides which to start
-- Material Readiness evaluates real-time availability
-- No artificial blocking from reservations
+- Material remains in WIP after transfer (not consumed until Backflush)
+- Excess from one WO automatically available for next WO
+- No automatic return to Stores after WO completion
+- Production decides whether excess remains or returns
+- WIP valuation reflects actual department inventory
+
+**Validation (Internal Test 2026-08-03):**
+- ✅ Transfer 30.0 kg to WIP
+- ✅ Consume 6.45 kg via Backflush
+- ✅ **23.55 kg remains in WIP** (available for next WO)
+
+**Owner:** Production Manager  
+**Status:** ✅ **FROZEN** (Validated)
 
 **Exception:** None
 
@@ -106,26 +122,42 @@ Six months from now, someone will ask: *"Why did we decide to do it this way?"* 
 
 ---
 
-### OD-005: Excess Material Remains in Department WIP
+### OD-005: ERPNext Backflush for Material Consumption
 
-**Decision:** Excess material from Work Orders remains in Department WIP unless Production explicitly returns it.
+**Decision:** Material consumption shall use **ERPNext's standard Backflush** from Department WIP warehouse. Only the BOM-required quantity shall be consumed during Manufacture Entry. Excess material shall remain in Department WIP.
 
 **Rationale:**
-- Reduces unnecessary Stock Entries
-- Matches shop floor practice
-- Available for next WO requiring same material
-- Production decides when to return
+- Leverages ERPNext's proven manufacturing engine
+- Automatic consumption based on actual production quantity
+- No custom consumption logic required
+- Accurate costing and valuation
+- Excess automatically remains available
 
-**Example:**
+**How It Works:**
 ```
-WO requires: 6 sheets
-Stores transfers: 10 sheets
-Production consumes: 6 sheets
-Remaining: 4 sheets → Stays in WIP
+Stores transfers:  30.0 kg to WIP
+WO produces:       30 Fins
+BOM rate:          0.215 kg per Fin
+Backflush:         30 × 0.215 = 6.45 kg consumed
+Remaining:         30.0 - 6.45 = 23.55 kg in WIP ✅
 ```
 
-**Owner:** Production Manager  
-**Status:** ✅ **FROZEN**
+**Implications:**
+- MES does NOT control consumption logic
+- MES controls **when** production can start (Material Readiness)
+- ERPNext controls **how much** is consumed (Backflush)
+- Clear separation: MES = readiness, ERPNext = inventory
+- No custom inventory tracking required
+
+**Validation (Internal Test 2026-08-03):**
+- ✅ Transfer 30.0 kg to WIP-Ralu In
+- ✅ Produce 30 Fins
+- ✅ Backflush consumed 6.45 kg (exact BOM qty)
+- ✅ 23.55 kg remains in WIP (available for next WO)
+- ✅ WO status updated to "In Process" → "Completed"
+
+**Owner:** Technical Lead / Production Manager  
+**Status:** ✅ **FROZEN** (Validated 2026-08-03)
 
 ---
 
@@ -538,20 +570,56 @@ Decision: Planning allocates manually
 
 ---
 
+## Operational Assumptions
+
+### OA-001: Concurrent Job Card Starts
+
+**Assumption:** Department supervisors coordinate Job Card starts. Simultaneous starts of multiple Job Cards competing for the exact same Department WIP inventory are considered **operationally rare** and are not specifically synchronized in Phase 1.
+
+**Rationale:**
+- Single supervisor per department coordinates work
+- Work Orders released by planned start dates
+- Management priorities communicated before execution
+- Common raw materials typically used within same department for similar sub-assemblies
+- Same workstation handling concurrent WOs is uncommon
+
+**Safety Net:** Even if concurrent starts occur:
+- Material Readiness validates at JC Start time
+- ERPNext Backflush will reject Manufacture Entry if insufficient stock
+- No inventory corruption possible
+
+**Observed Behavior at Teksons:**
+- Operations are department-based
+- Common materials consumed within same department
+- Production engineer/supervisor coordinates daily work
+- Simultaneous starts on exact same material: **rare**
+
+**Future Enhancement (if needed):**
+If concurrent starts become a practical issue during production:
+- Introduce short-lived "material lock" (30 seconds) at JC Start
+- Revalidate stock immediately before allowing "In Progress" transition
+- NOT inventory reservation, just transaction synchronization
+
+**Owner:** Production Manager  
+**Status:** ✅ **ACCEPTED ASSUMPTION** (Phase 1)
+
+---
+
 ## Summary by Category
 
 | Category | Decisions | Frozen | Deferred |
 |----------|-----------|--------|----------|
 | Architectural Principles | 1 | 1 | 0 |
-| Department WIP Management | 5 | 5 | 0 |
+| Department WIP Management | 6 | 6 | 0 |
 | Work Order Management | 3 | 3 | 0 |
 | Stores Operations | 3 | 3 | 0 |
-| Production Execution | 3 | 3 | 0 |
+| Production Execution | 4 | 4 | 0 |
 | Scrap & Quality | 2 | 1 | 1 |
 | Multi-WO Coordination | 2 | 2 | 0 |
 | System Behavior | 3 | 3 | 0 |
+| Operational Assumptions | 1 | 1 | 0 |
 | Deferred Decisions | 3 | 0 | 3 |
-| **TOTAL** | **25** | **21** | **4** |
+| **TOTAL** | **26** | **22** | **4** |
 
 ---
 

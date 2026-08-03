@@ -1,8 +1,8 @@
 # Enhancement Backlog - Phase 1 MES
 
 **Document ID:** MES-EB-001  
-**Version:** 1.0  
-**Date:** August 2, 2026  
+**Version:** 1.1  
+**Date:** August 3, 2026  
 **Status:** Active  
 **Owner:** Project Manager  
 
@@ -16,6 +16,37 @@ This document captures all enhancement requests, ideas, and improvements identif
 - **Phase 1.1:** Operational efficiency enhancements (post-UAT, pre-production)
 - **Phase 2:** Productivity improvements (future releases)
 - **Future:** Strategic enhancements (long-term roadmap)
+
+---
+
+## Architecture Decision: ERPNext Backflush Adopted
+
+**Date:** August 3, 2026  
+**Status:** ✅ **VALIDATED**
+
+**Decision:** Material consumption shall use **ERPNext's standard Backflush** from Department WIP warehouse. **No custom consumption logic** is required.
+
+**Validation Result:**
+- Transfer 30.0 kg to WIP → ✅
+- Produce 30 Fins → ✅
+- Backflush consumes 6.45 kg (exact BOM qty) → ✅
+- 23.55 kg remains in WIP (available for next WO) → ✅
+
+**Implications:**
+- ❌ **REMOVED FROM BACKLOG:** Custom Material Consumption Engine
+- ❌ **REMOVED FROM BACKLOG:** Custom inventory tracking
+- ✅ **ADOPTED:** ERPNext standard Backflush
+- ✅ **RETAINED:** MES Material Readiness (controls when production starts)
+
+**Responsibility Boundary:**
+| Component | Responsibility |
+|-----------|---------------|
+| **MES** | Material Readiness, Dependency Validation, Workflow Control |
+| **ERPNext** | Inventory Management, Costing, Valuation, Backflush Consumption |
+
+This decision **simplifies** the architecture and **reduces** custom code while maintaining full operational control.
+
+---
 
 ---
 
