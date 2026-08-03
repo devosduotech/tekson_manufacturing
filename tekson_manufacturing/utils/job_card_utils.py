@@ -141,7 +141,7 @@ def set_wip_warehouse(doc, method=None):
 
 def update_work_order_status_if_ready(work_order):
     """
-    Update Work Order status to "Started" if materials are available
+    Update Work Order status to "In Process" if materials are available
     
     Business Rule: WO-001 - Auto-complete when all Job Cards complete
     
@@ -150,8 +150,8 @@ def update_work_order_status_if_ready(work_order):
     
     Logic:
     - Check Material Readiness for the WO
-    - If materials available in WIP, set status to "Started"
-    - This allows Production to see which WOs are ready to execute
+    - If materials available in WIP, set status to "In Process"
+    - This follows ERPNext standard: WO status changes when production starts
     """
     if not work_order:
         return
@@ -164,10 +164,11 @@ def update_work_order_status_if_ready(work_order):
         
         if readiness['is_ready']:
             wo = frappe.get_doc("Work Order", work_order)
-            if wo.status != "Started":
-                wo.status = "Started"
+            # Only update if WO is submitted and status is "Not Started"
+            if wo.docstatus == 1 and wo.status == "Not Started":
+                wo.status = "In Process"
                 wo.save(ignore_permissions=True)
-                frappe.logger("tekson").info(f"Work Order {work_order} status updated to Started")
+                frappe.logger("tekson").info(f"Work Order {work_order} status updated to In Process")
     except Exception as e:
         frappe.logger("tekson").error(f"Error updating WO status: {e}")
 
