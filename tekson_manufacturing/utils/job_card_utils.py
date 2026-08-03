@@ -138,10 +138,6 @@ def update_job_card_status(doc, method=None):
     
     Called on Job Card validate event
     
-    Args:
-        doc: Job Card document
-        method: Event method name (optional)
-    
     Business Rules:
     - JC-003: Material readiness check
     - JC-004: Auto-refresh dependent Job Cards
@@ -165,3 +161,6 @@ def update_job_card_status(doc, method=None):
     service.update_start_status(doc)
     service.update_dependency_status(doc)
     service.update_material_status(doc)
+    
+    # Debug: Log the update
+    frappe.logger("tekson").info(f"Job Card {doc.name} status updated: {doc.custom_start_status}")
