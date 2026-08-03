@@ -215,28 +215,23 @@ def validate_job_card_start(doc, method=None):
     """
     Block Job Card start if materials are not available
     
-    Called on Job Card validate event
+    Called on Job Card validate/before_save event
     
     Business Rules:
     - JC-003: Job Card should not start if materials are not available
     - MR-014: Department WIP as Source of Truth
     
     Logic:
-    - If status changing to "Work In Progress"
+    - If status is "Work In Progress" (or changing to it)
     - Check Material Readiness
     - Block if materials not available in WIP
     """
-    # DEBUG: Use msgprint which always shows
-    frappe.msgprint(f"DEBUG: validate_job_card_start called for {doc.name}", alert=True)
-    
-    # Only check when status is changing to "Work In Progress"
-    if not doc.has_value_changed("status") or doc.status != "Work In Progress":
-        frappe.msgprint(f"DEBUG: Skipping - condition not met", alert=True)
+    # Check if status is Work In Progress (regardless of how it got there)
+    if doc.status != "Work In Progress":
         return
     
     # Skip if document is new
     if doc.is_new():
-        frappe.msgprint(f"DEBUG: Skipping - is_new", alert=True)
         return
     
     # Check material readiness
@@ -245,8 +240,6 @@ def validate_job_card_start(doc, method=None):
         
         engine = MaterialReadinessEngine(work_order=doc.work_order)
         readiness = engine.evaluate_material_readiness()
-        
-        frappe.msgprint(f"DEBUG: is_ready={readiness['is_ready']}, missing={len(readiness['missing_items'])}", alert=True)
         
         if not readiness['is_ready']:
             # Block the start
@@ -260,5 +253,4 @@ def validate_job_card_start(doc, method=None):
                 for item in shortage_details[:5]:  # Show first 5
                     error_msg += f"- {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
             
-            frappe.msgprint(f"DEBUG: ABOUT TO THROW", alert=True)
             frappe.throw(error_msg, title=_("Material Not Available"))
