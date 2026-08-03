@@ -555,7 +555,41 @@ Decision: Planning allocates manually
 
 ---
 
-### OD-025: Planner Production Buckets (Phase 2)
+### OD-025: ERPNext Work Order Status is Informational
+
+**Decision:** The MES shall **not derive production readiness** from ERPNext Work Order status (`Submitted`, `In Process`, `Completed`). Production readiness is determined **only** by:
+
+1. **Material Readiness** (current WIP stock availability)
+2. **Dependency Validation** (previous operations complete)
+3. **Job Card Status** (operational state)
+
+**Rationale:**
+- ERPNext WO status reflects inventory transactions, not shop-floor execution readiness
+- WO can be "In Process" but materials not yet transferred
+- WO can be "In Process" but previous operations incomplete
+- Production supervisors need real-time execution intelligence, not inventory status
+
+**Implications:**
+- MES Material Readiness Engine evaluates WIP stock independently
+- Dependency Engine validates sequence independently
+- JC Start allowed only when BOTH conditions met
+- ERPNext WO status updated automatically by inventory transactions (informational only)
+
+**Example:**
+```
+WO Status: In Process (after Material Transfer)
+    ↓
+Material Readiness: NOT READY (WIP stock = 0)
+    ↓
+JC Start: BLOCKED ❌
+```
+
+**Owner:** Production Manager / Technical Lead  
+**Status:** ✅ **FROZEN**
+
+---
+
+### OD-026: Planner Production Buckets (Phase 2)
 
 **Decision:** Shift-wise and daily production bucket planning is deferred to Phase 2.
 

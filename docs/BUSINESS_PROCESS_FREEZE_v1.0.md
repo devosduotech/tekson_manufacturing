@@ -124,6 +124,27 @@ If Finished Good
 | MR-015 | Live evaluation at Job Card start | ✅ FROZEN |
 | MR-016 | Partial Production Readiness | ✅ FROZEN |
 
+**Implementation Contract (MR-015):**
+
+Material Readiness shall **always evaluate current Department WIP balance**:
+
+```python
+Available = Current WIP Stock (real-time from Bin)
+Ready if: Available >= Required
+```
+
+**Explicitly NOT evaluated:**
+- ❌ Historical transfers against WO
+- ❌ Issued quantity tracking
+- ❌ Reservation or allocation
+- ❌ WO-specific material assignments
+
+**Rationale:**
+- Department WIP is operational inventory (shared across WOs)
+- First-come, first-consume model
+- Real-time physical stock is source of truth
+- No artificial blocking from reservations
+
 ### Work Order Management
 
 | Rule ID | Rule Name | Status |
@@ -198,9 +219,9 @@ If Finished Good
 
 ---
 
-## 4.1 Architectural Principle
+## 4.1 Architectural Principles
 
-**PRINCIPLE-001: MES Augments ERPNext, Does Not Replace**
+### PRINCIPLE-001: MES Augments ERPNext, Does Not Replace
 
 > **The MES shall augment ERPNext Manufacturing, not replace it.**
 
@@ -215,8 +236,59 @@ If Finished Good
 - Minimize customizations for easier upgrades
 - Maintain compatibility with ERPNext V16+
 
+---
+
+### PRINCIPLE-002: ERPNext is Single Source of Truth for Inventory
+
+> **ERPNext is responsible for Inventory, Valuation, Costing, and Material Consumption.**
+> **The MES shall not maintain parallel inventory or consumption calculations.**
+
+**ERPNext Responsibilities:**
+- ✅ BOM & Routing
+- ✅ Work Order & Job Card doctypes
+- ✅ Stock Entries (all types)
+- ✅ Inventory Management (all warehouses)
+- ✅ Backflush Consumption
+- ✅ Costing & Valuation
+- ✅ Stock Ledger
+- ✅ Warehouse Balances
+
+**MES Responsibilities:**
+- ✅ Material Readiness (business validation)
+- ✅ Dependency Validation (sequence enforcement)
+- ✅ Execution Control (JC start/complete workflow)
+- ✅ Department Workflow (WIP ownership)
+- ✅ Diagnostics (production visibility)
+- ✅ Security (role-based permissions)
+- ✅ MES Dashboards (operational intelligence)
+
+**Boundary:**
+```
+Material Readiness = Business Validation (MES)
+Backflush = Inventory Validation (ERPNext)
+```
+
+These are **independent validations** at different stages:
+```
+JC Start → MES Material Readiness → Production → Manufacture Entry → ERPNext Backflush
+```
+
+---
+
+### PRINCIPLE-003: Department WIP is Operational Inventory
+
+> **Department WIP is a departmental inventory, not a Work Order inventory.**
+
+**Implications:**
+- Material remains in WIP after transfer (not WO-specific)
+- Excess from one WO automatically available for next WO
+- No reservation, no allocation, no historical tracking
+- Material Readiness evaluates **current physical stock only**
+
+---
+
 **Owner:** Technical Lead  
-**Status:** ✅ **FUNDAMENTAL PRINCIPLE**
+**Status:** ✅ **FUNDAMENTAL PRINCIPLES** (Validated 2026-08-03)
 
 ---
 

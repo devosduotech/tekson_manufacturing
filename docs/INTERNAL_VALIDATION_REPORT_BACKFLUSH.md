@@ -202,20 +202,28 @@ Validate the inventory consumption behavior when using:
 
 1. **Material Transfer Workflow**
    - Stores user creates "Material Transfer for Manufacture"
-   - Verify WO status changes to "In Process"
+   - User terminology: "Transfer to WIP" (simplified)
+   - System: Stock Entry Type = "Material Transfer for Manufacture"
+   - Verify WO status changes to "In Process" (ERPNext auto)
 
-2. **Job Card Start Validation**
-   - Verify JC Start blocked when WIP insufficient
+2. **Job Card Start Validation** (CRITICAL)
+   - **Scenario:** Department WIP contains insufficient material
+   - **Expected:** JC Start is BLOCKED
+   - **Expected:** Diagnostic message: "Material not available in WIP-Ralu In - TPL"
+   - **Expected:** No production begins
+   - **Expected:** ERPNext Backflush is never reached
    - Verify diagnostic messages clear to users
 
 3. **Backflush Consumption**
-   - Verify excess remains in WIP
-   - Verify costing accurate
-   - Verify next WO can use excess
+   - Verify excess remains in WIP (23.55 kg from 30.0 kg transfer)
+   - Verify costing accurate (only consumed qty costed to WO)
+   - Verify next WO can use excess immediately
+   - Verify WIP valuation reports accurate
 
 4. **Sub-Assembly Flow**
    - Verify output goes to parent department WIP
-   - Verify parent JC becomes ready
+   - Verify parent JC becomes ready automatically
+   - Verify multi-level BOM coordination
 
 ### Monitoring During UAT
 
@@ -223,6 +231,82 @@ Validate the inventory consumption behavior when using:
 - Track user comprehension of "Material Transfer to WIP" terminology
 - Monitor Backflush behavior with multi-level BOMs
 - Verify WIP valuation reports accurate
+- **Validate:** Multiple WOs sharing same WIP inventory (sequential, not concurrent)
+
+---
+
+## UAT Acceptance Criteria (Critical)
+
+| Scenario | Expected Result | Priority |
+|----------|----------------|----------|
+| WIP has sufficient stock | JC Start allowed | CRITICAL |
+| WIP has insufficient stock | JC Start BLOCKED with clear message | CRITICAL |
+| Material Transfer to WIP | WO status = "In Process" | HIGH |
+| JC Complete → Manufacture Entry | Backflush consumes exact BOM qty | CRITICAL |
+| Excess material after production | Remains in WIP (available for next WO) | CRITICAL |
+| Next WO uses excess from previous | Material Readiness shows available | HIGH |
+| Sub-assembly output | Goes to parent dept WIP | HIGH |
+| Parent WO readiness | Updates when child complete | HIGH |
+
+**Pass Criteria:** All CRITICAL items must pass. HIGH items can have workarounds for Phase 1.
+
+---
+
+## Lessons Learned
+
+### What We Discovered
+
+1. **Department WIP Model Validated** ✅
+   - Earlier concern: "Will excess remain in WIP?"
+   - Validation: ERPNext Backflush leaves excess automatically
+   - Impact: No custom inventory tracking needed
+
+2. **ERPNext Backflush Eliminates Custom Consumption** ✅
+   - Earlier design: Custom consumption engine considered
+   - Validation: Standard ERPNext works perfectly
+   - Impact: ~500-800 lines of custom code eliminated
+
+3. **Inventory Reservation Unnecessary for Phase 1** ✅
+   - Earlier debate: Should we reserve materials for WOs?
+   - Validation: Physical stock check sufficient
+   - Impact: Simpler model, matches Teksons operations
+
+4. **ERPNext Standard Lifecycle Should Be Preserved** ✅
+   - Earlier approach: Some custom status overrides
+   - Validation: Standard WO status + MES readiness = perfect
+   - Impact: Better upgrade compatibility
+
+5. **Separation of Concerns Critical** ✅
+   - MES = Business Validation (readiness, dependency)
+   - ERPNext = Inventory Validation (backflush, costing)
+   - Impact: Clear architectural boundary prevents drift
+
+### What Changed During Implementation
+
+| Original Design | Validated Implementation | Impact |
+|----------------|-------------------------|--------|
+| Custom consumption logic | ERPNext Backflush | Simpler, upgrade-safe |
+| Material reservation | Physical stock check | Matches operations |
+| MES controls inventory | ERPNext controls inventory | Clear boundary |
+| Complex tracking | Simple availability check | Less code, faster |
+
+### Architectural Maturity Evolution
+
+```
+Design Phase:    "We need custom inventory control"
+       ↓
+Implementation:  "Let's try ERPNext Backflush"
+       ↓
+Validation:      "ERPNext handles inventory perfectly!"
+       ↓
+Conclusion:      "MES focuses on execution intelligence"
+```
+
+This evolution **strengthened** the architecture by:
+- Reducing custom code
+- Preserving upgrade compatibility
+- Maintaining operational control where it matters (readiness, workflow)
+- Leveraging ERPNext's proven manufacturing engine
 
 ---
 
