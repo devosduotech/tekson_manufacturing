@@ -141,63 +141,6 @@ class MaterialReadinessEngine:
         self.results['is_ready'] = is_ready
         self.results['missing_items'] = [d['item_code'] for d in shortage_details]
         self.results['shortage_details'] = shortage_details
-            cumulative_transferred = self.get_cumulative_transferred_qty(
-                item_code, 
-                work_order, 
-                department_warehouse
-            )
-            
-            # Determine transfer status
-            transfer_status = self.determine_transfer_status(
-                item_code, 
-                required_qty, 
-                cumulative_transferred,
-                current_stock
-            )
-            
-            # Track transferred items
-            self.results['transferred_items'].append({
-                'item_code': item_code,
-                'item_name': transfer_status.get('item_name'),
-                'required_qty': required_qty,
-                'cumulative_transferred': cumulative_transferred,
-                'current_stock_in_warehouse': current_stock,
-                'transfer_percent': transfer_status.get('transfer_percent'),
-                'transfer_status': transfer_status.get('status'),
-                'stock_entries': transfer_status.get('stock_entries')
-            })
-            
-            # Update transfer summary counts
-            if transfer_status.get('status') == 'Fully Transferred':
-                self.results['transfer_summary']['items_fully_transferred'] += 1
-            elif transfer_status.get('status') == 'Partially Transferred':
-                self.results['transfer_summary']['items_partially_transferred'] += 1
-            else:
-                self.results['transfer_summary']['items_not_transferred'] += 1
-            
-            # Check if material is available for production
-            if available_qty < required_qty:
-                self.results['is_ready'] = False
-                self.results['missing_items'].append(item_code)
-                self.results['shortage_details'].append({
-                    'item_code': item_code,
-                    'item_name': transfer_status.get('item_name'),
-                    'required_qty': required_qty,
-                    'available_qty': available_qty,
-                    'shortage_qty': required_qty - available_qty,
-                    'warehouse': department_warehouse,
-                    'cumulative_transferred': cumulative_transferred,
-                    'current_stock': current_stock,
-                    'transfer_status': transfer_status.get('status'),
-                    'reason': self.get_shortage_reason(transfer_status),
-                    'action': self.get_suggested_action(transfer_status)
-                })
-        
-        # Calculate overall transfer completeness
-        self.results['transfer_summary']['overall_transfer_percent'] = (
-            self.results['transfer_summary']['items_fully_transferred'] / 
-            len(required_materials) * 100
-        ) if required_materials else 0
         
         return self.results
     

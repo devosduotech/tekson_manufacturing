@@ -329,4 +329,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         import_master_data(sys.argv[1])
     else:
-        print("Usage: bench execute tekson_manufacturing.scripts.import_master_data.import_master_data --args '"/path/to/import/dir"'")
+        print("Usage: bench execute tekson_manufacturing.scripts.import_master_data.import_master_data --args '/path/to/import/dir'")

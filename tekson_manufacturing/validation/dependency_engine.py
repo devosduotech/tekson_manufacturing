@@ -159,12 +159,17 @@ class DependencyEngine:
                 }
             )
             
-            return result
+            return DependencyResult(
+                can_start=False,
+                previous_complete=False,
+                previous_jc_name=prev_op.get('name'),
+                reason=f"Previous operation not complete: {prev_op.get('status')}",
+                diagnostic=f"Wait for {prev_op.get('name')} to complete",
+                warnings=[],
+                errors=[f"Previous operation status: {prev_op.get('status')}"]
+            )
         
         # All checks passed
-        result['message'] = "Previous operation completed successfully"
-        result['is_valid'] = True
-        
         # Log success
         execution_time = (time.time() - start_time) * 1000
         log_mes_event(
@@ -182,7 +187,7 @@ class DependencyEngine:
         return DependencyResult(
             can_start=True,
             previous_complete=True,
-            previous_jc_name=None,
+            previous_jc_name=prev_op.get('name'),
             reason="Previous operation complete",
             diagnostic=f"Previous operation '{prev_op.get('operation')}' is complete",
             warnings=[],
@@ -440,10 +445,10 @@ def can_job_card_start(job_card):
     if engine.mes_settings and engine.mes_settings.strict_sequence:
         result = engine.validate_previous_operation()
         
-        if not result['is_valid']:
+        if not result.can_start:
             return {
                 'can_start': False,
-                'reason': result['message'],
+                'reason': result.reason,
                 'validation_details': result,
                 'blocked_by': 'DV-001'
             }
