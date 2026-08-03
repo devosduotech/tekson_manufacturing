@@ -11,7 +11,10 @@ doc_events = {
             "tekson_manufacturing.utils.job_card_utils.populate_job_card_fields",
             "tekson_manufacturing.utils.job_card_utils.allocate_workstation",
         ],
-        "validate": "tekson_manufacturing.utils.job_card_utils.set_wip_warehouse",
+        "validate": [
+            "tekson_manufacturing.utils.job_card_utils.set_wip_warehouse",
+            "tekson_manufacturing.utils.job_card_utils.update_job_card_status",
+        ],
         "on_submit": "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
     },

@@ -130,3 +130,38 @@ def set_wip_warehouse(doc, method=None):
             
             # Also set custom_plant_floor for reference
             doc.custom_plant_floor = plant_floor
+
+
+def update_job_card_status(doc, method=None):
+    """
+    Update Job Card status fields (start_status, dependency, material)
+    
+    Called on Job Card validate event
+    
+    Args:
+        doc: Job Card document
+        method: Event method name (optional)
+    
+    Business Rules:
+    - JC-003: Material readiness check
+    - JC-004: Auto-refresh dependent Job Cards
+    - MR-015: Live evaluation at Job Card start
+    
+    Updates:
+    - custom_start_status
+    - custom_dependency_check
+    - custom_can_start_operation
+    - custom_material_available_for_operation
+    """
+    # Skip if document is new or being submitted
+    if doc.is_new() or doc.flags.ignore_validate:
+        return
+    
+    from tekson_manufacturing.services.job_card_service import JobCardService
+    
+    service = JobCardService()
+    
+    # Update all status fields
+    service.update_start_status(doc)
+    service.update_dependency_status(doc)
+    service.update_material_status(doc)
