@@ -20,11 +20,13 @@ def start_job_card(job_card_name):
     """
     jc = frappe.get_doc('Job Card', job_card_name)
     
-    # Validate material readiness
+    # Change status first
+    jc.status = "Work In Progress"
+    
+    # Validate material readiness (will throw if not ready)
     validate_job_card_start(jc, method=None)
     
-    # Change status
-    jc.status = "Work In Progress"
+    # Save
     jc.save(ignore_permissions=True)
     frappe.db.commit()
     
