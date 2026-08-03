@@ -9,6 +9,7 @@ def populate_job_card_fields(doc, method=None):
     Business Rules:
     - JC-007: Item visibility
     - JC-008: Quantity visibility
+    - WO-001: Auto-complete when all Job Cards complete
     
     Trigger: Job Card Before Insert
     
@@ -16,6 +17,9 @@ def populate_job_card_fields(doc, method=None):
     - custom_operation_item_code: From Work Order production_item
     - custom_actual_production_qty: Quantity to produce
     - custom_plant_floor: From Workstation
+    
+    Side Effects:
+    - Updates Work Order status to "Started" if materials are available
     """
     # JC-007: Set Item Code
     if doc.work_order and not doc.get('custom_operation_item_code'):
@@ -36,6 +40,9 @@ def populate_job_card_fields(doc, method=None):
             doc.custom_actual_production_qty = doc.for_quantity
         else:
             doc.custom_actual_production_qty = wo.qty
+        
+        # WO-001: Update WO status to "Started" if materials are available
+        update_work_order_status_if_ready(doc.work_order)
 
 
 def allocate_workstation(doc, method=None):
@@ -130,6 +137,39 @@ def set_wip_warehouse(doc, method=None):
             
             # Also set custom_plant_floor for reference
             doc.custom_plant_floor = plant_floor
+
+
+def update_work_order_status_if_ready(work_order):
+    """
+    Update Work Order status to "Started" if materials are available
+    
+    Business Rule: WO-001 - Auto-complete when all Job Cards complete
+    
+    Args:
+        work_order: Work Order name
+    
+    Logic:
+    - Check Material Readiness for the WO
+    - If materials available in WIP, set status to "Started"
+    - This allows Production to see which WOs are ready to execute
+    """
+    if not work_order:
+        return
+    
+    try:
+        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+        
+        engine = MaterialReadinessEngine(work_order=work_order)
+        readiness = engine.evaluate_material_readiness()
+        
+        if readiness['is_ready']:
+            wo = frappe.get_doc("Work Order", work_order)
+            if wo.status != "Started":
+                wo.status = "Started"
+                wo.save(ignore_permissions=True)
+                frappe.logger("tekson").info(f"Work Order {work_order} status updated to Started")
+    except Exception as e:
+        frappe.logger("tekson").error(f"Error updating WO status: {e}")
 
 
 def update_job_card_status(doc, method=None):
