@@ -190,8 +190,12 @@ def update_job_card_status(doc, method=None):
     - custom_can_start_operation
     - custom_material_available_for_operation
     """
+    # DEBUG: Check if this hook is even running
+    frappe.msgprint(f"DEBUG: update_job_card_status called for {doc.name}", alert=True)
+    
     # Skip if document is new or being submitted
     if doc.is_new() or doc.flags.ignore_validate:
+        frappe.msgprint(f"DEBUG: Skipping update_job_card_status", alert=True)
         return
     
     from tekson_manufacturing.services.job_card_service import JobCardService
