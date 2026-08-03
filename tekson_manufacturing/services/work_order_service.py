@@ -24,10 +24,16 @@ def auto_create_manufacture_entry(doc, method=None):
         doc: Work Order document
         method: Event method name (optional)
     """
+    # Skip if document is new, draft, or not completed
     if (
-        doc.docstatus == 1
-        and doc.status == "Completed"
+        doc.is_new()
+        or doc.docstatus != 1
+        or doc.status != "Completed"
     ):
+        return
+    
+    if not doc.name:
+        return
         # Check if Stock Entry already exists (quick check before calling engine)
         existing = frappe.db.exists(
             "Stock Entry",
