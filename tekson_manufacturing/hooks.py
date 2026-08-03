@@ -16,6 +16,9 @@ doc_events = {
             "tekson_manufacturing.utils.job_card_utils.update_job_card_status",
             "tekson_manufacturing.utils.job_card_utils.validate_job_card_start",
         ],
+        "on_update": [
+            "tekson_manufacturing.utils.job_card_utils.validate_job_card_start",
+        ],
         "on_submit": "tekson_manufacturing.execution.execution_engine.on_job_card_submit",
         "on_cancel": "tekson_manufacturing.execution.execution_engine.on_job_card_cancel",
     },
