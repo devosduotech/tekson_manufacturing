@@ -22,14 +22,7 @@ def execute(filters=None):
     columns = get_columns()
     data = get_data(filters)
     
-    # Summary cards
-    if data:
-        summary = get_summary(data)
-        message = summary
-    else:
-        message = "No materials pending transfer for the selected period."
-    
-    return columns, data, message
+    return columns, data
 
 
 def get_columns():
@@ -122,7 +115,7 @@ def get_data(filters):
         FROM `tabWork Order` wo
         WHERE wo.docstatus = 1
           AND wo.status NOT IN ('Completed', 'Stopped')
-          AND wo.planned_start_date BETWEEN %s AND %s
+          AND DATE(wo.planned_start_date) BETWEEN %s AND %s
         ORDER BY wo.planned_start_date
     """, (from_date, to_date), as_dict=True)
     
