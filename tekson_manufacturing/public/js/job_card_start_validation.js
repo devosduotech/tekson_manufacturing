@@ -1,11 +1,7 @@
-// Client Script: Job Card Start Validation
-// Doctype: Job Card
-// Event: Before Save
-
 frappe.ui.form.on('Job Card', {
     refresh: function(frm) {
         if (frm.doc.status === 'Open' && frm.doc.docstatus === 0) {
-            frm.page.add_primary_action(__('Start Job'), function() {
+            frm.page.set_primary_action(__('Start Job'), function() {
                 start_job_with_validation(frm);
             });
         }
