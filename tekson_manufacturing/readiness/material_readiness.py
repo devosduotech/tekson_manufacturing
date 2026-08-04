@@ -89,12 +89,11 @@ class MaterialReadinessEngine:
             required_qty = material.get('qty')
             total_required += required_qty
             
-            # MR-014: Check stock in the BOM item's source warehouse (department WIP)
-            item_warehouse = material.get('source_warehouse') or department_warehouse
-            
+            # MR-014: Get available stock in Department WIP (Source of Truth)
+            # Checks the WO's WIP warehouse - where materials land after transfer
             available_qty = self.get_available_stock_in_wip(
                 item_code,
-                item_warehouse
+                department_warehouse
             )
             total_available += available_qty
             
@@ -107,7 +106,7 @@ class MaterialReadinessEngine:
                     'required_qty': required_qty,
                     'available_qty': available_qty,
                     'shortage_qty': shortage_qty,
-                    'warehouse': item_warehouse
+                    'warehouse': department_warehouse
                 })
         
         # Calculate totals
@@ -133,7 +132,7 @@ class MaterialReadinessEngine:
             required_qty=total_required,
             shortage_qty=shortage_qty,
             shortage_details=shortage_details,
-            warehouse=wo.wip_warehouse or department_warehouse,
+            warehouse=department_warehouse,
             message=message,
             warnings=warnings,
             errors=errors

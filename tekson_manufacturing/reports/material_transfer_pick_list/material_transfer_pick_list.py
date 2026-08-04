@@ -83,7 +83,7 @@ def get_columns():
         },
         {
             "label": _("To (WIP)"),
-            "fieldname": "wip_warehouse",
+            "fieldname": "target_warehouse",
             "fieldtype": "Link",
             "options": "Warehouse",
             "width": 180
@@ -140,6 +140,19 @@ def get_data(filters):
             # Source warehouse: BOM item source → WO source → Raw Material Stores
             source_wh = item.source_warehouse or wo.source_warehouse or ''
             
+            # Target: WO's WIP warehouse
+            target_wh = wo.wip_warehouse or ''
+            
+            # Check stock already in target WIP (already transferred)
+            already_in_wip = 0.0
+            if target_wh:
+                already_in_wip = flt(
+                    frappe.db.get_value('Bin',
+                        {'item_code': item.item_code, 'warehouse': target_wh},
+                        'actual_qty'
+                    ) or 0
+                )
+            
             # Check stock at source
             available = 0.0
             if source_wh:
@@ -150,9 +163,8 @@ def get_data(filters):
                     ) or 0
                 )
             
-            # Calculate transfer needed (don't double-count already transferred)
-            # For now, if stock in WIP warehouse already exists, we consider it
-            # Simpler approach: just show what's needed irrespective of existing transfers
+            # Balance: required - already in WIP
+            balance = max(0, required_total - already_in_wip)
             
             result.append({
                 'work_order': wo.name,
@@ -161,9 +173,10 @@ def get_data(filters):
                 'required_per_piece': flt(item.qty),
                 'required_total': required_total,
                 'source_warehouse': source_wh,
+                'target_warehouse': target_wh,
                 'available_qty': available,
-                'balance_to_transfer': required_total,
-                'wip_warehouse': wo.wip_warehouse or ''
+                'balance_to_transfer': balance,
+                'wip_warehouse': target_wh
             })
     
     # Sort by warehouse then item
