@@ -132,13 +132,13 @@ class ExecutionEngine:
         if self.mes_settings and self.mes_settings.enable_strict_validation:
             material_result = self.material_engine.evaluate_material_readiness(jc.work_order)
             
-            if not material_result.get('is_ready'):
+            if not material_result.is_ready:
                 result['can_start'] = False
                 result['reason'] = "Materials not available in Department Warehouse"
                 result['validations']['jc_003_material_readiness'] = False
                 
                 # Build detailed diagnostics
-                for shortage in material_result.get('shortage_details', []):
+                for shortage in material_result.shortage_details:
                     diagnostic = self.diagnostics.build_material_shortage_message(shortage)
                     result['diagnostics'].append(diagnostic)
                 
@@ -150,7 +150,7 @@ class ExecutionEngine:
                     context={
                         'job_card': jc.name,
                         'work_order': jc.work_order,
-                        'missing_items': material_result.get('missing_items', [])
+                        'missing_items': [s['item_code'] for s in material_result.shortage_details]
                     }
                 )
                 
