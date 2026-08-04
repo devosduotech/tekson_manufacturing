@@ -2,21 +2,16 @@
 // Doctype: Job Card
 // Event: Before Save
 
-// Override the standard Start button behavior
 frappe.ui.form.on('Job Card', {
     refresh: function(frm) {
-        // Only show custom start button for Open Job Cards
         if (frm.doc.status === 'Open' && frm.doc.docstatus === 0) {
-            // Remove standard Start button if exists
-            frm.page.clear_inner_toolbar();
-            
-            // Add custom Start button with validation
-            frm.page.add_inner_button(__('Start Job'), function() {
+            frm.page.add_primary_action(__('Start Job'), function() {
                 start_job_with_validation(frm);
-            }, 'Primary');
+            });
         }
     }
 });
+
 
 function start_job_with_validation(frm) {
     // Call our custom API which includes material validation

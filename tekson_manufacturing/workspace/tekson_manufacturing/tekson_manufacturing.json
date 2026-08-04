@@ -1,0 +1,42 @@
+{
+ "charts": [],
+ "content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Tekson Manufacturing</span>\",\"col\":12}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Work Order\",\"col\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Job Card\",\"col\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Entry\",\"col\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"BOM\",\"col\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Plan\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}}]",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "organization",
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Tekson Manufacturing",
+ "link_type": "DocType",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Material Transfer Pick List",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-04 00:00:00",
+ "module": "Tekson Manufacturing",
+ "name": "Tekson Manufacturing",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {"role": "Stock User"},
+  {"role": "Stock Manager"},
+  {"role": "Manufacturing User"},
+  {"role": "Manufacturing Manager"},
+  {"role": "Administrator"}
+ ],
+ "sequence_id": 20.0,
+ "shortcuts": [],
+ "title": "Tekson Manufacturing"
+}
