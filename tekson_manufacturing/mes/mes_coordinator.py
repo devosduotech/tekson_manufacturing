@@ -79,11 +79,7 @@ class MESExecutionCoordinator:
             validate_user_permission_for_work_order(work_order.name)
             validate_manufacturing_role()
             
-            # Step 1: Execution Engine (legacy tracking)
-            from tekson_manufacturing.execution.execution_engine import on_work_order_submit as exec_handler
-            exec_handler(work_order, method=None)
-            
-            # Step 2: Readiness Engine (evaluate all JCs)
+            # Step 1: Readiness Engine (evaluate all JCs)
             from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
             engine = JobCardReadinessEngine()
             engine.refresh_work_order(work_order)
