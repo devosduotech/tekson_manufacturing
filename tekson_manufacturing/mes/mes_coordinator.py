@@ -294,15 +294,10 @@ class MESExecutionCoordinator:
                 wo.save(ignore_permissions=True)
                 return
             
-            se = frappe.get_doc({
-                "doctype": "Stock Entry",
-                "purpose": "Manufacture",
-                "work_order": work_order,
-                "from_bom": 1,
-                "bom_no": wo.bom_no,
-                "fg_completed_qty": wo.qty,
-                "posting_date": frappe.utils.nowdate(),
-            })
+            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+            
+            se = make_stock_entry(work_order, "Manufacture", wo.qty)
+            se.posting_date = frappe.utils.nowdate()
             se.insert(ignore_permissions=True)
             se.submit()
             
