@@ -162,7 +162,7 @@ def update_work_order_status_if_ready(work_order):
         engine = MaterialReadinessEngine(work_order=work_order)
         readiness = engine.evaluate_material_readiness()
         
-        if readiness['is_ready']:
+        if readiness.is_ready:
             wo = frappe.get_doc("Work Order", work_order)
             # Only update if WO is submitted and status is "Not Started"
             if wo.docstatus == 1 and wo.status == "Not Started":
@@ -241,16 +241,15 @@ def validate_job_card_start(doc, method=None):
         engine = MaterialReadinessEngine(work_order=doc.work_order)
         readiness = engine.evaluate_material_readiness()
         
-        if not readiness['is_ready']:
+        if not readiness.is_ready:
             # Block the start
-            missing_items = readiness.get('missing_items', [])
-            shortage_details = readiness.get('shortage_details', [])
+            shortage_details = readiness.shortage_details
             
-            error_msg = f"Cannot start Job Card: Materials not available in {readiness['transfer_summary'].get('department_warehouse', 'WIP')}.\n\n"
+            error_msg = f"Cannot start Job Card: Materials not available in {readiness.warehouse}.\n\n"
             
             if shortage_details:
                 error_msg += "Missing Materials:\n"
-                for item in shortage_details[:5]:  # Show first 5
+                for item in shortage_details[:5]:
                     error_msg += f"- {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
             
             frappe.throw(error_msg, title=_("Material Not Available"))

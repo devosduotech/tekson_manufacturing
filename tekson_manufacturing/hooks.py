@@ -37,7 +37,6 @@ doc_events = {
 # }
 
 app_include_js = [
-    "/assets/tekson_manufacturing/js/job_card_start_validation.js",
     "/assets/tekson_manufacturing/js/job_card_list.js",
     "/assets/tekson_manufacturing/js/material_transfer_pick_list.js"
 ]

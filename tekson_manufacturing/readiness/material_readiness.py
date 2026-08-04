@@ -773,22 +773,22 @@ def can_job_card_start(job_card):
     engine = MaterialReadinessEngine(work_order=jc.work_order)
     readiness = engine.evaluate_material_readiness()
     
-    if readiness['is_ready']:
+    if readiness.is_ready:
         return {
             'can_start': True,
             'reason': 'Materials available in Department Warehouse',
             'material_status': 'Ready',
-            'transfer_summary': readiness['transfer_summary']
+            'transfer_summary': {}
         }
     else:
-        missing_items = readiness['missing_items']
+        missing_items = [s['item_code'] for s in readiness.shortage_details]
         return {
             'can_start': False,
             'reason': f"Materials not available: {', '.join(missing_items)}",
             'material_status': 'Not Ready',
             'missing_items': missing_items,
-            'shortage_details': readiness['shortage_details'],
-            'transfer_summary': readiness['transfer_summary']
+            'shortage_details': readiness.shortage_details,
+            'transfer_summary': {}
         }
 
 

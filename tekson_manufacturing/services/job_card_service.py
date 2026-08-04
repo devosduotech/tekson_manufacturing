@@ -138,7 +138,7 @@ class JobCardService:
                 engine = MaterialReadinessEngine(work_order=job_card.work_order)
                 readiness = engine.evaluate_material_readiness()
                 
-                if not readiness['is_ready']:
+                if not readiness.is_ready:
                     job_card.custom_start_status = "Awaiting Material"
                 else:
                     job_card.custom_start_status = "Material Available"
@@ -170,7 +170,7 @@ class JobCardService:
                 engine = MaterialReadinessEngine(work_order=job_card.work_order)
                 readiness = engine.evaluate_material_readiness()
                 
-                if readiness['is_ready']:
+                if readiness.is_ready:
                     job_card.custom_can_start_operation = 1
                 else:
                     job_card.custom_can_start_operation = 0
@@ -197,7 +197,7 @@ class JobCardService:
         engine = MaterialReadinessEngine(work_order=job_card.work_order)
         readiness = engine.evaluate_material_readiness()
         
-        if readiness['is_ready']:
+        if readiness.is_ready:
             job_card.custom_material_available_for_operation = 1
             job_card.custom_material_status_details = "Material available in WIP"
         else:

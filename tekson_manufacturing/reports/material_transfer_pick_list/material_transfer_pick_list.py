@@ -96,9 +96,9 @@ def get_data(filters):
     from_date = filters.get('from_date')
     to_date = filters.get('to_date')
     
-    if not from_date:
+    if not from_date or from_date == '':
         from_date = frappe.utils.add_days(frappe.utils.today(), -7)
-    if not to_date:
+    if not to_date or to_date == '':
         to_date = frappe.utils.today()
     
     # Get submitted WOs not yet completed
