@@ -90,8 +90,9 @@
  "name": "Material Transfer Pick List",
  "owner": "Administrator",
  "ref_doctype": "Work Order",
- "report_name": "Material Transfer Pick List",
- "report_type": "Script Report",
+  "report_name": "Material Transfer Pick List",
+  "report_type": "Script Report",
+  "query": "tekson_manufacturing.reports.material_transfer_pick_list.material_transfer_pick_list.execute",
  "roles": [
   {
    "role": "Stock User"
