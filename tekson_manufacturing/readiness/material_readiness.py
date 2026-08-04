@@ -32,33 +32,23 @@ class MaterialReadinessEngine:
     
     def evaluate_material_readiness(self, work_order=None, job_card=None) -> MaterialResult:
         """
-        Evaluate material readiness for a Work Order
+        Evaluate material readiness for a Work Order or specific Job Card
         
         Business Rules:
         - MR-010: Validates materials transferred to Department Warehouse
         - MR-011: Checks cumulative availability across multiple Stock Entries
+        - MR-015: Per-operation material check via BOM Item.operation
+        
+        When job_card is provided:
+        - Filters BOM items by the JC's operation
+        - Checks stock in the JC's wip_warehouse
+        - Only evaluates materials needed for this specific operation
         
         Args:
-            work_order: Work Order name (optional, uses self.work_order if not provided)
-            job_card: Job Card name (optional, for context)
+            work_order: Work Order name (optional)
+            job_card: Job Card name (optional) — enables per-operation filtering
         
         Returns: MaterialResult with is_ready, status, quantities, and details
-        
-        Dependencies:
-        - Work Order
-        - BOM
-        - Stock Ledger Entry
-        - Stock Entry
-        
-        Test Case:
-        - test_mr_010_stores_transfer_validation
-        - test_mr_011_cumulative_availability_check
-        
-        Example:
-        >>> engine = MaterialReadinessEngine(work_order="WO-2026-001")
-        >>> result = engine.evaluate_material_readiness()
-        >>> result.is_ready
-        True
         """
         if not work_order:
             work_order = self.work_order
@@ -66,16 +56,21 @@ class MaterialReadinessEngine:
         if not work_order:
             frappe.throw(_("Work Order is required"))
         
-        # Store in instance for later use
         self.work_order = work_order
         self.job_card = job_card
         wo = frappe.get_doc("Work Order", work_order)
         
-        # Get Department Warehouse for the Work Order
-        department_warehouse = self.get_department_warehouse(wo)
+        # Determine operation filter and target warehouse
+        operation_filter = None
+        if job_card:
+            jc = frappe.get_doc("Job Card", job_card) if isinstance(job_card, str) else job_card
+            operation_filter = jc.operation
+            department_warehouse = jc.wip_warehouse or self.get_department_warehouse(wo)
+        else:
+            department_warehouse = self.get_department_warehouse(wo)
         
-        # Get all required materials from BOM
-        required_materials = self.get_required_materials(wo)
+        # Get required materials from BOM (optionally filtered by operation)
+        required_materials = self.get_required_materials(wo, operation_filter)
         
         # Track shortages
         total_required = 0.0
@@ -145,45 +140,49 @@ class MaterialReadinessEngine:
         
         return self.results
     
-    def get_required_materials(self, work_order):
+    def get_required_materials(self, work_order, operation=None):
         """
         Get all materials required for the work order from BOM
         
+        Optionally filtered by BOM Item.operation for per-JC evaluation.
+        
         Args:
             work_order: Work Order document
+            operation: BOM Operation name to filter items (optional)
         
-        Returns: list of dicts with item_code, qty, uom, source_warehouse
-        
-        Dependencies:
-        - BOM Item
-        - BOM
-        
-        Example:
-        >>> materials = self.get_required_materials(wo)
-        >>> len(materials)
-        5
+        Returns: list of dicts with item_code, qty, uom, source_warehouse, operation
         """
         materials = []
         
-        # Get BOM materials
         if work_order.bom_no:
+            bom_item_filters = {"parent": work_order.bom_no}
+            
             bom_items = frappe.db.get_all(
                 "BOM Item",
-                filters={"parent": work_order.bom_no},
-                fields=["item_code", "qty", "uom", "source_warehouse"]
+                filters=bom_item_filters,
+                fields=["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"]
             )
             
             bom_qty = self.get_bom_qty(work_order.bom_no)
             
             for item in bom_items:
-                # Calculate required qty based on WO quantity
+                # Filter by operation if specified
+                if operation and item.operation and item.operation != operation:
+                    continue
+                
+                # If no operation filter and item has operation set → skip (each item belongs to a specific op)
+                if not operation and item.operation:
+                    continue
+                
                 required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
                 
                 materials.append({
                     'item_code': item.item_code,
+                    'item_name': item.item_name,
                     'qty': required_qty,
                     'uom': item.uom,
-                    'source_warehouse': item.source_warehouse
+                    'source_warehouse': item.source_warehouse,
+                    'operation': item.operation
                 })
         
         return materials
