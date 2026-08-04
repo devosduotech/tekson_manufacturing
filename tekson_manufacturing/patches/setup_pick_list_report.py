@@ -31,6 +31,9 @@ def create_report():
     with open(json_path) as f:
         report_data = json.load(f)
     
+    # Add doctype key (JSON doesn't include it)
+    report_data['doctype'] = 'Report'
+    
     report = frappe.get_doc(report_data)
     report.insert(ignore_permissions=True)
     frappe.db.commit()
