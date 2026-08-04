@@ -279,7 +279,7 @@ class MESExecutionCoordinator:
                 return
             
             incomplete = frappe.db.count("Job Card", {
-                "work_order": work_order, "docstatus": 1,
+                "work_order": work_order, "docstatus": ["!=", 2],
                 "status": ["!=", "Completed"]
             })
             if incomplete > 0:
