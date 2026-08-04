@@ -37,7 +37,14 @@ doc_events = {
 # }
 
 app_include_js = [
-    "/assets/tekson_manufacturing/js/job_card_list.js"
+    "/assets/tekson_manufacturing/js/job_card_list.js",
+    "/assets/tekson_manufacturing/js/material_transfer_pick_list.js"
+]
+
+# Reports
+# ------------------
+report = [
+    "tekson_manufacturing.reports.material_transfer_pick_list.material_transfer_pick_list.execute"
 ]
 
 # Apps

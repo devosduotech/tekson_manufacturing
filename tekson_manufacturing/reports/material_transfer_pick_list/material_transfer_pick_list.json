@@ -1,0 +1,112 @@
+{
+ "add_total_row": 0,
+ "columns": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "width": 200
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "width": 250
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "width": 200
+  },
+  {
+   "fieldname": "required_per_piece",
+   "fieldtype": "Float",
+   "label": "Qty/Piece",
+   "width": 80
+  },
+  {
+   "fieldname": "required_total",
+   "fieldtype": "Float",
+   "label": "Required",
+   "width": 80
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "From Warehouse",
+   "options": "Warehouse",
+   "width": 200
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "To (WIP)",
+   "options": "Warehouse",
+   "width": 180
+  },
+  {
+   "fieldname": "wip_warehouse",
+   "fieldtype": "Link",
+   "label": "WO WIP Warehouse",
+   "options": "Warehouse",
+   "width": 180
+  },
+  {
+   "fieldname": "available_qty",
+   "fieldtype": "Float",
+   "label": "Available",
+   "width": 80
+  },
+  {
+   "fieldname": "balance_to_transfer",
+   "fieldtype": "Float",
+   "label": "To Transfer",
+   "width": 80
+  }
+ ],
+ "filters": [
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date",
+   "default": "Today",
+   "mandatory": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date",
+   "default": "Today",
+   "mandatory": 1
+  }
+ ],
+ "idx": 1,
+ "is_standard": "Yes",
+ "modified": "2026-08-04 00:00:00",
+ "module": "Tekson Manufacturing",
+ "name": "Material Transfer Pick List",
+ "owner": "Administrator",
+ "ref_doctype": "Work Order",
+ "report_name": "Material Transfer Pick List",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Manufacturing User"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Administrator"
+  }
+ ]
+}
