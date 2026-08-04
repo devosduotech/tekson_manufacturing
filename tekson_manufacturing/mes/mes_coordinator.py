@@ -232,6 +232,9 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
+            # Step 3: Check if ALL Job Cards completed → auto-close WO
+            MESExecutionCoordinator._try_complete_work_order(job_card.work_order)
+            
             # Log success
             log_security_event(
                 event_type='JOB_CARD_COMPLETE',
@@ -264,6 +267,51 @@ class MESExecutionCoordinator:
 # =============================================================================
 # Hook Handlers (thin wrappers)
 # =============================================================================
+    @staticmethod
+    def _try_complete_work_order(work_order: str):
+        """
+        Auto-complete Work Order when all Job Cards are done.
+        Creates and submits Stock Entry (Manufacture).
+        """
+        try:
+            wo = frappe.get_doc("Work Order", work_order)
+            if wo.status == "Completed":
+                return
+            
+            incomplete = frappe.db.count("Job Card", {
+                "work_order": work_order, "docstatus": 1,
+                "status": ["!=", "Completed"]
+            })
+            if incomplete > 0:
+                return
+            
+            existing = frappe.db.exists("Stock Entry", {
+                "work_order": work_order, "purpose": "Manufacture", "docstatus": 1
+            })
+            
+            if existing:
+                wo.status = "Completed"
+                wo.save(ignore_permissions=True)
+                return
+            
+            se = frappe.get_doc({
+                "doctype": "Stock Entry",
+                "purpose": "Manufacture",
+                "work_order": work_order,
+                "from_bom": 1,
+                "bom_no": wo.bom_no,
+                "fg_completed_qty": wo.qty,
+                "posting_date": frappe.utils.nowdate(),
+            })
+            se.insert(ignore_permissions=True)
+            se.submit()
+            
+            wo.status = "Completed"
+            wo.save(ignore_permissions=True)
+            
+        except Exception as e:
+            frappe.log_error(title=f"WO Auto-Complete: {work_order}", message=str(e))
+
 
 def on_work_order_submit(doc, method):
     """Work Order submit hook handler"""
