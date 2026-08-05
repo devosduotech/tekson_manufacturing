@@ -232,8 +232,10 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Check if ALL Job Cards completed → auto-close WO
-            MESExecutionCoordinator._try_complete_work_order(job_card.work_order)
+            # Step 3: Delegate WO completion to ExecutionEngine (single authority)
+            from tekson_manufacturing.execution.execution_engine import ExecutionEngine
+            exec_engine = ExecutionEngine()
+            exec_engine.complete_work_order(job_card.work_order)
             
             # Log success
             log_security_event(
@@ -267,50 +269,6 @@ class MESExecutionCoordinator:
 # =============================================================================
 # Hook Handlers (thin wrappers)
 # =============================================================================
-    @staticmethod
-    def _try_complete_work_order(work_order: str):
-        """
-        Auto-complete Work Order when all Job Cards are done.
-        Creates and submits Stock Entry (Manufacture).
-        """
-        wo = frappe.get_doc("Work Order", work_order)
-        if wo.status == "Completed":
-            return
-        
-        incomplete = frappe.db.count("Job Card", {
-            "work_order": work_order, "docstatus": ["!=", 2],
-            "status": ["!=", "Completed"]
-        })
-        if incomplete > 0:
-            return
-        
-        existing = frappe.db.exists("Stock Entry", {
-            "work_order": work_order, "purpose": "Manufacture", "docstatus": 1
-        })
-        
-        if existing:
-            frappe.db.set_value("Work Order", work_order, "status", "Completed")
-            return
-        
-        from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
-        
-        se_dict = make_stock_entry(work_order, "Manufacture", wo.qty)
-        se = frappe.get_doc(se_dict)
-        
-        # Fix s_warehouse per item: consume from the WIP where stock actually exists
-        for item in se.items:
-            if not item.is_finished_item:
-                stock_wh = frappe.db.get_value("Bin",
-                    {"item_code": item.item_code, "actual_qty": [">", 0]},
-                    "warehouse")
-                if stock_wh:
-                    item.s_warehouse = stock_wh
-        
-        se.insert(ignore_permissions=True)
-        se.submit()
-        
-        frappe.db.set_value("Work Order", work_order, "status", "Completed")
-
 
 def on_work_order_submit(doc, method):
     """Work Order submit hook handler"""

@@ -190,12 +190,8 @@ def update_job_card_status(doc, method=None):
     - custom_can_start_operation
     - custom_material_available_for_operation
     """
-    # DEBUG: Check if this hook is even running
-    frappe.msgprint(f"DEBUG: update_job_card_status called for {doc.name}", alert=True)
-    
     # Skip if document is new or being submitted
     if doc.is_new() or doc.flags.ignore_validate:
-        frappe.msgprint(f"DEBUG: Skipping update_job_card_status", alert=True)
         return
     
     from tekson_manufacturing.services.job_card_service import JobCardService
@@ -215,26 +211,21 @@ def validate_job_card_start(doc, method=None):
     """
     Block Job Card start if materials are not available
     
-    Called on Job Card validate/before_save event
-    
     Business Rules:
     - JC-003: Job Card should not start if materials are not available
     - MR-014: Department WIP as Source of Truth
     
-    Logic:
-    - If status is "Work In Progress" (or changing to it)
-    - Check Material Readiness
-    - Block if materials not available in WIP
+    Only runs on transition to "Work In Progress" (not on every save).
     """
-    # Check if status is Work In Progress (regardless of how it got there)
+    old_doc = doc.get_doc_before_save()
+    
+    # Only validate on transition to Work In Progress
+    if not old_doc or old_doc.status == "Work In Progress":
+        return
+    
     if doc.status != "Work In Progress":
         return
     
-    # Skip if document is new
-    if doc.is_new():
-        return
-    
-    # Check material readiness
     if doc.work_order:
         from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
         

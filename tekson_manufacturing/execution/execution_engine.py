@@ -567,6 +567,14 @@ class ExecutionEngine:
             # Override t_warehouse for finished items if sub-assembly
             if target_warehouse and (item.is_finished_item or item.is_scrap_item):
                 item.t_warehouse = target_warehouse
+            
+            # Fix for multi-department WIP: consume from where stock actually exists
+            if not item.is_finished_item:
+                actual_wh = frappe.db.get_value("Bin",
+                    {"item_code": item.item_code, "actual_qty": [">", 0]},
+                    "warehouse")
+                if actual_wh:
+                    item.s_warehouse = actual_wh
         
         stock_entry.insert(ignore_permissions=True)
         stock_entry.submit()
