@@ -232,10 +232,12 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Delegate WO completion to ExecutionEngine (single authority)
+            # Step 3: Complete WO after transaction commits (JCs must be committed first)
             from tekson_manufacturing.execution.execution_engine import ExecutionEngine
             exec_engine = ExecutionEngine()
-            exec_engine.complete_work_order(job_card.work_order)
+            frappe.db.after_commit.add(
+                lambda: exec_engine.complete_work_order(job_card.work_order)
+            )
             
             # Log success
             log_security_event(
@@ -282,6 +284,5 @@ def on_stock_entry_submit(doc, method):
 
 def on_job_card_complete(doc, method):
     """Job Card submit hook handler"""
-    frappe.msgprint(f"Hook fired for {doc.name} | Status: {doc.status}", alert=True)
     coordinator = MESExecutionCoordinator()
     coordinator.on_job_card_complete(doc)
