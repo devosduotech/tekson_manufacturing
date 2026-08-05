@@ -273,39 +273,35 @@ class MESExecutionCoordinator:
         Auto-complete Work Order when all Job Cards are done.
         Creates and submits Stock Entry (Manufacture).
         """
-        try:
-            wo = frappe.get_doc("Work Order", work_order)
-            if wo.status == "Completed":
-                return
-            
-            incomplete = frappe.db.count("Job Card", {
-                "work_order": work_order, "docstatus": ["!=", 2],
-                "status": ["!=", "Completed"]
-            })
-            if incomplete > 0:
-                return
-            
-            existing = frappe.db.exists("Stock Entry", {
-                "work_order": work_order, "purpose": "Manufacture", "docstatus": 1
-            })
-            
-            if existing:
-                wo.status = "Completed"
-                wo.save(ignore_permissions=True)
-                return
-            
-            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
-            
-            se = make_stock_entry(work_order, "Manufacture", wo.qty)
-            se.posting_date = frappe.utils.nowdate()
-            se.insert(ignore_permissions=True)
-            se.submit()
-            
+        wo = frappe.get_doc("Work Order", work_order)
+        if wo.status == "Completed":
+            return
+        
+        incomplete = frappe.db.count("Job Card", {
+            "work_order": work_order, "docstatus": ["!=", 2],
+            "status": ["!=", "Completed"]
+        })
+        if incomplete > 0:
+            return
+        
+        existing = frappe.db.exists("Stock Entry", {
+            "work_order": work_order, "purpose": "Manufacture", "docstatus": 1
+        })
+        
+        if existing:
             wo.status = "Completed"
             wo.save(ignore_permissions=True)
-            
-        except Exception as e:
-            frappe.log_error(title=f"WO Auto-Complete: {work_order}", message=str(e))
+            return
+        
+        from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+        
+        se_dict = make_stock_entry(work_order, "Manufacture", wo.qty)
+        se = frappe.get_doc(se_dict)
+        se.insert(ignore_permissions=True)
+        se.submit()
+        
+        wo.status = "Completed"
+        wo.save(ignore_permissions=True)
 
 
 def on_work_order_submit(doc, method):
