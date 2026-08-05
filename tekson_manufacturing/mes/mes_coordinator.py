@@ -282,5 +282,6 @@ def on_stock_entry_submit(doc, method):
 
 def on_job_card_complete(doc, method):
     """Job Card submit hook handler"""
+    frappe.msgprint(f"Hook fired for {doc.name} | Status: {doc.status}", alert=True)
     coordinator = MESExecutionCoordinator()
     coordinator.on_job_card_complete(doc)
