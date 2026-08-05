@@ -395,7 +395,7 @@ class ExecutionEngine:
         """Check if all Job Cards for the Work Order are completed"""
         job_cards = frappe.get_all(
             "Job Card",
-            filters={"work_order": work_order.name},
+            filters={"work_order": work_order.name, "docstatus": 1},
             fields=["name", "status", "operation"]
         )
         
@@ -485,62 +485,48 @@ class ExecutionEngine:
         if is_sub_assembly:
             target_warehouse = self.get_sub_assembly_output_warehouse(work_order)
         
-        # Create Stock Entry manually to override warehouse
+        # Create Stock Entry manually — don't use get_items() (avoids BOM operation validation)
         stock_entry = frappe.new_doc("Stock Entry")
         stock_entry.stock_entry_type = "Manufacture"
         stock_entry.purpose = "Manufacture"
         stock_entry.work_order = work_order.name
-        stock_entry.from_bom = 1
-        stock_entry.bom_no = work_order.bom_no
-        stock_entry.use_multi_level_bom = 1
         stock_entry.company = work_order.company
-        stock_entry.fg_warehouse = work_order.fg_warehouse
-        
-        # Set manufactured quantity
         stock_entry.fg_completed_qty = work_order.produced_qty or work_order.qty
+        stock_entry.to_warehouse = target_warehouse or work_order.fg_warehouse
         
-        # Set target warehouse
-        if target_warehouse:
-            stock_entry.to_warehouse = target_warehouse
-        else:
-            stock_entry.to_warehouse = work_order.fg_warehouse
-        
-        # Get items from BOM
-        stock_entry.get_items()
-        
-        # Override source warehouse from BOM Item if set
+        # Build items manually from BOM
         bom = frappe.get_doc("BOM", work_order.bom_no) if work_order.bom_no else None
-        bom_items = {}
+        
         if bom:
-            bom_items = {item.item_code: item.source_warehouse for item in bom.items if item.source_warehouse}
-        
-        # Get last completed JC's WIP warehouse (where finished goods are located)
-        last_jc = frappe.db.get_value('Job Card', 
-            {'work_order': work_order.name, 'docstatus': 1},
-            'wip_warehouse',
-            order_by='modified desc')
-        
-        for item in stock_entry.items:
-            # Set source warehouse from BOM Item
-            if item.item_code in bom_items:
-                item.s_warehouse = bom_items[item.item_code]
-            
-            # For finished goods, source = last JC's WIP warehouse
-            if item.is_finished_item and last_jc:
-                item.s_warehouse = last_jc
-            
-            # Override t_warehouse for finished items if sub-assembly
-            if target_warehouse and (item.is_finished_item or item.is_scrap_item):
-                item.t_warehouse = target_warehouse
-            
-            # Fix for multi-department WIP: consume from WIP where stock actually exists
-            if not item.is_finished_item:
-                actual_wh = frappe.db.get_value("Bin",
+            for item in bom.items:
+                required_qty = (item.qty * work_order.qty) / (bom.quantity or 1)
+                
+                # Find WIP warehouse where this item actually has stock
+                wip_wh = frappe.db.get_value("Bin",
                     {"item_code": item.item_code, "actual_qty": [">", 0],
                      "warehouse": ["like", "%WIP%"]},
                     "warehouse", order_by="actual_qty desc")
-                if actual_wh:
-                    item.s_warehouse = actual_wh
+                
+                stock_entry.append("items", {
+                    "item_code": item.item_code,
+                    "qty": required_qty,
+                    "s_warehouse": wip_wh or work_order.wip_warehouse,
+                    "t_warehouse": "",
+                })
+            
+            # Add Finished Good
+            fg_wh = frappe.db.get_value("Bin",
+                {"item_code": work_order.production_item, "actual_qty": [">", 0],
+                 "warehouse": ["like", "%WIP%"]},
+                "warehouse", order_by="actual_qty desc")
+            
+            stock_entry.append("items", {
+                "item_code": work_order.production_item,
+                "qty": work_order.qty,
+                "s_warehouse": fg_wh or work_order.wip_warehouse,
+                "t_warehouse": target_warehouse or work_order.fg_warehouse,
+                "is_finished_item": 1
+            })
         
         stock_entry.insert(ignore_permissions=True)
         stock_entry.submit()
