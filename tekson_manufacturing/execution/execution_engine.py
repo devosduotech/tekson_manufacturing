@@ -533,11 +533,12 @@ class ExecutionEngine:
             if target_warehouse and (item.is_finished_item or item.is_scrap_item):
                 item.t_warehouse = target_warehouse
             
-            # Fix for multi-department WIP: consume from where stock actually exists
+            # Fix for multi-department WIP: consume from WIP where stock actually exists
             if not item.is_finished_item:
                 actual_wh = frappe.db.get_value("Bin",
-                    {"item_code": item.item_code, "actual_qty": [">", 0]},
-                    "warehouse")
+                    {"item_code": item.item_code, "actual_qty": [">", 0],
+                     "warehouse": ["like", "%WIP%"]},
+                    "warehouse", order_by="actual_qty desc")
                 if actual_wh:
                     item.s_warehouse = actual_wh
         
@@ -667,24 +668,8 @@ class ExecutionEngine:
         return {'success': True, 'message': 'Job Cards refreshed', 'refreshed_cards': refreshed}
     
     def update_work_order_status(self, work_order):
-        """Update Work Order status based on completion"""
-        wo = self.wo_repo.get(work_order)
-        
-        if not wo:
-            return
-        
-        wo.reload()
-        
-        # Update produced quantity
-        try:
-            wo.update_work_order_qty()
-        except Exception:
-            pass
-        
-        # ERPNext Work Order doesn't have set_status() method
-        # Status is auto-updated by ERPNext when Manufacture Entry is created
-        # Just save to trigger any hooks
-        wo.save(ignore_permissions=True)
+        """Update Work Order status to Completed"""
+        frappe.db.set_value("Work Order", work_order, "status", "Completed")
         
         frappe.db.commit()
     
