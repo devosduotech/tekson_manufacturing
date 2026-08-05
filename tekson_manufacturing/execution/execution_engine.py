@@ -487,6 +487,7 @@ class ExecutionEngine:
         
         # Create Stock Entry manually to override warehouse
         stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.stock_entry_type = "Manufacture"
         stock_entry.purpose = "Manufacture"
         stock_entry.work_order = work_order.name
         stock_entry.from_bom = 1
