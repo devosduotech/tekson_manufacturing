@@ -297,6 +297,16 @@ class MESExecutionCoordinator:
         
         se_dict = make_stock_entry(work_order, "Manufacture", wo.qty)
         se = frappe.get_doc(se_dict)
+        
+        # Fix s_warehouse per item: consume from the WIP where stock actually exists
+        for item in se.items:
+            if not item.is_finished_item:
+                stock_wh = frappe.db.get_value("Bin",
+                    {"item_code": item.item_code, "actual_qty": [">", 0]},
+                    "warehouse")
+                if stock_wh:
+                    item.s_warehouse = stock_wh
+        
         se.insert(ignore_permissions=True)
         se.submit()
         
