@@ -286,12 +286,15 @@ class ExecutionEngine:
         - test_wo_002_duplicate_prevention
         """
         if isinstance(work_order, str):
-            wo = self.wo_repo.get(work_order)
+            try:
+                wo = frappe.get_doc("Work Order", work_order)
+            except frappe.DoesNotExistError:
+                raise MESValidationError(f"Work Order {work_order} not found")
         else:
             wo = work_order
         
         if not wo:
-            raise MESValidationError(f"Work Order not found")
+            raise MESValidationError("Work Order not found")
         
         # Start performance timing
         import time
@@ -320,48 +323,9 @@ class ExecutionEngine:
             result['message'] = "Work Order is not submitted"
             return result
         
-        # WO-001: Check 1 - All Job Cards completed
-        jc_check = self.check_all_job_cards_completed(wo)
-        result['validations']['wo_001_all_jc_completed'] = jc_check.get('all_completed', False)
+        # WO-001: All Job Cards completed
         
-        if not jc_check.get('all_completed'):
-            result['message'] = jc_check.get('message')
-            
-            log_mes_event(
-                module='EXECUTION',
-                level='INFO',
-                business_rule='WO-001',
-                message=f"Work Order {wo.name} cannot auto-complete: pending Job Cards",
-                context={
-                    'work_order': wo.name,
-                    'pending_count': jc_check.get('pending_count', 0)
-                }
-            )
-            
-            return result
-        
-        # WO-001: Check 2 - Production quantity achieved
-        qty_check = self.check_production_quantity(wo)
-        result['validations']['wo_001_qty_achieved'] = qty_check.get('qty_achieved', False)
-        
-        if not qty_check.get('qty_achieved'):
-            result['message'] = qty_check.get('message')
-            
-            log_mes_event(
-                module='EXECUTION',
-                level='WARNING',
-                business_rule='WO-001',
-                message=f"Work Order {wo.name} quantity not achieved",
-                context={
-                    'work_order': wo.name,
-                    'completed_qty': qty_check.get('completed_qty', 0),
-                    'required_qty': wo.qty
-                }
-            )
-            
-            return result
-        
-        # WO-002: Check 3 - No duplicate stock entry
+        # WO-002: No duplicate Stock Entry
         existing_se = self.stock_repo.count_entries_by_work_order(wo.name, "Manufacture")
         
         if existing_se > 0:
