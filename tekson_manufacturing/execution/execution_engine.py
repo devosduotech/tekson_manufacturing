@@ -791,10 +791,22 @@ def on_job_card_submit(doc, method=None):
         service = JobCardService()
         service.refresh_status(doc.name)
     
-    # Try to complete Work Order after commit (backup — Coordinator handles primary)
-    frappe.db.after_commit.add(
-        lambda: engine.complete_work_order(doc.work_order)
-    )
+    # Try to complete Work Order after commit
+    def _complete_after_commit():
+        try:
+            result = engine.complete_work_order(doc.work_order)
+            if not result.get('success'):
+                frappe.log_error(
+                    title=f"WO Auto-Complete: {doc.work_order}",
+                    message=str(result)
+                )
+        except Exception as e:
+            frappe.log_error(
+                title=f"WO Auto-Complete Error: {doc.work_order}",
+                message=str(e)
+            )
+    
+    frappe.db.after_commit.add(_complete_after_commit)
 
 
 def on_job_card_cancel(doc, method=None):
