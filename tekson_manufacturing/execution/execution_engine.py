@@ -490,6 +490,8 @@ class ExecutionEngine:
         stock_entry.stock_entry_type = "Manufacture"
         stock_entry.purpose = "Manufacture"
         stock_entry.work_order = work_order.name
+        stock_entry.from_bom = 1
+        stock_entry.bom_no = work_order.bom_no
         stock_entry.company = work_order.company
         stock_entry.fg_completed_qty = work_order.produced_qty or work_order.qty
         stock_entry.to_warehouse = target_warehouse or work_order.fg_warehouse
@@ -525,7 +527,8 @@ class ExecutionEngine:
                 "qty": work_order.qty,
                 "s_warehouse": fg_wh or work_order.wip_warehouse,
                 "t_warehouse": target_warehouse or work_order.fg_warehouse,
-                "is_finished_item": 1
+                "is_finished_item": 1,
+                "allow_zero_valuation_rate": 1
             })
         
         stock_entry.insert(ignore_permissions=True)

@@ -232,15 +232,12 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Complete Work Order synchronously
+            # Step 3: Complete WO after transaction commits
             from tekson_manufacturing.execution.execution_engine import ExecutionEngine
             exec_engine = ExecutionEngine()
-            result = exec_engine.complete_work_order(job_card.work_order)
-            if not result.get('success'):
-                frappe.log_error(
-                    title=f"WO Complete Failed: {job_card.work_order}",
-                    message=str(result)
-                )
+            frappe.db.after_commit.add(
+                lambda: exec_engine.complete_work_order(job_card.work_order)
+            )
             
             # Log success
             log_security_event(
