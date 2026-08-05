@@ -289,8 +289,7 @@ class MESExecutionCoordinator:
         })
         
         if existing:
-            wo.status = "Completed"
-            wo.save(ignore_permissions=True)
+            frappe.db.set_value("Work Order", work_order, "status", "Completed")
             return
         
         from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
@@ -310,8 +309,7 @@ class MESExecutionCoordinator:
         se.insert(ignore_permissions=True)
         se.submit()
         
-        wo.status = "Completed"
-        wo.save(ignore_permissions=True)
+        frappe.db.set_value("Work Order", work_order, "status", "Completed")
 
 
 def on_work_order_submit(doc, method):
