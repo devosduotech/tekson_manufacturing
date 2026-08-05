@@ -544,7 +544,10 @@ class ExecutionEngine:
         stock_entry.get_items()
         
         # Override source warehouse from BOM Item if set
-        bom_items = {item.item_code: item.source_warehouse for item in bom.items if item.source_warehouse}
+        bom = frappe.get_doc("BOM", work_order.bom_no) if work_order.bom_no else None
+        bom_items = {}
+        if bom:
+            bom_items = {item.item_code: item.source_warehouse for item in bom.items if item.source_warehouse}
         
         # Get last completed JC's WIP warehouse (where finished goods are located)
         last_jc = frappe.db.get_value('Job Card', 
@@ -830,7 +833,7 @@ def on_job_card_submit(doc, method=None):
         service = JobCardService()
         service.refresh_status(doc.name)
     
-    # Try to complete Work Order after commit
+    # Try to complete Work Order after commit (backup — Coordinator handles primary)
     frappe.db.after_commit.add(
         lambda: engine.complete_work_order(doc.work_order)
     )
