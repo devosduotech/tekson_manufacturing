@@ -315,7 +315,7 @@ class ExecutionEngine:
         if wo.status == "Completed":
             result['success'] = True
             result['message'] = "Work Order already completed"
-            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name, "Manufacture")
+            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name)
             return result
         
         # Check if WO is submitted
@@ -331,7 +331,7 @@ class ExecutionEngine:
         if existing_se > 0:
             result['success'] = True
             result['message'] = "Manufacture Stock Entry already exists"
-            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name, "Manufacture")[0]
+            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name)[0]
             result['validations']['wo_002_no_duplicate'] = False  # Duplicate exists
             
             # Update WO status
