@@ -233,15 +233,17 @@ class MESExecutionCoordinator:
             engine.refresh_next_job_card(job_card)
             
             # Step 3: Complete WO ONLY if this was the last Job Card
-            pending = frappe.db.sql("""
-                SELECT COUNT(*) FROM `tabJob Card`
-                WHERE work_order = %s
-                AND docstatus != 2
-                AND status != 'Completed'
-                AND name != %s
-            """, (job_card.work_order, job_card.name))[0][0]
+            all_jcs = frappe.get_all("Job Card",
+                {"work_order": job_card.work_order},
+                ["name", "status", "docstatus"])
             
-            if pending == 0:
+            pending = [jc for jc in all_jcs 
+                       if jc.name != job_card.name 
+                       and jc.docstatus != 2 
+                       and jc.status != "Completed"]
+            
+            if len(pending) == 0:
+                frappe.log_error(f"Auto-completing {job_card.work_order} — {len(all_jcs)} JCs, {len(pending)} pending", "MES")
                 from tekson_manufacturing.execution.execution_engine import ExecutionEngine
                 result = ExecutionEngine().complete_work_order(job_card.work_order)
                 
