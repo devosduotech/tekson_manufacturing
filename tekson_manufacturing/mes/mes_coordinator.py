@@ -223,16 +223,12 @@ class MESExecutionCoordinator:
             if job_card.status != "Completed":
                 return
             
-            # Step 1: Execution Engine (legacy tracking)
-            from tekson_manufacturing.execution.execution_engine import on_job_card_submit as exec_handler
-            exec_handler(job_card, method=None)
-            
-            # Step 2: Readiness Engine (refresh next JC only)
+            # Step 1: Readiness Engine (refresh next JC only)
             from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Complete WO ONLY if this was the last Job Card
+            # Step 2: Complete WO ONLY if this was the last Job Card
             all_jcs = frappe.get_all("Job Card",
                 {"work_order": job_card.work_order},
                 ["name", "status", "docstatus"])
