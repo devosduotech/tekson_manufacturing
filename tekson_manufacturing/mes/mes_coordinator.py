@@ -243,7 +243,13 @@ class MESExecutionCoordinator:
             
             if pending == 0:
                 from tekson_manufacturing.execution.execution_engine import ExecutionEngine
-                ExecutionEngine().complete_work_order(job_card.work_order)
+                result = ExecutionEngine().complete_work_order(job_card.work_order)
+                
+                if not result.get('success'):
+                    frappe.msgprint(
+                        f"Auto-complete failed for {job_card.work_order}: {result.get('message')}",
+                        alert=True
+                    )
             
             # Log success
             log_security_event(
