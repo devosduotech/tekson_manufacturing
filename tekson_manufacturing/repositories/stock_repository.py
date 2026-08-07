@@ -126,8 +126,7 @@ class StockRepository:
                 purpose,
                 docstatus,
                 posting_date,
-                posting_time,
-                total_qty
+                posting_time
             FROM `tabStock Entry`
             WHERE work_order = %s
             AND docstatus = 1

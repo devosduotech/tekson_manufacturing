@@ -296,97 +296,54 @@ class ExecutionEngine:
         if not wo:
             raise MESValidationError("Work Order not found")
         
-        # Start performance timing
-        import time
-        start_time = time.time()
+        result = {'success': False, 'message': '', 'stock_entry': None}
         
-        result = {
-            'success': False,
-            'message': '',
-            'stock_entry': None,
-            'validations': {
-                'wo_001_all_jc_completed': False,
-                'wo_001_qty_achieved': False,
-                'wo_002_no_duplicate': True
-            }
-        }
-        
-        # Check if WO is already completed
-        if wo.status == "Completed":
+        # Already completed — nothing to do
+        if (wo.status == "Completed" or 
+            frappe.db.exists("Stock Entry", {"work_order": wo.name, "purpose": "Manufacture", "docstatus": 1})):
             result['success'] = True
             result['message'] = "Work Order already completed"
-            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name)
-            return result
-        
-        # Check if WO is submitted
-        if wo.docstatus != 1:
-            result['message'] = "Work Order is not submitted"
-            return result
-        
-        # WO-001: All Job Cards completed
-        
-        # WO-002: No duplicate Stock Entry
-        existing_se = self.stock_repo.count_entries_by_work_order(wo.name, "Manufacture")
-        
-        if existing_se > 0:
-            result['success'] = True
-            result['message'] = "Manufacture Stock Entry already exists"
-            result['stock_entry'] = self.stock_repo.get_entries_by_work_order(wo.name)[0]
-            result['validations']['wo_002_no_duplicate'] = False  # Duplicate exists
-            
-            # Update WO status
             self.update_work_order_status(wo.name)
-            
-            log_mes_event(
-                module='EXECUTION',
-                level='INFO',
-                business_rule='WO-002',
-                message=f"Work Order {wo.name} duplicate Stock Entry prevented",
-                context={
-                    'work_order': wo.name,
-                    'existing_se': result['stock_entry']
-                }
-            )
-            
             return result
         
-        # Create Stock Entry
+        # Create Stock Entry using ERPNext standard API
         try:
-            se = self.create_manufacture_stock_entry(wo)
+            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+            
+            se_dict = make_stock_entry(wo.name, "Manufacture", wo.qty)
+            se = frappe.get_doc(se_dict)
+            
+            # Override raw material s_warehouse from JC wip_warehouse per operation
+            ops_to_wh = {}
+            for jc in frappe.get_all("Job Card", 
+                {"work_order": wo.name, "docstatus": 1},
+                ["operation", "wip_warehouse"]):
+                if jc.operation and jc.wip_warehouse:
+                    ops_to_wh[jc.operation] = jc.wip_warehouse
+            
+            if ops_to_wh:
+                bom = frappe.get_doc("BOM", wo.bom_no)
+                item_to_op = {item.item_code: item.operation for item in bom.items if item.operation}
+                for item in se.items:
+                    if not item.is_finished_item and item.item_code in item_to_op:
+                        op = item_to_op[item.item_code]
+                        if op in ops_to_wh:
+                            item.s_warehouse = ops_to_wh[op]
+            
+            se.insert(ignore_permissions=True)
+            se.submit()
             
             result['success'] = True
             result['message'] = "Work Order completed successfully"
             result['stock_entry'] = se.name
             
-            # Update WO status
             self.update_work_order_status(wo.name)
-            
-            # Log success
-            execution_time = (time.time() - start_time) * 1000
-            log_mes_event(
-                module='EXECUTION',
-                level='INFO',
-                business_rule='WO-001',
-                message=f"Work Order {wo.name} completed successfully",
-                context={
-                    'work_order': wo.name,
-                    'stock_entry': se.name,
-                    'execution_time_ms': execution_time
-                }
-            )
             
         except Exception as e:
             result['message'] = f"Error creating Stock Entry: {str(e)}"
-            
-            log_mes_event(
-                module='EXECUTION',
-                level='ERROR',
-                business_rule='WO-001',
-                message=f"Work Order {wo.name} completion failed: {str(e)}",
-                context={
-                    'work_order': wo.name,
-                    'error': str(e)
-                }
+            frappe.log_error(
+                title=f"WO Complete Failed: {wo.name}",
+                message=str(e)
             )
         
         return result
@@ -453,99 +410,6 @@ class ExecutionEngine:
         )
         
         return existing
-    
-    def create_manufacture_stock_entry(self, work_order):
-        """
-        Create Manufacture Stock Entry
-        
-        Business Rule: WH-003 - Multi-department flow support
-        
-        For sub-assemblies, output goes to next department's WIP warehouse,
-        not Finished Goods warehouse.
-        
-        Args:
-            work_order: Work Order document
-        
-        Returns: Stock Entry document
-        
-        Logic:
-        1. Check if production item is used as raw material in another BOM (sub-assembly)
-        2. If yes, find parent BOM's first operation department
-        3. Set t_warehouse to parent department's WIP warehouse
-        4. Create and submit Stock Entry
-        """
-        # Check if this is a sub-assembly
-        is_sub_assembly = frappe.db.exists(
-            "BOM Item",
-            {"item_code": work_order.production_item, "docstatus": 1}
-        )
-        
-        # Get target warehouse for sub-assemblies
-        target_warehouse = None
-        if is_sub_assembly:
-            target_warehouse = self.get_sub_assembly_output_warehouse(work_order)
-        
-        # Create Stock Entry manually — don't use get_items() (avoids BOM operation validation)
-        stock_entry = frappe.new_doc("Stock Entry")
-        stock_entry.stock_entry_type = "Manufacture"
-        stock_entry.purpose = "Manufacture"
-        stock_entry.work_order = work_order.name
-        stock_entry.company = work_order.company
-        stock_entry.fg_completed_qty = work_order.produced_qty or work_order.qty
-        stock_entry.to_warehouse = target_warehouse or work_order.fg_warehouse
-        stock_entry.set_posting_time = 1
-        
-        # Build items manually from BOM
-        bom = frappe.get_doc("BOM", work_order.bom_no) if work_order.bom_no else None
-        
-        if bom:
-            # Build per-item WIP warehouse map from BOM Item.operation → JC.wip_warehouse
-            ops_to_wh = {}
-            for jc in frappe.get_all("Job Card", 
-                {"work_order": work_order.name, "docstatus": 1},
-                ["operation", "wip_warehouse"]):
-                if jc.operation:
-                    ops_to_wh[jc.operation] = jc.wip_warehouse
-            
-            for item in bom.items:
-                required_qty = (item.qty * work_order.qty) / (bom.quantity or 1)
-                
-                # Get WIP warehouse from matching JC's operation
-                item_wip = None
-                if item.operation and item.operation in ops_to_wh:
-                    item_wip = ops_to_wh[item.operation]
-                if not item_wip:
-                    item_wip = frappe.db.get_value("Bin",
-                        {"item_code": item.item_code, "actual_qty": [">", 0],
-                         "warehouse": ["like", "%WIP%"]},
-                        "warehouse", order_by="actual_qty desc")
-                
-                stock_entry.append("items", {
-                    "item_code": item.item_code,
-                    "qty": required_qty,
-                    "s_warehouse": item_wip or work_order.wip_warehouse,
-                    "t_warehouse": "",
-                })
-            
-            # Add Finished Good
-            fg_wh = frappe.db.get_value("Bin",
-                {"item_code": work_order.production_item, "actual_qty": [">", 0],
-                 "warehouse": ["like", "%WIP%"]},
-                "warehouse", order_by="actual_qty desc")
-            
-            stock_entry.append("items", {
-                "item_code": work_order.production_item,
-                "qty": work_order.qty,
-                "s_warehouse": fg_wh or work_order.wip_warehouse,
-                "t_warehouse": target_warehouse or work_order.fg_warehouse,
-                "is_finished_item": 1,
-                "allow_zero_valuation_rate": 1
-            })
-        
-        stock_entry.insert(ignore_permissions=True)
-        stock_entry.submit()
-        
-        return stock_entry
     
     def get_sub_assembly_output_warehouse(self, work_order):
         """
