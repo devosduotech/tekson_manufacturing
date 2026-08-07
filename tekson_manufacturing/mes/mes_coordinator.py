@@ -232,11 +232,12 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Complete WO after transaction commits
-            from tekson_manufacturing.execution.execution_engine import ExecutionEngine
-            exec_engine = ExecutionEngine()
-            frappe.db.after_commit.add(
-                lambda: exec_engine.complete_work_order(job_card.work_order)
+            # Step 3: Enqueue WO completion (runs in separate worker after commit)
+            frappe.enqueue(
+                "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
+                work_order=job_card.work_order,
+                queue="short",
+                timeout=30
             )
             
             # Log success
