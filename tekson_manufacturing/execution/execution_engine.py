@@ -313,34 +313,16 @@ class ExecutionEngine:
             se_dict = make_stock_entry(wo.name, "Manufacture", wo.qty)
             se = frappe.get_doc(se_dict)
             
-            # Override raw material s_warehouse: BOM item.operation → JC wip_warehouse
-            ops_to_wh = {}
-            jcs = frappe.db.sql("""
-                SELECT operation, wip_warehouse FROM `tabJob Card`
-                WHERE work_order = %s AND docstatus != 2
-            """, wo.name, as_dict=True)
-            for jc in jcs:
-                if jc.operation and jc.wip_warehouse:
-                    ops_to_wh[jc.operation] = jc.wip_warehouse
-            
-            bom = frappe.get_doc("BOM", wo.bom_no)
-            item_to_op = {item.item_code: item.operation for item in bom.items if item.operation}
-            
+            # Override raw material s_warehouse: find where stock actually is in WIP
             for item in se.items:
-                if item.is_finished_item:
-                    item.allow_zero_valuation_rate = 1
-                    continue
-                
-                # Try BOM operation mapping first
-                if item.item_code in item_to_op and item_to_op[item.item_code] in ops_to_wh:
-                    item.s_warehouse = ops_to_wh[item_to_op[item.item_code]]
-                else:
-                    # Fallback: find WIP where this item has stock
+                if not item.is_finished_item:
                     wh = frappe.db.get_value("Bin",
                         {"item_code": item.item_code, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
                         "warehouse", order_by="actual_qty desc")
                     if wh:
                         item.s_warehouse = wh
+                else:
+                    item.allow_zero_valuation_rate = 1
             
             se.insert(ignore_permissions=True)
             se.submit()
