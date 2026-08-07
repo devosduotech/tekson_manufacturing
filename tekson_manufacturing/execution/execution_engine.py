@@ -308,21 +308,42 @@ class ExecutionEngine:
         
         # Create Stock Entry using ERPNext standard API
         try:
-            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+            # Build SE manually — bypass make_stock_entry (it sets s_warehouse from WO wip_warehouse)
+            se = frappe.new_doc("Stock Entry")
+            se.stock_entry_type = "Manufacture"
+            se.purpose = "Manufacture"
+            se.work_order = wo.name
+            se.company = wo.company
+            se.fg_completed_qty = wo.qty
+            se.to_warehouse = wo.fg_warehouse or "Finish Goods Stores - TPL"
             
-            se_dict = make_stock_entry(wo.name, "Manufacture", wo.qty)
-            se = frappe.get_doc(se_dict)
-            
-            # Override raw material s_warehouse: find where stock actually is in WIP
-            for item in se.items:
-                if not item.is_finished_item:
+            # Raw materials: from BOM items, s_warehouse from where stock actually is in WIP
+            bom = frappe.get_doc("BOM", wo.bom_no) if wo.bom_no else None
+            if bom:
+                for item in bom.items:
+                    qty = (item.qty * wo.qty) / (bom.quantity or 1)
                     wh = frappe.db.get_value("Bin",
                         {"item_code": item.item_code, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
                         "warehouse", order_by="actual_qty desc")
-                    if wh:
-                        item.s_warehouse = wh
-                else:
-                    item.allow_zero_valuation_rate = 1
+                    se.append("items", {
+                        "item_code": item.item_code,
+                        "qty": qty,
+                        "s_warehouse": wh or wo.wip_warehouse,
+                        "t_warehouse": "",
+                    })
+                
+                # Finished Good
+                fg_wh = frappe.db.get_value("Bin",
+                    {"item_code": wo.production_item, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
+                    "warehouse", order_by="actual_qty desc")
+                se.append("items", {
+                    "item_code": wo.production_item,
+                    "qty": wo.qty,
+                    "s_warehouse": fg_wh or wo.wip_warehouse,
+                    "t_warehouse": wo.fg_warehouse or "Finish Goods Stores - TPL",
+                    "is_finished_item": 1,
+                    "allow_zero_valuation_rate": 1
+                })
             
             se.insert(ignore_permissions=True)
             se.submit()
