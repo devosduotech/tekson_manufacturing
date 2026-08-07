@@ -79,16 +79,17 @@ def allocate_workstation(doc, method=None):
                 as_dict=True
             )
         
-        # If not found in parent BOM, search child BOMs (multi-level support)
-        if not bom_op:
-            bom_op = frappe.db.get_value(
-                "BOM Operation",
-                {"operation": doc.operation, "parent": ["in", 
-                    frappe.get_all("BOM", {"is_active": 1, "docstatus": 1}, pluck="name")]},
-                ["workstation_type", "workstation"],
-                as_dict=True,
-                order_by="creation asc"
-            )
+        # If not found in parent BOM, try child BOM for this item (multi-level)
+        if not bom_op and hasattr(doc, 'production_item') and doc.production_item:
+            child_bom = frappe.db.get_value("BOM", 
+                {"item": doc.production_item, "is_active": 1, "docstatus": 1})
+            if child_bom and child_bom != bom_no:
+                bom_op = frappe.db.get_value(
+                    "BOM Operation",
+                    {"parent": child_bom, "operation": doc.operation},
+                    ["workstation_type", "workstation"],
+                    as_dict=True
+                )
         
         if bom_op:
                 # Prefer workstation_type, fallback to workstation
