@@ -308,7 +308,7 @@ class ExecutionEngine:
         
         # Create Stock Entry using ERPNext standard API
         try:
-            # Build SE manually — bypass make_stock_entry (it sets s_warehouse from WO wip_warehouse)
+            # Build SE manually — use JC wip_warehouse per operation
             se = frappe.new_doc("Stock Entry")
             se.stock_entry_type = "Manufacture"
             se.purpose = "Manufacture"
@@ -317,14 +317,21 @@ class ExecutionEngine:
             se.fg_completed_qty = wo.qty
             se.to_warehouse = wo.fg_warehouse or "Finish Goods Stores - TPL"
             
-            # Raw materials: from BOM items, s_warehouse from where stock actually is in WIP
+            # Map: BOM operation → JC wip_warehouse
+            ops_to_wh = {}
+            for jc in frappe.get_all("Job Card", {"work_order": wo.name}, ["operation", "wip_warehouse"]):
+                if jc.operation and jc.wip_warehouse:
+                    ops_to_wh[jc.operation] = jc.wip_warehouse
+            
             bom = frappe.get_doc("BOM", wo.bom_no) if wo.bom_no else None
             if bom:
                 for item in bom.items:
                     qty = (item.qty * wo.qty) / (bom.quantity or 1)
-                    wh = frappe.db.get_value("Bin",
-                        {"item_code": item.item_code, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
-                        "warehouse", order_by="actual_qty desc")
+                    wh = ops_to_wh.get(item.operation) if item.operation else None
+                    if not wh:
+                        wh = frappe.db.get_value("Bin",
+                            {"item_code": item.item_code, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
+                            "warehouse", order_by="actual_qty desc")
                     se.append("items", {
                         "item_code": item.item_code,
                         "qty": qty,
@@ -333,13 +340,10 @@ class ExecutionEngine:
                     })
                 
                 # Finished Good
-                fg_wh = frappe.db.get_value("Bin",
-                    {"item_code": wo.production_item, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
-                    "warehouse", order_by="actual_qty desc")
                 se.append("items", {
                     "item_code": wo.production_item,
                     "qty": wo.qty,
-                    "s_warehouse": fg_wh or wo.wip_warehouse,
+                    "s_warehouse": wo.wip_warehouse,
                     "t_warehouse": wo.fg_warehouse or "Finish Goods Stores - TPL",
                     "is_finished_item": 1,
                     "allow_zero_valuation_rate": 1
