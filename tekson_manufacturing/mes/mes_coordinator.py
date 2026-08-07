@@ -241,12 +241,12 @@ class MESExecutionCoordinator:
             })
             
             if pending == 0:
-                frappe.enqueue(
-                    "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
-                    work_order=job_card.work_order,
-                    queue="short",
-                    timeout=30
-                )
+                wo = job_card.work_order
+                def _complete():
+                    frappe.db.commit()
+                    from tekson_manufacturing.execution.execution_engine import ExecutionEngine
+                    ExecutionEngine().complete_work_order(wo)
+                frappe.db.after_commit.add(_complete)
             
             # Log success
             log_security_event(

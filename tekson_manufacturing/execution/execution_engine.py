@@ -533,9 +533,9 @@ class ExecutionEngine:
     
     def update_work_order_status(self, work_order):
         """Update Work Order status to Completed"""
-        frappe.db.set_value("Work Order", work_order, "status", "Completed")
         frappe.db.sql("UPDATE `tabWork Order` SET status='Completed' WHERE name=%s", work_order)
         frappe.db.commit()
+        frappe.db.set_value("Work Order", work_order, "status", "Completed")
     
     def refresh_work_order_status(self, work_order):
         """Alias for update_work_order_status - refreshes WO status"""
