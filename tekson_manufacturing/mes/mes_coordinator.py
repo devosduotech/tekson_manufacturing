@@ -232,13 +232,21 @@ class MESExecutionCoordinator:
             engine = JobCardReadinessEngine()
             engine.refresh_next_job_card(job_card)
             
-            # Step 3: Enqueue WO completion (runs in separate worker after commit)
-            frappe.enqueue(
-                "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
-                work_order=job_card.work_order,
-                queue="short",
-                timeout=30
-            )
+            # Step 3: Complete WO ONLY if this was the last Job Card
+            pending = frappe.db.count("Job Card", {
+                "work_order": job_card.work_order,
+                "docstatus": ["!=", 2],
+                "status": ["!=", "Completed"],
+                "name": ["!=", job_card.name]
+            })
+            
+            if pending == 0:
+                frappe.enqueue(
+                    "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
+                    work_order=job_card.work_order,
+                    queue="short",
+                    timeout=30
+                )
             
             # Log success
             log_security_event(
