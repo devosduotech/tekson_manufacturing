@@ -38,12 +38,12 @@ def populate_job_card_fields(doc, method=None):
         
         if doc.for_quantity:
             doc.custom_actual_production_qty = doc.for_quantity
-        elif hasattr(doc, 'production_item') and doc.production_item:
-            # Multi-level BOM: calculate from child BOM
-            child_bom_qty = frappe.db.get_value("BOM",
-                {"item": doc.production_item, "is_active": 1, "docstatus": 1}, "quantity")
-            if child_bom_qty:
-                doc.custom_actual_production_qty = child_bom_qty * wo.qty
+        elif wo.bom_no and hasattr(doc, 'production_item') and doc.production_item:
+            # Multi-level BOM: parent BOM item qty × WO qty
+            parent_item = frappe.db.get_value("BOM Item",
+                {"parent": wo.bom_no, "item_code": doc.production_item}, "qty")
+            if parent_item:
+                doc.custom_actual_production_qty = parent_item * wo.qty
             else:
                 doc.custom_actual_production_qty = wo.qty
         else:
