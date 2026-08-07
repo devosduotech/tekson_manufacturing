@@ -233,12 +233,13 @@ class MESExecutionCoordinator:
             engine.refresh_next_job_card(job_card)
             
             # Step 3: Complete WO ONLY if this was the last Job Card
-            pending = frappe.db.count("Job Card", {
-                "work_order": job_card.work_order,
-                "docstatus": ["!=", 2],
-                "status": ["!=", "Completed"],
-                "name": ["!=", job_card.name]
-            })
+            pending = frappe.db.sql("""
+                SELECT COUNT(*) FROM `tabJob Card`
+                WHERE work_order = %s
+                AND docstatus != 2
+                AND status != 'Completed'
+                AND name != %s
+            """, (job_card.work_order, job_card.name))[0][0]
             
             if pending == 0:
                 wo = job_card.work_order

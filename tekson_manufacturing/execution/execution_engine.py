@@ -329,6 +329,8 @@ class ExecutionEngine:
                         op = item_to_op[item.item_code]
                         if op in ops_to_wh:
                             item.s_warehouse = ops_to_wh[op]
+                    if item.is_finished_item:
+                        item.allow_zero_valuation_rate = 1
             
             se.insert(ignore_permissions=True)
             se.submit()
