@@ -490,29 +490,40 @@ class ExecutionEngine:
         stock_entry.stock_entry_type = "Manufacture"
         stock_entry.purpose = "Manufacture"
         stock_entry.work_order = work_order.name
-        stock_entry.from_bom = 1
-        stock_entry.bom_no = work_order.bom_no
         stock_entry.company = work_order.company
         stock_entry.fg_completed_qty = work_order.produced_qty or work_order.qty
         stock_entry.to_warehouse = target_warehouse or work_order.fg_warehouse
+        stock_entry.set_posting_time = 1
         
         # Build items manually from BOM
         bom = frappe.get_doc("BOM", work_order.bom_no) if work_order.bom_no else None
         
         if bom:
+            # Build per-item WIP warehouse map from BOM Item.operation → JC.wip_warehouse
+            ops_to_wh = {}
+            for jc in frappe.get_all("Job Card", 
+                {"work_order": work_order.name, "docstatus": 1},
+                ["operation", "wip_warehouse"]):
+                if jc.operation:
+                    ops_to_wh[jc.operation] = jc.wip_warehouse
+            
             for item in bom.items:
                 required_qty = (item.qty * work_order.qty) / (bom.quantity or 1)
                 
-                # Find WIP warehouse where this item actually has stock
-                wip_wh = frappe.db.get_value("Bin",
-                    {"item_code": item.item_code, "actual_qty": [">", 0],
-                     "warehouse": ["like", "%WIP%"]},
-                    "warehouse", order_by="actual_qty desc")
+                # Get WIP warehouse from matching JC's operation
+                item_wip = None
+                if item.operation and item.operation in ops_to_wh:
+                    item_wip = ops_to_wh[item.operation]
+                if not item_wip:
+                    item_wip = frappe.db.get_value("Bin",
+                        {"item_code": item.item_code, "actual_qty": [">", 0],
+                         "warehouse": ["like", "%WIP%"]},
+                        "warehouse", order_by="actual_qty desc")
                 
                 stock_entry.append("items", {
                     "item_code": item.item_code,
                     "qty": required_qty,
-                    "s_warehouse": wip_wh or work_order.wip_warehouse,
+                    "s_warehouse": item_wip or work_order.wip_warehouse,
                     "t_warehouse": "",
                 })
             
