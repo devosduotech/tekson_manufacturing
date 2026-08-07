@@ -239,17 +239,12 @@ class MESExecutionCoordinator:
                        and jc.status != "Completed"]
             
             if len(pending) == 0:
-                wo_name = job_card.work_order
-                def _complete_after_commit():
-                    frappe.db.commit()
-                    from tekson_manufacturing.execution.execution_engine import ExecutionEngine
-                    result = ExecutionEngine().complete_work_order(wo_name)
-                    if not result.get('success'):
-                        frappe.log_error(
-                            title=f"WO Auto-Complete Failed: {wo_name}",
-                            message=str(result)
-                        )
-                frappe.db.after_commit.add(_complete_after_commit)
+                frappe.enqueue(
+                    "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
+                    work_order=job_card.work_order,
+                    queue="short",
+                    timeout=30
+                )
             
             # Log success
             log_security_event(
