@@ -242,12 +242,8 @@ class MESExecutionCoordinator:
             """, (job_card.work_order, job_card.name))[0][0]
             
             if pending == 0:
-                wo = job_card.work_order
-                def _complete():
-                    frappe.db.commit()
-                    from tekson_manufacturing.execution.execution_engine import ExecutionEngine
-                    ExecutionEngine().complete_work_order(wo)
-                frappe.db.after_commit.add(_complete)
+                from tekson_manufacturing.execution.execution_engine import ExecutionEngine
+                ExecutionEngine().complete_work_order(job_card.work_order)
             
             # Log success
             log_security_event(
