@@ -69,16 +69,28 @@ def allocate_workstation(doc, method=None):
         # Get BOM from Work Order
         bom_no = frappe.db.get_value("Work Order", doc.work_order, "bom_no")
         
+        bom_op = None
         if bom_no:
-            # Fetch BOM Operation
+            # Fetch BOM Operation from parent BOM
             bom_op = frappe.db.get_value(
                 "BOM Operation",
                 {"parent": bom_no, "operation": doc.operation},
                 ["workstation_type", "workstation"],
                 as_dict=True
             )
-            
-            if bom_op:
+        
+        # If not found in parent BOM, search child BOMs (multi-level support)
+        if not bom_op:
+            bom_op = frappe.db.get_value(
+                "BOM Operation",
+                {"operation": doc.operation, "parent": ["in", 
+                    frappe.get_all("BOM", {"is_active": 1, "docstatus": 1}, pluck="name")]},
+                ["workstation_type", "workstation"],
+                as_dict=True,
+                order_by="creation asc"
+            )
+        
+        if bom_op:
                 # Prefer workstation_type, fallback to workstation
                 workstation_type = bom_op.workstation_type or bom_op.workstation
                 
