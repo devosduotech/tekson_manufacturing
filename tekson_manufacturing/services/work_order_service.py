@@ -33,12 +33,9 @@ def set_warehouses(doc, method=None):
     # ========== BATCH PRODUCTION ROUNDING ==========
     if doc.bom_no and doc.qty > 0:
         import math
-        bom = frappe.get_cached_doc("BOM", doc.bom_no)
-        bom_output_qty = bom.quantity
-        
-        if bom_output_qty > 1:
-            original_qty = doc.qty
-            doc.qty = math.ceil(original_qty / bom_output_qty) * bom_output_qty
+        bom_qty = frappe.get_cached_doc("BOM", doc.bom_no).quantity
+        if bom_qty and doc.qty < math.ceil(doc.qty / bom_qty) * bom_qty:
+            doc.qty = math.ceil(doc.qty / bom_qty) * bom_qty
     
     # ========== FG WAREHOUSE ==========
     
