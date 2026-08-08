@@ -30,6 +30,18 @@ def set_warehouses(doc, method=None):
     if not doc.is_new():
         return
     
+    # ========== BATCH PRODUCTION ROUNDING ==========
+    if doc.bom_no and doc.qty > 0:
+        bom = frappe.get_cached_doc("BOM", doc.bom_no)
+        if bom.get("custom_is_fixed_batch") and bom.get("custom_batch_size", 0) > 0:
+            import math
+            batch_size = bom.custom_batch_size
+            original_qty = doc.qty
+            doc.qty = math.ceil(original_qty / batch_size) * batch_size
+            frappe.logger("tekson").info(
+                f"BOM {doc.bom_no}: rounded WO qty {original_qty} → {doc.qty} (batch={batch_size})"
+            )
+    
     # ========== FG WAREHOUSE ==========
     
     # Priority 1: Production Plan override
