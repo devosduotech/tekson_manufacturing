@@ -27,7 +27,7 @@ def get_production_qty(bom_no: str, demand_qty: float) -> Dict[str, Any]:
     bom = frappe.get_cached_doc("BOM", bom_no)
     bom_output = bom.quantity or 1
     
-    if bom_output > 1:
+    if bom_output > 1 and demand_qty % bom_output != 0:
         batch_count = math.ceil(demand_qty / bom_output)
         production_qty = batch_count * bom_output
         is_fixed_batch = True
