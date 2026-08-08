@@ -32,15 +32,13 @@ def set_warehouses(doc, method=None):
     
     # ========== BATCH PRODUCTION ROUNDING ==========
     if doc.bom_no and doc.qty > 0:
+        import math
         bom = frappe.get_cached_doc("BOM", doc.bom_no)
-        if bom.get("custom_is_fixed_batch") and bom.get("custom_batch_size", 0) > 0:
-            import math
-            batch_size = bom.custom_batch_size
+        bom_output_qty = bom.quantity
+        
+        if bom_output_qty > 1:
             original_qty = doc.qty
-            doc.qty = math.ceil(original_qty / batch_size) * batch_size
-            frappe.logger("tekson").info(
-                f"BOM {doc.bom_no}: rounded WO qty {original_qty} → {doc.qty} (batch={batch_size})"
-            )
+            doc.qty = math.ceil(original_qty / bom_output_qty) * bom_output_qty
     
     # ========== FG WAREHOUSE ==========
     
