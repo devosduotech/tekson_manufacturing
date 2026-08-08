@@ -45,3 +45,38 @@ def round_production_qty(doc, method=None):
             rounded = math.ceil(doc.qty / bom_qty) * bom_qty
             if doc.qty != rounded:
                 doc.qty = rounded
+
+
+def fix_pp_work_orders(doc, method=None):
+    """
+    Production Plan on_submit: fix WIP warehouse + round qty
+    for all Draft WOs created by this PP.
+    """
+    wos = frappe.get_all("Work Order",
+        {"production_plan": doc.name, "docstatus": 0},
+        pluck="name")
+    
+    for wo_name in wos:
+        wo = frappe.get_doc("Work Order", wo_name)
+        if wo.bom_no:
+            if not wo.wip_warehouse:
+                ops = frappe.get_all("BOM Operation",
+                    {"parent": wo.bom_no},
+                    ["workstation_type", "workstation"],
+                    order_by="idx asc", limit=1)
+                if ops:
+                    ws = ops[0].workstation_type or ops[0].workstation
+                    if ws:
+                        pf = frappe.db.get_value("Workstation",
+                            {"workstation_type": ws}, "plant_floor")
+                        if pf:
+                            wh = f"WIP-{pf} - TPL"
+                            if frappe.db.exists("Warehouse", wh):
+                                wo.db_set("wip_warehouse", wh)
+            if not wo.source_warehouse:
+                wo.db_set("source_warehouse", "Stores - TPL")
+            if wo.qty < 1:
+                bom_qty = frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1
+                rounded = math.ceil(wo.qty / bom_qty) * bom_qty
+                if wo.qty != rounded:
+                    wo.db_set("qty", rounded)
