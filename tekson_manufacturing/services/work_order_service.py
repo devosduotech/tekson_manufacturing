@@ -58,37 +58,28 @@ def set_warehouses(doc, method=None):
         if pp_wip_wh and not frappe.db.get_value('Warehouse', pp_wip_wh, 'is_group'):
             doc.wip_warehouse = pp_wip_wh
     
-    # Priority 2: First Operation's Department WIP
-    if not doc.wip_warehouse and doc.operations:
-        first_op = doc.operations[0]
-        department = None
+    # Priority 2: First BOM Operation's WIP (from workstation_type → plant_floor)
+    if not doc.wip_warehouse and doc.bom_no:
+        bom_op = frappe.db.get_all("BOM Operation",
+            {"parent": doc.bom_no},
+            ["workstation_type", "workstation"],
+            order_by="idx asc", limit=1)
         
-        # Get department from workstation
-        if first_op.workstation:
-            department = frappe.db.get_value('Workstation', first_op.workstation, 'department')
-        
-        # Build WIP warehouse name from department
-        if department:
-            dept_short = department.split('-')[0].strip()
-            wip_warehouse_name = f'WIP-{dept_short} - TPL'
-            
-            wip_wh = frappe.db.get_value('Warehouse', {
-                'warehouse_name': wip_warehouse_name,
-                'is_group': 0
-            })
-            
-            if wip_wh:
-                doc.wip_warehouse = wip_wh
+        if bom_op:
+            ws_type = bom_op[0].workstation_type or bom_op[0].workstation
+            if ws_type:
+                plant_floor = frappe.db.get_value("Workstation",
+                    {"workstation_type": ws_type}, "plant_floor",
+                    order_by="name asc")
+                
+                if plant_floor:
+                    wip_wh = f"WIP-{plant_floor} - TPL"
+                    if frappe.db.exists("Warehouse", wip_wh):
+                        doc.wip_warehouse = wip_wh
     
-    # Show message if warehouses set
-    if doc.wip_warehouse or doc.fg_warehouse:
-        frappe.msgprint(
-            _('Warehouses configured: WIP={0}, FG={1}').format(
-                frappe.bold(doc.wip_warehouse or 'Default'),
-                frappe.bold(doc.fg_warehouse or 'Default')
-            ),
-            alert=True
-        )
+    # Set default source_warehouse for bulk WO creation
+    if not doc.source_warehouse:
+        doc.source_warehouse = "Stores - TPL"
 
 
 def auto_create_manufacture_entry(doc, method=None):
