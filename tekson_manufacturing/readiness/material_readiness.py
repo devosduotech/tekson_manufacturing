@@ -103,6 +103,21 @@ class MaterialReadinessEngine:
                     'shortage_qty': shortage_qty,
                     'warehouse': department_warehouse
                 })
+            
+            # Check manufactured component: child WO not completed → block
+            child_wo = self.get_child_work_order(item_code, wo.name)
+            if child_wo:
+                child_status = frappe.db.get_value("Work Order", child_wo, "status")
+                if child_status != "Completed":
+                    shortage_details.append({
+                        'item_code': item_code,
+                        'item_name': material.get('item_name', ''),
+                        'required_qty': required_qty,
+                        'available_qty': available_qty,
+                        'shortage_qty': required_qty,
+                        'warehouse': department_warehouse,
+                        'reason': f"Child WO {child_wo} status: {child_status}"
+                    })
         
         # Calculate totals
         shortage_qty = max(0, total_required - total_available)
