@@ -42,6 +42,7 @@ def round_production_qty(doc, method=None):
         if bom_qty:
             rounded = math.ceil(doc.qty / bom_qty) * bom_qty
             if doc.qty != rounded:
+                frappe.msgprint(f"Rounding: {doc.qty} → {rounded} (BOM qty={bom_qty})", alert=True)
                 doc.qty = rounded
     # ========== FG WAREHOUSE ==========
     
