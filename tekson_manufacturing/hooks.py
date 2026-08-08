@@ -23,6 +23,7 @@ doc_events = {
     },
     "Work Order": {
         "before_insert": "tekson_manufacturing.services.work_order_service.set_warehouses",
+        "validate": "tekson_manufacturing.services.work_order_service.set_warehouses",
         "on_submit": "tekson_manufacturing.mes.mes_coordinator.on_work_order_submit",
     },
     "Stock Entry": {
