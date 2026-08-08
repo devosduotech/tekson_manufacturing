@@ -31,6 +31,11 @@ def get_production_qty(bom_no: str, demand_qty: float) -> Dict[str, Any]:
         batch_count = math.ceil(demand_qty / bom_output)
         production_qty = batch_count * bom_output
         is_fixed_batch = True
+    elif demand_qty < 1:
+        # Fractional demand: round up to 1 (minimum production unit)
+        batch_count = 1
+        production_qty = 1
+        is_fixed_batch = True
     else:
         batch_count = 1
         production_qty = demand_qty
