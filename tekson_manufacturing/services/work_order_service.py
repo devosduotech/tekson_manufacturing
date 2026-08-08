@@ -79,7 +79,7 @@ def fix_pp_work_orders(doc, method=None):
             if not wo.source_warehouse:
                 wo.source_warehouse = "Stores - TPL"
                 needs_save = True
-            if wo.qty < 1:
+            if wo.qty > 0:
                 bq = frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1
                 rounded = math.ceil(wo.qty / bq) * bq
                 if wo.qty != rounded:
@@ -89,6 +89,16 @@ def fix_pp_work_orders(doc, method=None):
         if needs_save:
             wo.flags.ignore_validate = True
             wo.save()
-            # Recalculate required items from BOM with new qty
-            wo.get_items_and_operations_from_bom()
+            # Manually recalculate required items from BOM with new qty
+            wo.set("required_items", [])
+            for item in frappe.get_all("BOM Item", {"parent": wo.bom_no},
+                ["item_code", "item_name", "qty", "uom", "source_warehouse"]):
+                ratio = wo.qty / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
+                wo.append("required_items", {
+                    "item_code": item.item_code,
+                    "item_name": item.item_name,
+                    "required_qty": item.qty * ratio,
+                    "source_warehouse": item.source_warehouse,
+                    "allow_alternative_item": 1,
+                })
             wo.save(ignore_permissions=True)
