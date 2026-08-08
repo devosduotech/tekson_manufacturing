@@ -58,6 +58,8 @@ def fix_pp_work_orders(doc, method=None):
     
     for wo_name in wos:
         wo = frappe.get_doc("Work Order", wo_name)
+        needs_save = False
+        
         if wo.bom_no:
             if not wo.wip_warehouse:
                 ops = frappe.get_all("BOM Operation",
@@ -72,11 +74,22 @@ def fix_pp_work_orders(doc, method=None):
                         if pf:
                             wh = f"WIP-{pf} - TPL"
                             if frappe.db.exists("Warehouse", wh):
-                                wo.db_set("wip_warehouse", wh)
+                                wo.wip_warehouse = wh
+                                needs_save = True
             if not wo.source_warehouse:
-                wo.db_set("source_warehouse", "Stores - TPL")
+                wo.source_warehouse = "Stores - TPL"
+                needs_save = True
             if wo.qty < 1:
-                bom_qty = frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1
-                rounded = math.ceil(wo.qty / bom_qty) * bom_qty
+                bq = frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1
+                rounded = math.ceil(wo.qty / bq) * bq
                 if wo.qty != rounded:
-                    wo.db_set("qty", rounded)
+                    wo.qty = rounded
+                    needs_save = True
+        
+        if needs_save:
+            wo.flags.ignore_validate = True
+            wo.save()
+            wo.reload()
+            # Regenerate required items with correct quantities
+            wo.set_required_items()
+            wo.save(ignore_permissions=True)
