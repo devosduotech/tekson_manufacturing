@@ -32,17 +32,12 @@ def set_warehouses(doc, method=None):
 
 
 def round_production_qty(doc, method=None):
-    """
-    Round WO qty to BOM output quantity multiples.
-    Runs on validate — catches PP recalculated qty.
-    """
     if doc.bom_no and doc.qty > 0:
         import math
         bom_qty = frappe.get_cached_doc("BOM", doc.bom_no).quantity
         if bom_qty:
             rounded = math.ceil(doc.qty / bom_qty) * bom_qty
             if doc.qty != rounded:
-                frappe.msgprint(f"Rounding: {doc.qty} → {rounded} (BOM qty={bom_qty})", alert=True)
                 doc.qty = rounded
     # ========== FG WAREHOUSE ==========
     

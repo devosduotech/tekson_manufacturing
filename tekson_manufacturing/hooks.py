@@ -24,8 +24,6 @@ doc_events = {
     "Work Order": {
         "before_insert": "tekson_manufacturing.services.work_order_service.set_warehouses",
         "on_submit": "tekson_manufacturing.mes.mes_coordinator.on_work_order_submit",
-        "validate": "tekson_manufacturing.services.work_order_service.round_production_qty",
-        "before_submit": "tekson_manufacturing.services.work_order_service.round_production_qty",
     },
     "Stock Entry": {
         "on_submit": "tekson_manufacturing.mes.mes_coordinator.on_stock_entry_submit",
@@ -33,9 +31,9 @@ doc_events = {
     }
 }
 
-# override_doctype_class = {
-#     "Job Card": "tekson_manufacturing.manufacturing.custom_job_card.TeksonJobCard"
-# }
+override_doctype_class = {
+    "Work Order": "tekson_manufacturing.overrides.work_order.TeksonWorkOrder"
+}
 
 app_include_js = [
     "/assets/tekson_manufacturing/js/job_card_list.js",
