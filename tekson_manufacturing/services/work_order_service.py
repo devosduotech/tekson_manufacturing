@@ -29,14 +29,20 @@ def set_warehouses(doc, method=None):
     """
     if not doc.is_new():
         return
-    
-    # ========== BATCH PRODUCTION ROUNDING ==========
+
+
+def round_production_qty(doc, method=None):
+    """
+    Round WO qty to BOM output quantity multiples.
+    Runs on validate — catches PP recalculated qty.
+    """
     if doc.bom_no and doc.qty > 0:
         import math
         bom_qty = frappe.get_cached_doc("BOM", doc.bom_no).quantity
-        if bom_qty and doc.qty < math.ceil(doc.qty / bom_qty) * bom_qty:
-            doc.qty = math.ceil(doc.qty / bom_qty) * bom_qty
-    
+        if bom_qty:
+            rounded = math.ceil(doc.qty / bom_qty) * bom_qty
+            if doc.qty != rounded:
+                doc.qty = rounded
     # ========== FG WAREHOUSE ==========
     
     # Priority 1: Production Plan override
