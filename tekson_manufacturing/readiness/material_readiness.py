@@ -185,10 +185,6 @@ class MaterialReadinessEngine:
                 if operation and item.operation and item.operation != operation:
                     continue
                 
-                # If no operation filter and item has operation set → skip (each item belongs to a specific op)
-                if not operation and item.operation:
-                    continue
-                
                 required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
                 
                 materials.append({
