@@ -89,7 +89,6 @@ def fix_pp_work_orders(doc, method=None):
         if needs_save:
             wo.flags.ignore_validate = True
             wo.save()
-            wo.reload()
-            # Regenerate required items with correct quantities
-            wo.set_required_items()
+            # Recalculate required items from BOM with new qty
+            wo.get_items_and_operations_from_bom()
             wo.save(ignore_permissions=True)
