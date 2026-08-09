@@ -1,73 +1,63 @@
-# Tekson MES Phase 1 — Ready for Internal Production Simulation
+# Tekson MES Phase 1 — Status
 
-**Date:** 2026-08-07
-**Status:** ✅ **READY FOR PRODUCTION SIMULATION**
-**Latest Commit:** `e293392` on `develop`
+**Date:** 2026-08-09
+**Latest Commit:** `fea680e` on `develop`
+**Status:** ✅ **Readiness Engine Working — Production Simulation in Progress**
 
 ---
 
 ## Verified Features
 
-| Feature | Tested On | Status |
-|---------|-----------|--------|
-| Single-level auto-complete | WO/260807/0025 | ✅ |
-| Multi-level auto-complete | WO/260807/0026 | ✅ |
-| Per-operation WIP warehouses | All tests | ✅ |
-| Multi-level child workstation allocation | WO/260807/0026 | ✅ |
-| Child component production qty | Fixed | ✅ |
-| Auto wip_warehouse from BOM | Production Plan | ✅ |
-| Server scripts migrated | All 6 scripts | ✅ |
-| Client Script conflicts resolved | All disabled | ✅ |
+| Feature | Status |
+|---------|--------|
+| Production Plan → WO generation | ✅ |
+| Batch qty rounding (BOM.quantity) | ✅ |
+| Auto wip_warehouse from BOM | ✅ |
+| Material Readiness (per-operation) | ✅ |
+| Child WO dependency blocking | ✅ |
+| Previous JC dependency blocking | ✅ |
+| Stock availability check (Bin) | ✅ |
+| Clear error messages (child WO name, qty) | ✅ |
+| Auto-complete (last JC → SE → WO) | ✅ |
+| Manual SE correct WIP warehouses | ✅ |
 
 ---
 
-## Auto-Set Fields on WO Create
-
-| Field | Source |
-|-------|--------|
-| `wip_warehouse` | BOM 1st operation → workstation_type → plant_floor → WIP-{pf} - TPL |
-| `fg_warehouse` | PP override → BOM target_fg_warehouse → Default |
-| `source_warehouse` | "Stores - TPL" |
-
----
-
-## Multi-Level BOM Flow
+## Readiness Checks on JC Start
 
 ```
-Production Plan → Release WOs (all wip_warehouse auto-set)
-    ↓
-Submit all WOs → JCs created with correct workstations
-    ↓
-Transfer materials to department WIPs
-    ↓
-Complete child WOs → output lands in parent's expected WIP
-    ↓
-Parent JC → Ready → Start → Complete → Auto-complete
-    ↓
-SE with correct per-operation WIP warehouses
+Start JC → validate_job_card_start (before_save)
+    ├─ Dependency check: previous JC completed?
+    │   └─ No → Block "Complete JC-002 first"
+    └─ Material check: evaluate_material_readiness(job_card)
+        ├─ Stock in JC's own WIP warehouse
+        └─ Child WOs completed? (only if stock < needed)
 ```
 
 ---
 
-## Production Simulation Test Plan
+## Architecture
 
-1. Create Production Plan for R215 Combi Cooler (top-level)
-2. Release → verify all WOs get wip_warehouse auto-set
-3. Submit all WOs → verify JCs with correct workstations
-4. Transfer materials → verify per-operation readiness
-5. Execute JCs bottom-up → verify dependency chains
-6. Verify auto-complete fires on last JC of each WO
-7. Verify child WO output flows to parent WO
-8. Verify SE warehouses match operation WIPs
+```
+HOOKS (thin, delegation only)
+    ↓
+MES Coordinator (single entry)
+    ↓
+Readiness Engine (Dependency + Material + Child WO)
+    ↓
+Execution Engine (SE + WO completion)
+```
 
 ---
 
-## Quick Commands
+## Key Files Modified This Session
 
-```bash
-# Pull latest
-cd ~/frappe-bench/apps/tekson_manufacturing && git pull origin develop
-
-# Restart
-sudo systemctl restart frappe-bench.target
-```
+| File | Change |
+|------|--------|
+| `readiness/material_readiness.py` | get_child_work_order fixed, duplicate entries removed, child WO + stock check |
+| `utils/job_card_utils.py` | Pass job_card, add dependency check, HTML error formatting |
+| `services/job_card_service.py` | readiness.shortage_details fix |
+| `services/work_order_service.py` | Clean set_warehouses |
+| `services/batch_planning.py` | Two-rule production qty |
+| `overrides/production_plan.py` | make_work_order_for_subassembly_items |
+| `hooks.py` | Cleaned hooks, removed dead hooks |
