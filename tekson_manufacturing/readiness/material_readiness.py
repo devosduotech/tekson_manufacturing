@@ -104,9 +104,9 @@ class MaterialReadinessEngine:
                     'warehouse': department_warehouse
                 })
             
-            # Check manufactured component: child WO not completed → block
+            # Check manufactured component: child WO incomplete + no stock = block
             child_wo = self.get_child_work_order(item_code, wo.name)
-            if child_wo:
+            if child_wo and available_qty < required_qty:
                 child_status = frappe.db.get_value("Work Order", child_wo, "status")
                 if child_status != "Completed":
                     # Update existing shortage entry or add new one
