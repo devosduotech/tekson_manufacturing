@@ -251,7 +251,7 @@ def validate_job_card_start(doc, method=None):
         from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
         
         engine = MaterialReadinessEngine(work_order=doc.work_order)
-        readiness = engine.evaluate_material_readiness()
+        readiness = engine.evaluate_material_readiness(work_order=doc.work_order, job_card=doc.name)
         
         if not readiness.is_ready:
             # Block the start
