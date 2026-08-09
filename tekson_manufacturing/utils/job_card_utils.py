@@ -257,15 +257,17 @@ def validate_job_card_start(doc, method=None):
             # Block the start
             shortage_details = readiness.shortage_details
             
-            error_msg = f"Cannot start Job Card: Materials not available in {readiness.warehouse}.\n\n"
+            error_msg = f"Cannot start Job Card: Materials not available in {readiness.warehouse}.<br><br>"
             
             if shortage_details:
-                error_msg += "Missing Materials:\n"
+                error_msg += "Missing Materials:<br>"
+                items = []
                 for item in shortage_details[:5]:
                     reason = item.get('reason', '')
                     if reason:
-                        error_msg += f"> {item.get('item_code', 'Unknown')}: {reason}\n"
+                        items.append(f"{item.get('item_code', 'Unknown')}: {reason}")
                     else:
-                        error_msg += f"> {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
+                        items.append(f"{item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}")
+                error_msg += "<br>".join(items)
             
             frappe.throw(error_msg, title=_("Material Not Available"))
