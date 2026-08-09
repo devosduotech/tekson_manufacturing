@@ -248,8 +248,20 @@ def validate_job_card_start(doc, method=None):
         return
     
     if doc.work_order:
-        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+        # Check dependency: previous operation must be completed
+        from tekson_manufacturing.validation.dependency_engine import DependencyEngine
+        dep_engine = DependencyEngine()
+        dep_result = dep_engine.validate_previous_operation(doc)
         
+        if not dep_result.can_start:
+            frappe.throw(
+                f"Cannot start {doc.operation}: {dep_result.reason}.<br>"
+                f"Complete {dep_result.previous_jc_name} first.",
+                title=_("Previous Operation Not Complete")
+            )
+        
+        # Check material readiness
+        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
         engine = MaterialReadinessEngine(work_order=doc.work_order)
         readiness = engine.evaluate_material_readiness(work_order=doc.work_order, job_card=doc.name)
         
