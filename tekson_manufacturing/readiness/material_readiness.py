@@ -709,18 +709,13 @@ class MaterialReadinessEngine:
         return 0
     
     def get_child_work_order(self, item_code, parent_wo):
-        """Get child work order for an item"""
+        """Get child work order for a manufactured component"""
         child_wo = frappe.db.sql("""
-            SELECT name
-            FROM `tabWork Order`
-            WHERE production_item = %s
-            AND (
-                (select name from `tabBOM` where item = %s and name = (select bom_no from `tabWork Order` where name = %s))
-                IS NOT NULL
-            )
-            ORDER BY creation DESC
-            LIMIT 1
-        """, (item_code, item_code, parent_wo), as_dict=True)
+            SELECT name FROM `tabWork Order`
+            WHERE production_item = %s AND docstatus = 1
+            AND status NOT IN ('Stopped', 'Completed')
+            ORDER BY creation DESC LIMIT 1
+        """, (item_code,), as_dict=True)
         
         return child_wo[0].name if child_wo else None
 
