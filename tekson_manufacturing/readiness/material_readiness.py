@@ -109,15 +109,20 @@ class MaterialReadinessEngine:
             if child_wo:
                 child_status = frappe.db.get_value("Work Order", child_wo, "status")
                 if child_status != "Completed":
-                    shortage_details.append({
-                        'item_code': item_code,
-                        'item_name': material.get('item_name', ''),
-                        'required_qty': required_qty,
-                        'available_qty': available_qty,
-                        'shortage_qty': required_qty,
-                        'warehouse': department_warehouse,
-                        'reason': f"Child WO {child_wo} status: {child_status}"
-                    })
+                    # Update existing shortage entry or add new one
+                    existing = next((s for s in shortage_details if s.get('item_code') == item_code), None)
+                    if existing:
+                        existing['reason'] = f"Child WO {child_wo} status: {child_status}"
+                    else:
+                        shortage_details.append({
+                            'item_code': item_code,
+                            'item_name': material.get('item_name', ''),
+                            'required_qty': required_qty,
+                            'available_qty': available_qty,
+                            'shortage_qty': required_qty,
+                            'warehouse': department_warehouse,
+                            'reason': f"Child WO {child_wo} status: {child_status}"
+                        })
         
         # Calculate totals
         shortage_qty = max(0, total_required - total_available)
