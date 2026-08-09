@@ -264,8 +264,8 @@ def validate_job_card_start(doc, method=None):
                 for item in shortage_details[:5]:
                     reason = item.get('reason', '')
                     if reason:
-                        error_msg += f"- {item.get('item_code', 'Unknown')}: {reason}\n"
+                        error_msg += f"> {item.get('item_code', 'Unknown')}: {reason}\n"
                     else:
-                        error_msg += f"- {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
+                        error_msg += f"> {item.get('item_code', 'Unknown')}: Required {item.get('required_qty', 0)}, Available {item.get('available_qty', 0)}\n"
             
             frappe.throw(error_msg, title=_("Material Not Available"))
