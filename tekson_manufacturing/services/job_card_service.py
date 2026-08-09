@@ -204,7 +204,7 @@ class JobCardService:
             job_card.custom_material_available_for_operation = 0
             
             # Build detailed message
-            missing_items = readiness.get('missing_items', [])
+            missing_items = [s.get('item_code', '') for s in readiness.shortage_details]
             
             if missing_items:
                 job_card.custom_material_status_details = "Missing: " + ", ".join(missing_items[:3])
