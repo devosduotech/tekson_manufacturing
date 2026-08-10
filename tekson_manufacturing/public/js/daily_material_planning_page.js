@@ -1,4 +1,4 @@
-frappe.pages['daily-material-planning'].on_page_load = function(wrapper) {
+frappe.pages['material-planning'].on_page_load = function(wrapper) {
     let page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Daily Material Planning',
