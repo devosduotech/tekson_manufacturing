@@ -88,18 +88,29 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     if not dept_items:
         return {"created_mrs": [], "total_items": 0, "message": _("All materials already in WIP for {0}").format(planned_date)}
     
-    # MP-003, MP-004: Create MRs per department WIP
+    # MP-003, MP-004, MP-005: Create/update MRs per department WIP
     created = []
     
     for target_wh, items in dept_items.items():
-        dept = target_wh.split(" - ")[0].replace("WIP-", "")
+        # MP-005: Find existing draft MR for same PP + date
+        existing = None
+        if production_plan:
+            existing = frappe.db.exists("Material Request", {
+                "docstatus": 0,
+                "production_plan": production_plan,
+                "schedule_date": planned_date,
+            })
         
-        mr = frappe.get_doc({
-            "doctype": "Material Request",
-            "material_request_type": "Material Transfer",
-            "schedule_date": planned_date,
-            "production_plan": production_plan,
-        })
+        if existing:
+            mr = frappe.get_doc("Material Request", existing)
+            mr.set("items", [])
+        else:
+            mr = frappe.get_doc({
+                "doctype": "Material Request",
+                "material_request_type": "Material Transfer",
+                "schedule_date": planned_date,
+                "production_plan": production_plan,
+            })
         
         for item_key, item_data in items.items():
             mr.append("items", {
@@ -112,7 +123,10 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "schedule_date": planned_date,
             })
         
-        mr.insert()
+        if existing:
+            mr.save()
+        else:
+            mr.insert()
         
         created.append({"name": mr.name, "department_wip": target_wh, "items": len(mr.items)})
     
