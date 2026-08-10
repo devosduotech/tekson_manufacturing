@@ -84,28 +84,17 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     if not dept_items:
         return {"created_mrs": [], "total_items": 0, "message": _("All materials already in WIP for {0}").format(planned_date)}
     
-    # MP-003, MP-004, MP-005: Create/update MRs per department WIP
+    # MP-003, MP-004: Create MRs per department WIP
     created = []
     
     for target_wh, items in dept_items.items():
         dept = target_wh.split(" - ")[0].replace("WIP-", "")
         
-        # MP-005: Check for existing draft MR
-        existing_mr = frappe.db.exists("Material Request", {
-            "docstatus": 0,
+        mr = frappe.get_doc({
+            "doctype": "Material Request",
+            "material_request_type": "Material Transfer",
             "schedule_date": planned_date,
-            "title": ["like", f"%{dept}%"],
         })
-        
-        if existing_mr:
-            mr = frappe.get_doc("Material Request", existing_mr)
-            mr.set("items", [])
-        else:
-            mr = frappe.get_doc({
-                "doctype": "Material Request",
-                "material_request_type": "Material Transfer",
-                "schedule_date": planned_date,
-            })
         
         for item_key, item_data in items.items():
             mr.append("items", {
@@ -118,10 +107,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "schedule_date": planned_date,
             })
         
-        if existing_mr:
-            mr.save()
-        else:
-            mr.insert()
+        mr.insert()
         
         created.append({"name": mr.name, "department_wip": target_wh, "items": len(mr.items)})
     
@@ -134,20 +120,13 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 
 
 def _get_raw_bom_items(bom_no: str) -> List[Dict]:
-    """Get BOM items filtered to raw materials and BOF items only"""
-    items = frappe.get_all("BOM Item",
-        {"parent": bom_no, "source_warehouse": ["in", 
-            frappe.get_all("Warehouse", {"warehouse_name": ["in", ["Raw Material Stores", "BOF Stores"]]}, pluck="name")]},
+    """Get BOM items that are raw materials or BOF items only"""
+    all_items = frappe.get_all("BOM Item", {"parent": bom_no},
         ["item_code", "item_name", "qty", "uom", "source_warehouse"])
     
-    if not items:
-        # Fallback: get all items and filter in Python
-        all_items = frappe.get_all("BOM Item", {"parent": bom_no},
-            ["item_code", "item_name", "qty", "uom", "source_warehouse"])
-        return [i for i in all_items if i.source_warehouse and 
-                ("Raw Material" in i.source_warehouse or "BOF" in i.source_warehouse)]
-    
-    return items
+    # Filter: only items from Raw Material Stores or BOF Stores
+    return [i for i in all_items if i.source_warehouse and 
+            ("Raw Material" in i.source_warehouse or "BOF" in i.source_warehouse)]
 
 
 def _needs_whole_qty(item_code: str) -> bool:
