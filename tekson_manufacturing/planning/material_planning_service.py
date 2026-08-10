@@ -92,14 +92,11 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     created = []
     
     for target_wh, items in dept_items.items():
-        # MP-005: Find existing draft MR for same PP + date
-        existing = None
-        if production_plan:
-            existing = frappe.db.exists("Material Request", {
-                "docstatus": 0,
-                "production_plan": production_plan,
-                "schedule_date": planned_date,
-            })
+        # MP-005: Find existing draft MR for same planned_date
+        existing = frappe.db.exists("Material Request", {
+            "docstatus": 0,
+            "schedule_date": planned_date,
+        })
         
         if existing:
             mr = frappe.get_doc("Material Request", existing)
@@ -109,7 +106,6 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "doctype": "Material Request",
                 "material_request_type": "Material Transfer",
                 "schedule_date": planned_date,
-                "production_plan": production_plan,
             })
         
         for item_key, item_data in items.items():
