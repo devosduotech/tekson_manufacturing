@@ -20,15 +20,16 @@ frappe.ui.form.on('Production Plan', {
                             freeze: true,
                             freeze_message: __('Generating Material Requests...'),
                             callback: function(r) {
-                                let res = r.message || {};
-                                if (res.created_mrs && res.created_mrs.length > 0) {
+                                let res = r.message;
+                                if (res && res.created_mrs && res.created_mrs.length > 0) {
                                     let msg = __('<b>{0}</b> MR(s) for <b>{1}</b>:<br>', [res.created_mrs.length, res.planned_date]);
                                     (res.details || []).forEach(function(d) {
                                         msg += '<br><a href="/app/material-request/' + d.name + '">' + d.name + '</a> — ' + d.department_wip + ' (' + d.items + ' items)';
                                     });
                                     frappe.msgprint({title: __('✅ Generated'), message: msg, indicator: 'green'});
                                 } else {
-                                    frappe.msgprint({title: __('No MRs'), message: res.message || __('All materials already in WIP for {0}').format(values.planned_date), indicator: 'blue'});
+                                    let msg = (res && res.message) || __('All materials already in WIP for {0}').format(values.planned_date);
+                                    frappe.msgprint({title: __('No MRs'), message: msg, indicator: 'blue'});
                                 }
                             }
                         });

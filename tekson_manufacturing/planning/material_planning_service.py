@@ -27,7 +27,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     if not planned_date:
         planned_date = date.today().strftime("%Y-%m-%d")
     
-    # MP-001: Find submitted, incomplete WOs for the date
+    # MP-001: Find incomplete WOs for the date
     wo_filters = {
         "docstatus": 1,
         "status": ["!=", "Completed"],
