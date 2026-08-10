@@ -94,7 +94,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         existing_mr = frappe.db.exists("Material Request", {
             "docstatus": 0,
             "schedule_date": planned_date,
-            "custom_department_wip": target_wh,
+            "title": ["like", f"%{dept}%"],
         })
         
         if existing_mr:
@@ -105,8 +105,6 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "doctype": "Material Request",
                 "material_request_type": "Material Transfer",
                 "schedule_date": planned_date,
-                "custom_department_wip": target_wh,
-                "title": f"Daily MR - {dept} - {planned_date}",
             })
         
         for item_key, item_data in items.items():
