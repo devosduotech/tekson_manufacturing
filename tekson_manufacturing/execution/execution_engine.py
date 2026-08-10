@@ -327,9 +327,6 @@ class ExecutionEngine:
             se.insert(ignore_permissions=True)
             se.submit()
             
-            se.insert(ignore_permissions=True)
-            se.submit()
-            
             result['success'] = True
             result['message'] = "Work Order completed successfully"
             result['stock_entry'] = se.name

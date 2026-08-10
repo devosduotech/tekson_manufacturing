@@ -152,13 +152,6 @@ class MaterialReadinessEngine:
             warnings=warnings,
             errors=errors
         )
-        
-        # Legacy: Also populate self.results for backward compatibility
-        self.results['is_ready'] = is_ready
-        self.results['missing_items'] = [d['item_code'] for d in shortage_details]
-        self.results['shortage_details'] = shortage_details
-        
-        return self.results
     
     def get_required_materials(self, work_order, operation=None):
         """
