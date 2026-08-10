@@ -9,11 +9,7 @@ from tekson_manufacturing.services.batch_planning import get_production_qty
 
 class TeksonProductionPlan(ProductionPlan):
     def combine_subassembly_items(self, sub_assembly_items_store):
-        """Override: include schedule_date in consolidation key when combine_sub_items enabled"""
-        if not self.combine_sub_items:
-            super().combine_subassembly_items(sub_assembly_items_store)
-            return
-        
+        """Override: include schedule_date when combine_sub_items enabled"""
         key_wise_data = {}
         for row in sub_assembly_items_store:
             key = (
@@ -21,7 +17,7 @@ class TeksonProductionPlan(ProductionPlan):
                 row.get("fg_warehouse"),
                 row.get("bom_no"),
                 row.get("type_of_manufacturing"),
-                str(row.get("schedule_date", "")),
+                str(row.get("schedule_date", "")) if self.combine_sub_items else "",
             )
             if key not in key_wise_data:
                 key_wise_data[key] = row
@@ -31,8 +27,6 @@ class TeksonProductionPlan(ProductionPlan):
                 existing_row.qty += flt(row.qty)
                 existing_row.stock_qty += flt(row.stock_qty)
                 existing_row.bom_level = max(existing_row.bom_level, row.bom_level)
-                continue
-            key_wise_data[key] = row
         
         self.sub_assembly_items = list(key_wise_data.values())
     
