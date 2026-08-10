@@ -28,7 +28,7 @@ class TeksonProductionPlan(ProductionPlan):
                 existing_row.stock_qty += flt(row.stock_qty)
                 existing_row.bom_level = max(existing_row.bom_level, row.bom_level)
         
-        self.sub_assembly_items = list(key_wise_data.values())
+        return list(key_wise_data.values())
     
     def make_work_order_for_subassembly_items(self, wo_list, subcontracted_po, default_warehouses):
         self._apply_batch_rounding()
