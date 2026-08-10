@@ -28,9 +28,12 @@ def get_work_order_details(work_order):
     readiness = engine.evaluate_material_readiness()
     
     return {
-        "work_order": wo,
-        "job_cards": job_cards,
-        "material_readiness": readiness
+        "work_order": wo.name,
+        "status": wo.status,
+        "qty": wo.qty,
+        "production_item": wo.production_item,
+        "job_cards": [{"name": jc.name, "operation": jc.operation, "status": jc.status} for jc in job_cards],
+        "material_readiness": readiness.to_dict() if hasattr(readiness, 'to_dict') else str(readiness.is_ready)
     }
 
 

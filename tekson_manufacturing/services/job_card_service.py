@@ -276,27 +276,6 @@ class WorkOrderService:
         frappe.db.commit()
 
 
-class MaterialService:
-    """
-    Material Service - Reusable business logic for materials
-    """
-    
-    def __init__(self):
-        pass
-    
-    def get_stock_balance(self, item_code, warehouse=None):
-        """Get actual stock balance"""
-        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
-        
-        engine = MaterialReadinessEngine()
-        return engine.get_actual_stock(item_code, warehouse)
-    
-    def get_cumulative_transfers(self, item_code, work_order, warehouse):
-        """Get cumulative material transfers"""
-        from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
-        
-        engine = MaterialReadinessEngine()
-        return engine.get_cumulative_transferred_qty(item_code, work_order, warehouse)
 
 
 @frappe.whitelist()

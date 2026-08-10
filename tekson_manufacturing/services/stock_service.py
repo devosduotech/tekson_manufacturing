@@ -407,8 +407,8 @@ class StockService:
         """
         try:
             # Get warehouses from departments
-            from_warehouse = self.get_department_warehouse(from_department)
-            to_warehouse = self.get_department_warehouse(to_department)
+            from_warehouse = self.get_department_wip_warehouse(from_department)
+            to_warehouse = self.get_department_wip_warehouse(to_department)
             
             if not from_warehouse:
                 return {
@@ -560,7 +560,7 @@ class StockService:
         
         return warehouse_group == "Work In Progress Stores"
     
-    def get_department_warehouse(self, department: str) -> str:
+    def get_department_wip_warehouse(self, department: str) -> str:
         """
         Get WIP warehouse for department
         
