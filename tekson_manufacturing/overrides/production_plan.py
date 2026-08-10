@@ -9,7 +9,11 @@ from tekson_manufacturing.services.batch_planning import get_production_qty
 
 class TeksonProductionPlan(ProductionPlan):
     def combine_subassembly_items(self, sub_assembly_items_store):
-        """Override ERPNext: include schedule_date in consolidation key"""
+        """Override: include schedule_date in consolidation key when combine_sub_items enabled"""
+        if not self.combine_sub_items:
+            super().combine_subassembly_items(sub_assembly_items_store)
+            return
+        
         key_wise_data = {}
         for row in sub_assembly_items_store:
             key = (
