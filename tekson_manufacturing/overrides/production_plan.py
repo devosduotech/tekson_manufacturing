@@ -35,7 +35,6 @@ class TeksonProductionPlan(ProductionPlan):
             key_wise_data[key] = row
         
         self.sub_assembly_items = list(key_wise_data.values())
-        self.set_sub_assembly_items_based_on_level()
     
     def make_work_order_for_subassembly_items(self, wo_list, subcontracted_po, default_warehouses):
         self._apply_batch_rounding()
