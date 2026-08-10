@@ -109,6 +109,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "doctype": "Material Request",
                 "material_request_type": "Material Transfer",
                 "schedule_date": planned_date,
+                "custom_production_plan": production_plan,
             })
         
         for item_key, item_data in items.items():

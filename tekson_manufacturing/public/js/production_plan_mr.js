@@ -22,11 +22,12 @@ frappe.ui.form.on('Production Plan', {
                             callback: function(r) {
                                 let res = r.message;
                                 if (res && res.created_mrs && res.created_mrs.length > 0) {
-                                    let names = res.created_mrs.join(', ');
-                                    let details = (res.details || []).map(d => '<br>' + d.name + ' — ' + d.department_wip + ' (' + d.items + ' items)').join('');
+                                    let details = (res.details || []).map(function(d) {
+                                        return '<br>' + d.name + ' — ' + d.department_wip + ' (' + d.items + ' items)';
+                                    }).join('');
                                     frappe.msgprint({
-                                        title: __('✅ Generated'),
-                                        message: __('<b>{0}</b> MR(s) for <b>{1}</b>: {2}', [res.created_mrs.length, res.planned_date, details]),
+                                        title: 'Generated',
+                                        message: '<b>' + res.created_mrs.length + '</b> MR(s) for <b>' + res.planned_date + '</b>:' + details,
                                         indicator: 'green'
                                     });
                                 } else {
