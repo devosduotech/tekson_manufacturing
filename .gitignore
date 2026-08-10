@@ -74,3 +74,4 @@ fix_custom_field_names.sh
 *.csv
 *.xlsx
 *.lock
+UAT_DOCS/
