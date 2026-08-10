@@ -52,17 +52,17 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             continue
         
         for item in _get_raw_bom_items(wo.bom_no):
-            # Only raw materials and BOF items
             source_wh = item.get("source_warehouse") or ""
             if "Raw Material" not in source_wh and "BOF" not in source_wh:
                 continue
             
-            required_qty = (item["qty"] * wo.qty) / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
-            
-            # MP-002: Deduct stock already in target WIP
-            in_wip = frappe.db.get_value("Bin",
-                {"item_code": item["item_code"], "warehouse": target_wh},
-                "actual_qty") or 0
+            # Target: item's operation → JC's wip_warehouse, fallback to WO's
+            target_wh = wo.wip_warehouse
+            if item.get("operation"):
+                jc_wh = frappe.db.get_value("Job Card",
+                    {"work_order": wo.name, "operation": item["operation"]}, "wip_warehouse")
+                if jc_wh:
+                    target_wh = jc_wh
             
             shortage = max(0, required_qty - in_wip)
             if shortage <= 0:
@@ -122,7 +122,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 def _get_raw_bom_items(bom_no: str) -> List[Dict]:
     """Get BOM items that are raw materials or BOF items only"""
     all_items = frappe.get_all("BOM Item", {"parent": bom_no},
-        ["item_code", "item_name", "qty", "uom", "source_warehouse"])
+        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
     
     # Filter: only items from Raw Material Stores or BOF Stores
     return [i for i in all_items if i.source_warehouse and 
