@@ -60,3 +60,17 @@ htmlcov/
 # Node (if needed)
 node_modules/
 npm-debug.log
+
+# Internal documentation (moved to private storage)
+docs/
+UAT/
+SESSION_HANDOFF*
+PHASE1_COMPLETE.md
+INTERNAL_UAT_TESTING_GUIDE.md
+deploy_to_vm.sh
+fix_custom_field_names.sh
+
+# Test data exports (CSV, XLSX)
+*.csv
+*.xlsx
+*.lock
