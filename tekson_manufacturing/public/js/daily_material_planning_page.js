@@ -5,46 +5,67 @@ frappe.pages['material-planning'].on_page_load = function(wrapper) {
         single_column: true
     });
     
-    let body = $(frappe.render_template('daily_material_planning', {}));
-    page.body.append(body);
+    let html = `
+    <div style="padding:30px; max-width:800px;">
+        <h3>Daily Material Planning</h3>
+        <p>Generate Material Requests for stores — one per department WIP.</p>
+        <hr>
+        <div class="row">
+            <div class="col-sm-6">
+                <label>Production Plan</label>
+                <select id="pp_select" class="form-control"></select>
+            </div>
+            <div class="col-sm-3">
+                <label>Planned Start Date</label>
+                <input type="date" id="plan_date" class="form-control">
+            </div>
+            <div class="col-sm-3">
+                <br>
+                <button id="gen_btn" class="btn btn-primary">Generate MRs</button>
+            </div>
+        </div>
+        <div id="result_area" style="margin-top:20px;"></div>
+    </div>`;
+    
+    page.body.html(html);
     
     // Load PPs
     frappe.call({
         method: 'tekson_manufacturing.www.mes.daily_material_planning.search_production_plans',
         args: {txt: ''},
         callback: function(r) {
-            let select = body.find('#production_plan');
+            let sel = page.body.find('#pp_select');
             (r.message || []).forEach(function(pp) {
-                select.append('<option value="' + pp.name + '">' + pp.name + '</option>');
+                sel.append('<option value="' + pp.name + '">' + pp.name + '</option>');
             });
         }
     });
     
-    body.find('#planned_date').val(frappe.datetime.get_today());
+    page.body.find('#plan_date').val(frappe.datetime.get_today());
     
-    body.find('#generate_btn').on('click', function() {
-        let pp = body.find('#production_plan').val();
-        let date = body.find('#planned_date').val();
+    page.body.find('#gen_btn').on('click', function() {
+        let pp = page.body.find('#pp_select').val();
+        let dt = page.body.find('#plan_date').val();
         if (!pp) { frappe.msgprint('Select a Production Plan'); return; }
         
-        let btn = $(this);
+        let btn = page.body.find('#gen_btn');
         btn.prop('disabled', true).text('Generating...');
         
         frappe.call({
             method: 'tekson_manufacturing.planning.material_planning_service.generate_daily_material_requests',
-            args: { production_plan: pp, planned_date: date },
+            args: { production_plan: pp, planned_date: dt },
             callback: function(r) {
                 btn.prop('disabled', false).text('Generate MRs');
                 let res = r.message || {};
-                let result = body.find('#result').empty();
+                let area = page.body.find('#result_area').empty();
                 
                 if (res.created_mrs && res.created_mrs.length > 0) {
-                    result.append('<div class="alert alert-success"><b>' + res.created_mrs.length + '</b> MR(s) for <b>' + res.planned_date + '</b></div>');
+                    area.append('<div class="alert alert-success"><b>' + res.created_mrs.length + '</b> MR(s) for <b>' + res.planned_date + '</b></div>');
                     (res.details || []).forEach(function(d) {
-                        result.append('<div class="alert alert-info" style="margin:3px 0"><a href="/app/material-request/' + d.name + '"><b>' + d.name + '</b></a> — ' + d.department_wip + ' (' + d.items + ' items)</div>');
+                        area.append('<div class="alert alert-info" style="margin:3px 0"><a href="/app/material-request/' + d.name + '"><b>' + d.name + '</b></a> — ' + d.department_wip + ' (' + d.items + ' items)</div>');
                     });
                 } else {
-                    result.append('<div class="alert alert-warning">' + (res.message || 'All materials in WIP') + '</div>');
+                    area.append('<div class="alert alert-warning">' + (res.message || 'All materials in WIP') + '</div>');
                 }
             }
         });
