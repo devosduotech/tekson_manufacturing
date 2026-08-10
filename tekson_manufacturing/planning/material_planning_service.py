@@ -137,5 +137,8 @@ def _needs_whole_qty(item_code: str) -> bool:
     """Check if item's UOM requires whole number"""
     uom = frappe.db.get_value("Item", item_code, "stock_uom")
     if uom:
-        return bool(frappe.db.get_value("UOM", uom, "must_be_whole_number"))
+        if frappe.db.get_value("UOM", uom, "must_be_whole_number"):
+            return True
+        if uom.lower() == "nos":
+            return True
     return False
