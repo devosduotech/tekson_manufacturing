@@ -64,6 +64,10 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 if jc_wh:
                     target_wh = jc_wh
             
+            required_qty = (item["qty"] * wo.qty) / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
+            in_wip = frappe.db.get_value("Bin",
+                {"item_code": item["item_code"], "warehouse": target_wh},
+                "actual_qty") or 0
             shortage = max(0, required_qty - in_wip)
             if shortage <= 0:
                 continue
