@@ -92,14 +92,17 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     created = []
     
     for target_wh, items in dept_items.items():
-        # MP-005: Find existing draft MR for same planned_date
-        existing = frappe.db.exists("Material Request", {
-            "docstatus": 0,
-            "schedule_date": planned_date,
-        })
+        # MP-005: Find existing draft MR with items for this target warehouse
+        existing = frappe.db.sql("""
+            SELECT mr.name FROM `tabMaterial Request` mr
+            INNER JOIN `tabMaterial Request Item` mri ON mri.parent = mr.name
+            WHERE mr.docstatus = 0 AND mr.schedule_date = %s
+            AND mri.warehouse = %s
+            LIMIT 1
+        """, (planned_date, target_wh), as_dict=True)
         
         if existing:
-            mr = frappe.get_doc("Material Request", existing)
+            mr = frappe.get_doc("Material Request", existing[0].name)
             mr.set("items", [])
         else:
             mr = frappe.get_doc({
