@@ -8,9 +8,9 @@
 
 Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends standard ERPNext Manufacturing with readiness evaluation, dependency validation, and automated workflow controls — without replacing ERPNext's inventory, costing, or backflush engine.
 
-**Status:** ✅ Phase 1 Complete — Internal UAT Passed  
-**Version:** v15.0.1  
-**Last Updated:** August 9, 2026
+**Status:** ✅ Phase 1.1 Complete — Ready for UAT
+**Version:** v15.1.1
+**Last Updated:** August 10, 2026
 
 ---
 
@@ -20,8 +20,10 @@ Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends 
 - Dependency Engine — sequential operation blocking
 - Child Work Order validation — parent blocked until sub-assemblies complete
 - Auto Work Order completion — last JC triggers Manufacture SE + WO closure
-- Batch production rounding — fixed-yield BOM support
 - Multi-department WIP — per-operation warehouse assignment
+- WO Consolidation — sub-assemblies grouped by planned start date
+- Daily Material Planning — Material Requests per department WIP
+- Batch production rounding — fixed-yield BOM support
 - Clear operator error messages — shows exactly what's blocking
 
 ---
