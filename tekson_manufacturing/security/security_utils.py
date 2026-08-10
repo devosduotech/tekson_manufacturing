@@ -252,7 +252,7 @@ def audit_trail(
     if frappe.db.exists('DocType', 'Audit Trail'):
         audit = frappe.get_doc({
             'doctype': 'Audit Trail',
-            'doctype': doctype,
+            'document_type': doctype,
             'document_name': docname,
             'action': action,
             'user': user,

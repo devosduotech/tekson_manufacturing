@@ -1,7 +1,6 @@
 import frappe
 from frappe import _
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from tekson_manufacturing.repositories.job_card_repository import JobCardRepository
 from tekson_manufacturing.utils.exceptions import MESDependencyError

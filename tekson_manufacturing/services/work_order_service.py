@@ -1,5 +1,4 @@
 import frappe
-from frappe import _
 import math
 
 
@@ -35,70 +34,3 @@ def set_warehouses(doc, method=None):
     
     if not doc.source_warehouse:
         doc.source_warehouse = "Stores - TPL"
-
-
-def round_production_qty(doc, method=None):
-    """Round WO qty to BOM output quantity multiples."""
-    if doc.bom_no and doc.qty > 0:
-        bom_qty = frappe.get_cached_doc("BOM", doc.bom_no).quantity
-        if bom_qty and bom_qty > 0:
-            rounded = math.ceil(doc.qty / bom_qty) * bom_qty
-            if doc.qty != rounded:
-                doc.qty = rounded
-
-
-def fix_pp_work_orders(doc, method=None):
-    """
-    Production Plan on_submit: fix WIP warehouse + round qty
-    for all Draft WOs created by this PP.
-    """
-    wos = frappe.get_all("Work Order",
-        {"production_plan": doc.name, "docstatus": 0},
-        pluck="name")
-    
-    for wo_name in wos:
-        wo = frappe.get_doc("Work Order", wo_name)
-        needs_save = False
-        
-        if wo.bom_no:
-            if not wo.wip_warehouse:
-                ops = frappe.get_all("BOM Operation",
-                    {"parent": wo.bom_no},
-                    ["workstation_type", "workstation"],
-                    order_by="idx asc", limit=1)
-                if ops:
-                    ws = ops[0].workstation_type or ops[0].workstation
-                    if ws:
-                        pf = frappe.db.get_value("Workstation",
-                            {"workstation_type": ws}, "plant_floor")
-                        if pf:
-                            wh = f"WIP-{pf} - TPL"
-                            if frappe.db.exists("Warehouse", wh):
-                                wo.wip_warehouse = wh
-                                needs_save = True
-            if not wo.source_warehouse:
-                wo.source_warehouse = "Stores - TPL"
-                needs_save = True
-            if wo.qty > 0:
-                bq = frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1
-                rounded = math.ceil(wo.qty / bq) * bq
-                if wo.qty != rounded:
-                    wo.qty = rounded
-                    needs_save = True
-        
-        if needs_save:
-            wo.flags.ignore_validate = True
-            wo.save()
-            # Manually recalculate required items from BOM with new qty
-            wo.set("required_items", [])
-            for item in frappe.get_all("BOM Item", {"parent": wo.bom_no},
-                ["item_code", "item_name", "qty", "uom", "source_warehouse"]):
-                ratio = wo.qty / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
-                wo.append("required_items", {
-                    "item_code": item.item_code,
-                    "item_name": item.item_name,
-                    "required_qty": item.qty * ratio,
-                    "source_warehouse": item.source_warehouse,
-                    "allow_alternative_item": 1,
-                })
-            wo.save(ignore_permissions=True)

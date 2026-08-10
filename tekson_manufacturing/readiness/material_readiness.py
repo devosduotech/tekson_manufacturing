@@ -1,6 +1,5 @@
 import frappe
 from frappe import _
-from datetime import datetime
 from typing import Dict, Any, List
 
 from tekson_manufacturing.mes.dataclasses import MaterialResult, MaterialStatus
