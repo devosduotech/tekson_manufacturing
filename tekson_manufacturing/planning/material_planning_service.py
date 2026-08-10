@@ -104,7 +104,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             mr.append("items", {
                 "item_code": item_data["item_code"],
                 "item_name": item_data.get("item_name", ""),
-                "qty": math.ceil(item_data["qty"]) if _needs_whole_qty(item_data["item_code"]) else round(item_data["qty"], 3),
+                "qty": math.ceil(item_data["qty"]),
                 "from_warehouse": item_data["from_warehouse"],
                 "warehouse": target_wh,
                 "uom": item_data.get("uom", "Nos"),
