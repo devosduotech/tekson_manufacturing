@@ -13,6 +13,15 @@ from typing import List, Dict, Any, Optional
 
 
 @frappe.whitelist()
+def search_production_plans(txt=None):
+    """Search submitted Production Plans for dropdown"""
+    return frappe.get_all("Production Plan",
+        {"docstatus": 1, "name": ["like", f"%{txt or ''}%"]},
+        ["name", "status"],
+        limit=20, order_by="creation desc")
+
+
+@frappe.whitelist()
 def generate_daily_material_requests(production_plan: str = None, planned_date: str = None) -> Dict[str, Any]:
     """
     Generate Material Requests for WOs starting on a given date.
