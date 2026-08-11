@@ -1,40 +1,68 @@
-"""Planner Exceptions — delayed, blocked, overdue WOs"""
+"""Planner Exceptions — with severity, summary, and drill-down"""
 
 import frappe
-from frappe.utils import today, getdate
+from frappe.utils import today, getdate, add_days
 
 
 @frappe.whitelist()
 def get_exceptions():
-    """Return WOs needing planner attention"""
-    result = {"overdue": [], "delayed": [], "blocked": [], "material_short": [], "dependency_wait": []}
+    today_date = today()
     
-    # Overdue: past planned_start_date, not completed
-    overdue = frappe.get_all("Work Order", {
+    # Overdue: planned_start_date < today, not completed
+    overdue_wo = frappe.get_all("Work Order", {
         "docstatus": 1, "status": ["!=", "Completed"],
-        "planned_start_date": ["<", today()]
-    }, ["name", "production_item", "planned_start_date", "status"], limit=20)
-    result["overdue"] = [{"name": w.name, "item": w.production_item, "date": str(w.planned_start_date)[:10]} for w in overdue]
+        "planned_start_date": ["<", today_date]
+    }, ["name", "production_item", "planned_start_date", "status"], limit=10)
     
-    # Blocked: JCs that can't start
-    blocked = frappe.get_all("Job Card", {
+    overdue = []
+    for wo in overdue_wo:
+        days = (getdate(today_date) - getdate(wo.planned_start_date)).days
+        overdue.append({
+            "name": wo.name, "item": wo.production_item, "status": wo.status,
+            "date": str(wo.planned_start_date)[:10], "days_overdue": days
+        })
+    
+    # Severity classification
+    severity = {"critical": 0, "high": 0, "medium": 0}
+    for wo in overdue_wo:
+        days = (getdate(today_date) - getdate(wo.planned_start_date)).days
+        if days > 5: severity["critical"] += 1
+        elif days > 1: severity["high"] += 1
+        else: severity["medium"] += 1
+    
+    # Blocked JCs with root cause
+    blocked_jcs = frappe.get_all("Job Card", {
         "docstatus": 1, "status": "Open",
         "custom_readiness_status": ["in", ["Blocked", "Waiting for Material", "Waiting for Previous Operation"]]
-    }, ["name", "work_order", "operation", "custom_readiness_status", "custom_blocked_by"], limit=20)
-    result["blocked"] = [{"name": j.name, "wo": j.work_order, "op": j.operation, "reason": j.custom_blocked_by} for j in blocked]
+    }, ["name", "work_order", "operation", "custom_readiness_status", "custom_blocked_by"], limit=10)
     
-    # Material Short
-    short = frappe.get_all("Job Card", {
+    blocked = []
+    for jc in blocked_jcs:
+        blocked.append({
+            "name": jc.name, "wo": jc.work_order, "op": jc.operation,
+            "reason": jc.custom_blocked_by or jc.custom_readiness_status
+        })
+    
+    # Material shortage
+    short_jcs = frappe.get_all("Job Card", {
         "docstatus": 1, "status": "Open",
         "custom_material_status": ["in", ["Waiting for Material", "Material Short"]]
-    }, ["name", "work_order", "operation", "custom_material_status"], limit=20)
-    result["material_short"] = [{"name": j.name, "wo": j.work_order, "op": j.operation} for j in short]
+    }, ["name", "work_order", "operation"], limit=10)
+    material_short = [{"name": j.name, "wo": j.work_order, "op": j.operation} for j in short_jcs]
     
-    # Dependency Waiting
-    dep = frappe.get_all("Job Card", {
+    # Dependency waiting
+    dep_jcs = frappe.get_all("Job Card", {
         "docstatus": 1, "status": "Open",
         "custom_readiness_status": "Waiting for Previous Operation"
-    }, ["name", "work_order", "operation"], limit=20)
-    result["dependency_wait"] = [{"name": j.name, "wo": j.work_order, "op": j.operation} for j in dep]
+    }, ["name", "work_order", "operation"], limit=10)
+    dependency_wait = [{"name": j.name, "wo": j.work_order, "op": j.operation} for j in dep_jcs]
     
-    return result
+    return {
+        "summary": {
+            "overdue": len(overdue_wo), "blocked": len(blocked_jcs),
+            "material_short": len(short_jcs), "dependency_wait": len(dep_jcs)
+        },
+        "severity": severity,
+        "overdue": overdue, "blocked": blocked,
+        "material_short": material_short, "dependency_wait": dependency_wait,
+    }

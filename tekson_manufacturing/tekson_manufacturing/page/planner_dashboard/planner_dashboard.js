@@ -25,8 +25,9 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#e3f2fd"><h3>'+(d.total_wo||0)+'</h3><small>Total WOs</small></div></div>'+
             '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#e8f5e9"><h3>'+(d.completed_wo||0)+'</h3><small>Completed</small></div></div>'+
             '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#fff3e0"><h3>'+(d.in_process_wo||0)+'</h3><small>In Process</small></div></div>'+
-            '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#fce4ec"><h3>'+(d.pending_pp||0)+'</h3><small>Pending PPs</small></div></div>'+
-            '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#f3e5f5"><h3>'+(d.on_time_pct||0)+'%</h3><small>On-Time</small></div></div>'
+            '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#c8e6c9"><h3>'+(d.readiness_pct||0)+'%</h3><small>Readiness</small></div></div>'+
+            '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#f3e5f5"><h3>'+(d.on_time_pct||0)+'%</h3><small>On-Time</small></div></div>'+
+            '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#fce4ec"><h3>'+(d.pending_pp||0)+'</h3><small>Pending PPs</small></div></div>'
         );
     }});
     
@@ -52,15 +53,25 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
     
     // Exceptions
     frappe.call({method:'tekson_manufacturing.api.intelligence.planner_exceptions',callback:function(r){
-        let d=r.message||{}, html='<div class="row">';
-        ['overdue','blocked','material_short','dependency_wait'].forEach(function(k){
-            let arr=d[k]||[], color=k==='overdue'?'#ffebee':k==='blocked'?'#fff3e0':k==='material_short'?'#e8eaf6':'#e8f5e9';
-            html+='<div class="col-sm-3"><div class="card" style="padding:10px;background:'+color+'"><b>'+k.replace(/_/g,' ').toUpperCase()+'</b><h2>'+arr.length+'</h2>';
-            arr.slice(0,3).forEach(function(x){
-                html+='<small><a href="/app/work-order/'+(x.wo||'')+'">'+(x.wo||x.name||'')+'</a>: '+(x.op||x.item||x.reason||'')+'</small><br>';
-            });
-            html+='</div></div>';
-        });
-        html+='</div>'; page.body.find('#exceptions').html(html);
+        let d=r.message||{}, s=d.summary||{}, sev=d.severity||{};
+        let html='<div class="row">';
+        html+='<div class="col-sm-12" style="margin-bottom:10px"><b>Overdue Breakdown:</b> ';
+        if(sev.critical) html+='<span class="badge" style="background:red">'+sev.critical+' Critical (>5d)</span> ';
+        if(sev.high) html+='<span class="badge" style="background:orange">'+sev.high+' High (2-5d)</span> ';
+        if(sev.medium) html+='<span class="badge" style="background:#ffc107">'+sev.medium+' Medium (1d)</span> ';
+        html+='</div>';
+        html+='<div class="col-sm-3"><div class="card" style="padding:10px;background:#ffebee"><b>Overdue</b><h2>'+s.overdue+'</h2>';
+        (d.overdue||[]).slice(0,3).forEach(function(x){html+='<small><a href="/app/work-order/'+x.name+'">'+x.name+'</a>: '+x.days_overdue+'d</small><br>';});
+        html+='</div></div>';
+        html+='<div class="col-sm-3"><div class="card" style="padding:10px;background:#fff3e0"><b>Blocked</b><h2>'+s.blocked+'</h2>';
+        (d.blocked||[]).slice(0,3).forEach(function(x){html+='<small><a href="/app/work-order/'+x.wo+'">'+x.wo+'</a>: '+x.reason+'</small><br>';});
+        html+='</div></div>';
+        html+='<div class="col-sm-3"><div class="card" style="padding:10px;background:#e8eaf6"><b>Material Short</b><h2>'+s.material_short+'</h2>';
+        (d.material_short||[]).slice(0,3).forEach(function(x){html+='<small><a href="/app/work-order/'+x.wo+'">'+x.wo+'</a>: '+x.op+'</small><br>';});
+        html+='</div></div>';
+        html+='<div class="col-sm-3"><div class="card" style="padding:10px;background:#e8f5e9"><b>Dependency Wait</b><h2>'+s.dependency_wait+'</h2>';
+        (d.dependency_wait||[]).slice(0,3).forEach(function(x){html+='<small><a href="/app/work-order/'+x.wo+'">'+x.wo+'</a>: '+x.op+'</small><br>';});
+        html+='</div></div></div>';
+        page.body.find('#exceptions').html(html);
     }});
 };

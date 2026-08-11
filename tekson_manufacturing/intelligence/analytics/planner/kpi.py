@@ -25,8 +25,24 @@ def get_planner_kpis(planned_date=None) -> Dict[str, Any]:
     
     pending_pp = frappe.db.count("Production Plan", {"docstatus": 1, "status": "Submitted"})
     
+    # Production Readiness: % of today's planned WOs where first JC is ready
+    today_wos = frappe.get_all("Work Order", {
+        "docstatus": 1, "planned_start_date": planned_date,
+        "status": ["!=", "Completed"]
+    }, pluck="name")
+    
+    ready_count = 0
+    if today_wos:
+        ready_count = frappe.db.count("Job Card", {
+            "work_order": ["in", today_wos], "docstatus": ["!=", 2],
+            "sequence_id": 1, "custom_can_start_operation": 1
+        })
+    readiness_pct = round((ready_count / len(today_wos) * 100) if today_wos else 0, 1)
+    
     return {
         "total_wo": total, "completed_wo": completed, "in_process_wo": in_process,
         "pending_pp": pending_pp, "on_time_pct": on_time_pct,
+        "readiness_pct": readiness_pct,
+        "readiness_detail": {"ready": ready_count, "total": len(today_wos)},
         "planned_vs_actual": {"planned": total, "completed": completed},
     }
