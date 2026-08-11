@@ -12,6 +12,7 @@ from frappe.utils import flt, today, add_days, getdate
 from typing import Dict, List, Any
 
 
+@frappe.whitelist()
 def get_planner_kpis(planned_date=None) -> Dict[str, Any]:
     """
     Planner Dashboard KPIs.
@@ -55,6 +56,7 @@ def get_planner_kpis(planned_date=None) -> Dict[str, Any]:
     }
 
 
+@frappe.whitelist()
 def get_stores_kpis(planned_date=None) -> Dict[str, Any]:
     """
     Stores Dashboard KPIs.
