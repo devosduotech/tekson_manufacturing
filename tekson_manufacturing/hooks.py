@@ -36,10 +36,11 @@ override_doctype_class = {
     # "Production Plan": "tekson_manufacturing.overrides.production_plan.TeksonProductionPlan"
 }
 
-app_include_js = [
-    "/assets/tekson_manufacturing/js/job_card_list.js",
-    "/assets/tekson_manufacturing/js/material_transfer_pick_list.js"
-]
+# Temporarily disabled - causes PP UI rendering issue in Frappe v15
+# app_include_js = [
+#     "/assets/tekson_manufacturing/js/job_card_list.js",
+#     "/assets/tekson_manufacturing/js/material_transfer_pick_list.js"
+# ]
 
 doctype_js = {
     # Temporarily disabled - Frappe v15 compatibility issue
