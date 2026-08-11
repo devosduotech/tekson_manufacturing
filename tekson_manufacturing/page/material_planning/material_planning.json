@@ -21,7 +21,7 @@
    "role": "All"
   }
  ],
- "script": "tekson_manufacturing/page/material_planning/material_planning.js",
+ "script": "tekson_manufacturing/tekson_manufacturing/page/material_planning/material_planning.js",
  "standard": "Yes",
  "style": null,
  "system_page": 0,
