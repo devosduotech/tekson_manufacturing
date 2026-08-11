@@ -11,7 +11,7 @@ frappe.pages['material-planning'].on_page_load = function(wrapper) {
     });
     dateField.set_value(frappe.datetime.get_today());
     
-    frappe.call({method:'tekson_manufacturing.www.mes.daily_material_planning.search_production_plans',args:{txt:''},callback:function(r){
+    frappe.call({method:'tekson_manufacturing.planning.material_planning_service.search_production_plans',args:{txt:''},callback:function(r){
         var sel = page.body.find('#pp_select');
         (r.message||[]).forEach(function(pp){sel.append('<option value="'+pp.name+'">'+pp.name+'</option>');});
     }});
