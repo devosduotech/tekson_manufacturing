@@ -1,8 +1,9 @@
 frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
     var page = frappe.ui.make_app_page({parent: wrapper, title: 'Planner Dashboard', single_column: true});
+    var $wrapper = $(wrapper);
     
-    $(wrapper).on('show', function() {
-        $(wrapper).html(`
+    $wrapper.on('show', function() {
+        $wrapper.html(`
         <div style="padding:20px; max-width:1300px;">
             <div class="row" style="margin-bottom:15px;">
                 <div class="col-sm-4">
@@ -54,7 +55,8 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             method:'tekson_manufacturing.api.intelligence.planner_kpis',
             args:{planned_date:from_date},
             callback:function(r){
-                var d = r.message || {};
+                if(!r.message) return;
+                var d = r.message;
                 $('#kpi_cards').html(
                     '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#e3f2fd"><h3>'+(d.total_wo||0)+'</h3><small>Total WOs<br>'+from_date+'</small></div></div>'+
                     '<div class="col-sm-2"><div class="card" style="padding:15px;text-align:center;background:#e8f5e9"><h3>'+(d.completed_wo||0)+'</h3><small>Completed</small></div></div>'+
@@ -71,7 +73,8 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             method:'tekson_manufacturing.api.intelligence.planner_calendar',
             args:{from_date:from_date,to_date:to_date},
             callback:function(r){
-                var d = r.message || {}, cal = d.calendar || {};
+                if(!r.message) return;
+                var d = r.message, cal = d.calendar || {};
                 var html = '<table class="table table-bordered table-sm"><tr><th>Date</th><th>WOs</th><th>FG Items</th></tr>';
                 Object.keys(cal).sort().forEach(function(dt){
                     if(dt >= from_date && dt <= to_date){
@@ -89,7 +92,8 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             method:'tekson_manufacturing.api.intelligence.planner_workload',
             args:{planned_date:from_date},
             callback:function(r){
-                var d = r.message || {};
+                if(!r.message) return;
+                var d = r.message;
                 var dl = d.dept_load || {}, dm = d.fg_mix || {};
                 var h = '<table class="table table-bordered table-sm"><tr><th>Dept</th><th>WOs</th></tr>';
                 Object.entries(dl.dept_count||{}).forEach(function(e){
@@ -112,7 +116,8 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             method:'tekson_manufacturing.api.intelligence.planner_exceptions',
             args:{planned_date:from_date},
             callback:function(r){
-                var d = r.message || {}, s = d.summary || {}, sev = d.severity || {};
+                if(!r.message) return;
+                var d = r.message, s = d.summary || {}, sev = d.severity || {};
                 var html = '<div class="row"><div class="col-sm-12" style="margin-bottom:10px"><b>Overdue:</b> ';
                 if(sev.critical) html += '<span class="badge" style="background:red">'+sev.critical+' Critical</span> ';
                 if(sev.high) html += '<span class="badge" style="background:orange">'+sev.high+' High</span> ';
@@ -147,13 +152,14 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
             method:'frappe.client.get_list',
             args:{
                 doctype:'Production Plan Item',
-                fields:['item_code','item_name','planned_qty','parent'],
+                fields:['item_code','item_name','planned_qty'],
                 filters:{docstatus:1},
                 start:0,
                 page_length:50
             },
             callback:function(r){
-                var items = r.message || [];
+                if(!r.message) return;
+                var items = r.message;
                 var grouped = {};
                 items.forEach(function(it){
                     if(!grouped[it.item_code]) grouped[it.item_code] = {qty:0, wo_count:0, name:it.item_name||it.item_code};
@@ -165,7 +171,7 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
                         method:'frappe.client.get_list',
                         args:{
                             doctype:'Work Order',
-                            fields:['production_item','name'],
+                            fields:['production_item'],
                             filters:{
                                 production_item:['in',item_list],
                                 docstatus:1,
@@ -175,7 +181,8 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
                             page_length:500
                         },
                         callback:function(r2){
-                            var wos = r2.message || [];
+                            if(!r2.message) return;
+                            var wos = r2.message;
                             wos.forEach(function(w){
                                 if(grouped[w.production_item]) grouped[w.production_item].wo_count++;
                             });
