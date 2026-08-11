@@ -53,7 +53,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         
         for item in _get_raw_bom_items(wo.bom_no):
             source_wh = item.get("source_warehouse") or ""
-            if "Raw Material" not in source_wh and "BOF" not in source_wh:
+            if not _is_source_warehouse(source_wh):
                 continue
             
             # Target: item's operation → JC's wip_warehouse, fallback to WO's
@@ -144,16 +144,12 @@ def _get_raw_bom_items(bom_no: str) -> List[Dict]:
         ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
     
     # Filter: only items from Raw Material Stores or BOF Stores
-    return [i for i in all_items if i.source_warehouse and 
-            ("Raw Material" in i.source_warehouse or "BOF" in i.source_warehouse)]
+    return [i for i in all_items if _is_source_warehouse(i.source_warehouse)]
 
 
-def _needs_whole_qty(item_code: str) -> bool:
-    """Check if item's UOM requires whole number"""
-    uom = frappe.db.get_value("Item", item_code, "stock_uom")
-    if uom:
-        if frappe.db.get_value("UOM", uom, "must_be_whole_number"):
-            return True
-        if uom.lower() == "nos":
-            return True
-    return False
+def _is_source_warehouse(warehouse: str) -> bool:
+    """Check if warehouse is a valid source (Raw Material Stores or BOF Stores)"""
+    if not warehouse:
+        return False
+    wh_name = frappe.db.get_value("Warehouse", warehouse, "warehouse_name") or ""
+    return wh_name in ("Raw Material Stores", "BOF Stores")
