@@ -32,7 +32,8 @@ doc_events = {
 }
 
 override_doctype_class = {
-    "Production Plan": "tekson_manufacturing.overrides.production_plan.TeksonProductionPlan"
+    # Temporarily disabled - Frappe v15 compatibility issue
+    # "Production Plan": "tekson_manufacturing.overrides.production_plan.TeksonProductionPlan"
 }
 
 app_include_js = [
@@ -41,7 +42,8 @@ app_include_js = [
 ]
 
 doctype_js = {
-    "Production Plan": "public/js/production_plan_mr.js",
+    # Temporarily disabled - Frappe v15 compatibility issue
+    # "Production Plan": "public/js/production_plan_mr.js",
 }
 
 # Reports
