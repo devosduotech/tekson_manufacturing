@@ -104,7 +104,6 @@ class JobCardService:
         self.update_material_status(jc)
         
         jc.save(ignore_permissions=True)
-        frappe.db.commit()
     
     def update_start_status(self, job_card):
         """
@@ -273,7 +272,6 @@ class WorkOrderService:
         wo.reload()
         wo.set_status()
         wo.save(ignore_permissions=True)
-        frappe.db.commit()
 
 
 
