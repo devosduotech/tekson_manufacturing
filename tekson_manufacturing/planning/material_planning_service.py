@@ -53,30 +53,47 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     
     # MP-002: Calculate requirements per department WIP
     dept_items = {}
+    
+    # Pre-fetch: JC wip_warehouse, BOM quantities, Bin stock — batched
+    wo_names = [wo.name for wo in wos if wo.bom_no]
+    bom_nos = list(set(wo.bom_no for wo in wos if wo.bom_no))
+    
+    jc_map = {}
+    if wo_names:
+        for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]}, ["work_order", "operation", "wip_warehouse"]):
+            jc_map[(jc.work_order, jc.operation)] = jc.wip_warehouse
+    
+    bom_map = {b["name"]: b["quantity"] or 1 for b in frappe.get_all("BOM", {"name": ["in", bom_nos]}, ["name", "quantity"])} if bom_nos else {}
+    
+    item_codes = set()
+    for wo in wos:
+        if not wo.bom_no: continue
+        for item in _get_raw_bom_items(wo.bom_no):
+            item_codes.add(item["item_code"])
+    
+    bin_map = {}
+    if item_codes:
+        for b in frappe.get_all("Bin", {"item_code": ["in", list(item_codes)], "warehouse": ["like", "%WIP%"]}, ["item_code", "warehouse", "actual_qty"]):
+            key = (b.item_code, b.warehouse)
+            bin_map[key] = (bin_map.get(key, 0) + b.actual_qty) if key in bin_map else b.actual_qty
+    
     for wo in wos:
         if not wo.bom_no:
             continue
-        target_wh = wo.wip_warehouse
-        if not target_wh:
+        if not wo.wip_warehouse:
             continue
+        wo_bom_qty = bom_map.get(wo.bom_no, 1)
         
         for item in _get_raw_bom_items(wo.bom_no):
             source_wh = item.get("source_warehouse") or ""
             if not _is_source_warehouse(source_wh):
                 continue
             
-            # Target: item's operation → JC's wip_warehouse, fallback to WO's
-            target_wh = wo.wip_warehouse
-            if item.get("operation"):
-                jc_wh = frappe.db.get_value("Job Card",
-                    {"work_order": wo.name, "operation": item["operation"]}, "wip_warehouse")
-                if jc_wh:
-                    target_wh = jc_wh
+            target_wh = jc_map.get((wo.name, item.get("operation"))) if item.get("operation") else None
+            target_wh = target_wh or wo.wip_warehouse
             
-            required_qty = (item["qty"] * wo.qty) / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
-            in_wip = frappe.db.get_value("Bin",
-                {"item_code": item["item_code"], "warehouse": target_wh},
-                "actual_qty") or 0
+            required_qty = (item["qty"] * wo.qty) / wo_bom_qty
+            in_wip = bin_map.get((item["item_code"], target_wh), 0)
             shortage = max(0, required_qty - in_wip)
             if shortage <= 0:
                 continue
