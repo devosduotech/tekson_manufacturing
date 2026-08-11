@@ -16,6 +16,9 @@
   },
   {
    "role": "System Manager"
+  },
+  {
+   "role": "All"
   }
  ],
  "script": "tekson_manufacturing/tekson_manufacturing/page/planner_dashboard/planner_dashboard.js",
