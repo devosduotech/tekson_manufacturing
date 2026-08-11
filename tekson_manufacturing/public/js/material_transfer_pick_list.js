@@ -4,18 +4,12 @@
  * Adds "Pick List" button to Work Order List View for quick access.
  */
 
-frappe.listview_settings['Work Order'] = {
-    onload: function(listview) {
-        listview.page.add_action_item(__('Pick List'), function() {
-            let selected = listview.get_checked_items();
-            let work_order = selected.length === 1 ? selected[0].name : '';
-            
-            let url = '/app/query-report/Material Transfer Pick List';
-            if (work_order) {
-                url += '?work_order=' + encodeURIComponent(work_order);
-            }
-            
-            window.open(url, '_blank');
-        });
-    }
+var wos = frappe.listview_settings['Work Order'] || {};
+wos.onload = function(listview) {
+    listview.page.add_action_item(__('Pick List'), function() {
+        let wo = listview.get_checked_items().length === 1 ? listview.get_checked_items()[0].name : '';
+        let url = '/app/query-report/Material Transfer Pick List' + (wo ? '?work_order=' + encodeURIComponent(wo) : '');
+        window.open(url, '_blank');
+    });
 };
+frappe.listview_settings['Work Order'] = wos;

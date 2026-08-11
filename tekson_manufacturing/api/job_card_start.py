@@ -28,7 +28,6 @@ def start_job_card(job_card_name):
     
     # Save
     jc.save(ignore_permissions=True)
-    frappe.db.commit()
     
     return {"success": True, "message": "Job Card started successfully"}
 
