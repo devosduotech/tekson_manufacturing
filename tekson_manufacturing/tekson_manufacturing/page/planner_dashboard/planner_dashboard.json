@@ -12,12 +12,6 @@
  "page_name": "planner-dashboard",
  "roles": [
   {
-   "role": "Manufacturing User"
-  },
-  {
-   "role": "System Manager"
-  },
-  {
    "role": "All"
   }
  ],
