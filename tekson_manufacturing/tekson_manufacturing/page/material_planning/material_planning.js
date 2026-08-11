@@ -1,7 +1,7 @@
 frappe.pages['material-planning'].on_page_load = function(wrapper) {
     let page = frappe.ui.make_app_page({parent: wrapper, title: 'Daily Material Planning', single_column: true});
     
-    let html = '<div style="padding:30px; max-width:900px;"><h3>Daily Material Planning</h3><p>Generate Material Requests for stores.</p><hr><div class="row" style="margin-bottom:15px;"><div class="col-sm-7"><label>Production Plan</label><select id="pp_select" class="form-control" style="width:100%;"></select></div><div class="col-sm-5"><label>Planned Start Date</label><div id="plan_date_wrapper" style="margin-top:5px;"></div></div></div><div class="row"><div class="col-sm-12"><button id="gen_btn" class="btn btn-primary btn-lg">Generate Material Requests</button></div></div><div id="result_area" style="margin-top:20px;"></div></div>';
+    let html = '<div style="padding:30px; max-width:1000px;"><h3>Daily Material Planning</h3><p>Generate Material Requests for stores.</p><hr><div class="row" style="margin-bottom:15px;"><div class="col-sm-8"><label style="font-weight:600">Production Plan</label><select id="pp_select" class="form-control"></select></div><div class="col-sm-4"><label style="font-weight:600; white-space:nowrap;">Planned Start Date *</label><div id="plan_date_wrapper" style="margin-top:5px;"></div></div></div><div class="row"><div class="col-sm-12"><button id="gen_btn" class="btn btn-primary btn-lg">Generate Material Requests</button></div></div><div id="result_area" style="margin-top:20px;"></div></div>';
     page.body.html(html);
     
     var dateField = frappe.ui.form.make_control({
