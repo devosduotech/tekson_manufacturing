@@ -8,8 +8,8 @@
 
 Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends standard ERPNext Manufacturing with readiness evaluation, dependency validation, and automated workflow controls — without replacing ERPNext's inventory, costing, or backflush engine.
 
-**Status:** ✅ Phase 1.1 Complete — Ready for UAT
-**Version:** v15.1.1
+**Status:** ✅ Phase 1.2 — v15.1.2 Released
+**Version:** v15.1.2
 **Last Updated:** August 10, 2026
 
 ---
