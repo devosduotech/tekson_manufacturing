@@ -25,7 +25,7 @@ frappe.pages['planner-dashboard'].on_page_load = function(wrapper) {
     page.body.html(html);
     
     frappe.call({
-        method: 'tekson_manufacturing.intelligence.analytics.planner_kpi.get_planner_kpis',
+        method: 'tekson_manufacturing.api.intelligence.planner_kpis',
         callback: function(r) {
             let d = r.message || {};
             page.body.find('#kpi_total').text(d.total_wo || 0);

@@ -25,7 +25,7 @@ frappe.pages['stores-dashboard'].on_page_load = function(wrapper) {
     page.body.html(html);
     
     frappe.call({
-        method: 'tekson_manufacturing.intelligence.analytics.planner_kpi.get_stores_kpis',
+        method: 'tekson_manufacturing.api.intelligence.stores_kpis',
         callback: function(r) {
             let d = r.message || {};
             page.body.find('#kpi_mr').text(d.mr_count || 0);
