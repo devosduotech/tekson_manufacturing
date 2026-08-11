@@ -33,9 +33,12 @@ frappe.ui.form.on('Production Plan', {
                                 } else {
                                     let msg = (res && res.message) || __('All materials already in WIP for {0}').format(values.planned_date);
                                     frappe.msgprint({title: __('No MRs'), message: msg, indicator: 'blue'});
+                                    }
                                 }
+                            },
+                            error: function(err) {
+                                frappe.msgprint({title: __('Error'), message: __('Failed to generate: {0}').format(err), indicator: 'red'});
                             }
-                        });
                     }
                 });
                 d.show();

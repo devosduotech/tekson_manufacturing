@@ -18,6 +18,9 @@ def start_job_card(job_card_name):
     This method ensures material validation runs before allowing JC start,
     bypassing hook registration issues.
     """
+    if not frappe.db.exists("Job Card", job_card_name):
+        frappe.throw(_("Job Card {0} not found").format(job_card_name))
+    
     jc = frappe.get_doc('Job Card', job_card_name)
     
     # Change status first
@@ -43,6 +46,9 @@ def complete_job_card(job_card_name):
     
     Returns: dict with success status
     """
+    if not frappe.db.exists("Job Card", job_card_name):
+        frappe.throw(_("Job Card {0} not found").format(job_card_name))
+    
     jc = frappe.get_doc('Job Card', job_card_name)
     
     # Validate can complete

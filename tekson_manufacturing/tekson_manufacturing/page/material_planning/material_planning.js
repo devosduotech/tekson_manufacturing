@@ -14,7 +14,7 @@ frappe.pages['material-planning'].on_page_load = function(wrapper) {
     frappe.call({method:'tekson_manufacturing.planning.material_planning_service.search_production_plans',args:{txt:''},callback:function(r){
         var sel = page.body.find('#pp_select');
         (r.message||[]).forEach(function(pp){sel.append('<option value="'+pp.name+'">'+pp.name+'</option>');});
-    }});
+    },error:function(){}});
     
     page.body.find('#gen_btn').on('click',function(){
         var pp = page.body.find('#pp_select').val(), dt = dateField.get_value();
@@ -27,6 +27,6 @@ frappe.pages['material-planning'].on_page_load = function(wrapper) {
                 area.append('<div class="alert alert-success"><b>'+res.created_mrs.length+'</b> MR(s) for <b>'+res.planned_date+'</b></div>');
                 (res.details||[]).forEach(function(d){area.append('<div class="alert alert-info" style="margin:3px 0"><a href="/app/material-request/'+d.name+'"><b>'+d.name+'</b></a> &mdash; '+d.department_wip+' ('+d.items+' items)</div>');});
             }else{area.append('<div class="alert alert-warning">'+(res.message||'All materials in WIP')+'</div>');}
-        }});
+        },error:function(err){btn.prop('disabled',false).text('Generate MRs');frappe.msgprint('Error: '+err);}});
     });
 };
