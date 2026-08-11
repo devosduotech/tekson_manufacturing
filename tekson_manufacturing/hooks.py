@@ -49,9 +49,6 @@ doctype_list_js = {
 doctype_js = {
     "Production Plan": "public/js/production_plan_mr.js",
 }
-    # Temporarily disabled - Frappe v15 compatibility issue
-    # "Production Plan": "public/js/production_plan_mr.js",
-}
 
 # Reports
 # ------------------
