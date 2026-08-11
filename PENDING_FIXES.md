@@ -1,8 +1,8 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
 **Date:** Aug 10, 2026
-**Version:** v15.2.0-dev
-**Fixed in v15.2.0:** 4 HIGH + 2 MEDIUM + 2 LOW items
+**Version:** v15.1.3
+**Fixed in v15.1.3:** 4 HIGH items
 
 ---
 
