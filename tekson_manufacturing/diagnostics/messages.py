@@ -227,6 +227,8 @@ class DiagnosticMessages:
             dict with formatted message per DM-001
         """
         if isinstance(work_order, str):
+            if not frappe.db.exists("Work Order", work_order):
+                return {"title": "Error", "message_plain": f"Work Order {work_order} not found"}
             wo = frappe.get_doc("Work Order", work_order)
         else:
             wo = work_order
@@ -584,10 +586,10 @@ Details:
 {diagnostic.get('details', {})}
                 """.strip()
             )
-        except Exception:
+        except Exception as e:
             frappe.log_error(
                 title="Failed to log MES diagnostic",
-                message=f"Diagnostic: {diagnostic.get('title', 'Unknown')}"
+                message=f"Diagnostic: {diagnostic.get('title', 'Unknown')}\nError: {str(e)}"
             )
     
     def build_aggregated_diagnostic(
