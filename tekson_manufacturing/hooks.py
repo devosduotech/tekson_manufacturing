@@ -37,9 +37,12 @@ override_doctype_class = {
 
 app_include_js = [
     "/assets/tekson_manufacturing/js/job_card_list.js",
-    "/assets/tekson_manufacturing/js/material_transfer_pick_list.js",
-    "/assets/tekson_manufacturing/js/production_plan_mr.js"
+    "/assets/tekson_manufacturing/js/material_transfer_pick_list.js"
 ]
+
+doctype_js = {
+    "Production Plan": "public/js/production_plan_mr.js",
+}
 
 # Reports
 # ------------------
