@@ -5,10 +5,12 @@ from frappe.utils import today, add_days, getdate
 
 
 @frappe.whitelist()
-def get_calendar(days=7):
-    """Return WOs grouped by planned_start_date for next N days"""
-    from_date = today()
-    to_date = add_days(from_date, days)
+def get_calendar(from_date=None, to_date=None, days=7):
+    """Return WOs grouped by planned_start_date for date range"""
+    if not from_date:
+        from_date = today()
+    if not to_date:
+        to_date = add_days(from_date, days)
     
     wos = frappe.get_all("Work Order", {
         "docstatus": 1, "status": ["!=", "Completed"],

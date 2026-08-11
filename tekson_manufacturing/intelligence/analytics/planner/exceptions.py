@@ -5,27 +5,25 @@ from frappe.utils import today, getdate, add_days
 
 
 @frappe.whitelist()
-def get_exceptions():
-    today_date = today()
+def get_exceptions(planned_date=None):
+    """Get exceptions for a specific planned date"""
+    if not planned_date:
+        planned_date = today()
     
-    # Overdue: planned_start_date < today, not completed
+    # Overdue: planned_start_date < planned_date, not completed
     overdue_wo = frappe.get_all("Work Order", {
         "docstatus": 1, "status": ["!=", "Completed"],
-        "planned_start_date": ["<", today_date]
+        "planned_start_date": ["<", planned_date]
     }, ["name", "production_item", "planned_start_date", "status"], limit=10)
     
     overdue = []
+    severity = {"critical": 0, "high": 0, "medium": 0}
     for wo in overdue_wo:
-        days = (getdate(today_date) - getdate(wo.planned_start_date)).days
+        days = (getdate(planned_date) - getdate(wo.planned_start_date)).days
         overdue.append({
             "name": wo.name, "item": wo.production_item, "status": wo.status,
             "date": str(wo.planned_start_date)[:10], "days_overdue": days
         })
-    
-    # Severity classification
-    severity = {"critical": 0, "high": 0, "medium": 0}
-    for wo in overdue_wo:
-        days = (getdate(today_date) - getdate(wo.planned_start_date)).days
         if days > 5: severity["critical"] += 1
         elif days > 1: severity["high"] += 1
         else: severity["medium"] += 1

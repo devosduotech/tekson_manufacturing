@@ -5,11 +5,13 @@ from collections import Counter
 
 
 @frappe.whitelist()
-def get_dept_load():
-    """Return department workload — active WOs per department"""
-    wos = frappe.get_all("Work Order", {
-        "docstatus": 1, "status": ["!=", "Completed"]
-    }, ["wip_warehouse", "name", "qty"])
+def get_dept_load(planned_date=None):
+    """Return department workload — WOs for planned_date"""
+    filters = {"docstatus": 1, "status": ["!=", "Completed"]}
+    if planned_date:
+        filters["planned_start_date"] = planned_date
+    
+    wos = frappe.get_all("Work Order", filters=filters, fields=["wip_warehouse", "name", "qty"])
     
     dept = Counter()
     total_qty = Counter()
@@ -26,11 +28,13 @@ def get_dept_load():
 
 
 @frappe.whitelist()
-def get_fg_mix():
-    """Return FG product mix — count of WOs per production_item"""
-    wos = frappe.get_all("Work Order", {
-        "docstatus": 1, "status": ["!=", "Completed"]
-    }, ["production_item", "qty"])
+def get_fg_mix(planned_date=None):
+    """Return FG product mix — WOs per production_item for planned_date"""
+    filters = {"docstatus": 1, "status": ["!=", "Completed"]}
+    if planned_date:
+        filters["planned_start_date"] = planned_date
+    
+    wos = frappe.get_all("Work Order", filters=filters, fields=["production_item", "qty"])
     
     mix = Counter()
     for wo in wos:
