@@ -1,39 +1,44 @@
-"""Stores Dashboard KPIs"""
-
+"""Stores KPIs - Material Health Metrics"""
 import frappe
 from frappe.utils import today
 
 
 @frappe.whitelist()
 def get_stores_kpis(planned_date=None):
+    """Return stores health KPIs"""
     if not planned_date:
         planned_date = today()
     
-    mr_count = frappe.db.count("Material Request", {
-        "docstatus": 1, "status": ["!=", "Stopped"],
-        "schedule_date": planned_date
+    # Pending Material Requests
+    pending_mrs = frappe.db.count("Material Request", {
+        "docstatus": 1,
+        "status": ["!=", "Cancelled"],
+        "material_request_type": "Material Transfer"
     })
     
-    wos = frappe.get_all("Work Order", {
-        "docstatus": 1, "planned_start_date": planned_date,
-        "status": ["!=", "Completed"]
-    }, ["name", "wip_warehouse"])
+    # Pending Pick Lists
+    pending_pick_lists = frappe.db.count("Pick List", {
+        "docstatus": 1,
+        "status": "Open"
+    })
     
-    dept_breakdown = {}
-    items_short = 0
+    # WIP Transfers Today
+    wip_transfers = frappe.db.count("Stock Entry", {
+        "docstatus": 1,
+        "stock_entry_type": "Material Transfer for Manufacture",
+        "posting_date": planned_date
+    })
     
-    for wo in wos:
-        if not wo.wip_warehouse: continue
-        bom_no = frappe.db.get_value("Work Order", wo.name, "bom_no")
-        if not bom_no: continue
-        for item in frappe.get_all("BOM Item", {"parent": bom_no}, ["item_code", "source_warehouse"]):
-            wh = item.source_warehouse or ""
-            if "Raw Material" not in wh and "BOF" not in wh:
-                continue
-            stock = frappe.db.get_value("Bin", {"item_code": item.item_code, "warehouse": wo.wip_warehouse}, "actual_qty") or 0
-            if stock <= 0:
-                items_short += 1
-                dept = wo.wip_warehouse.split(" - ")[0]
-                dept_breakdown[dept] = dept_breakdown.get(dept, 0) + 1
+    # Material Shortages (Job Cards waiting for material)
+    material_short = frappe.db.count("Job Card", {
+        "docstatus": 1,
+        "status": "Open",
+        "custom_material_status": ["in", ["Waiting for Material", "Material Short"]]
+    })
     
-    return {"mr_count": mr_count, "items_short": items_short, "dept_breakdown": dept_breakdown}
+    return {
+        "pending_mrs": pending_mrs,
+        "pending_pick_lists": pending_pick_lists,
+        "wip_transfers": wip_transfers,
+        "material_short": material_short
+    }
