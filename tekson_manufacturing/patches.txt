@@ -2,4 +2,4 @@
 # Patches added in this section will be executed before doctypes are migrated
 
 [post_model_sync]
-tekson_manufacturing.patches.create_planner_dashboard_page.execute
+# Dashboard pages moved to Frappe Insights - patch removed
