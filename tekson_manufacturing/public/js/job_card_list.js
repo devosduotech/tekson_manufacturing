@@ -6,11 +6,12 @@
 
 frappe.listview_settings['Job Card'] = {
     onload: function(listview) {
-        // Hide name column, show operation instead
+        // Hide name column
         listview.hide_name_column = true;
         
-        // Add custom fields to display
+        // Add fields to display (explicitly include 'status')
         listview.settings.add_fields = [
+            "status",
             "operation",
             "production_item", 
             "for_quantity",
@@ -18,14 +19,17 @@ frappe.listview_settings['Job Card'] = {
             "work_order"
         ];
         
-        // Status color coding
+        // Status color coding - matches ERPNext Job Card status values
         listview.settings.get_indicator = function(doc) {
             const colors = {
                 "Open": "blue",
                 "Work In Progress": "green",
+                "Partially Transferred": "lightblue",
+                "Material Transferred": "cyan",
                 "On Hold": "orange",
-                "Completed": "darkgrey",
-                "Stopped": "red"
+                "Submitted": "green",
+                "Cancelled": "red",
+                "Completed": "darkgrey"
             };
             const status = doc.status || "Open";
             return [__(status), colors[status] || "gray", ""];
