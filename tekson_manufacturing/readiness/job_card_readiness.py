@@ -189,7 +189,6 @@ class JobCardReadinessEngine:
         current_values = frappe.db.get_value('Job Card', job_card_name, [
             'custom_material_status',
             'custom_readiness_status',
-            'custom_can_start_operation',
             'custom_material_available_for_operation',
             'custom_blocked_by',
             'custom_start_status'
@@ -217,9 +216,6 @@ class JobCardReadinessEngine:
         
         if current_values.custom_readiness_status != result.readiness_status:
             updates['custom_readiness_status'] = result.readiness_status
-        
-        if current_values.custom_can_start_operation != result.can_start:
-            updates['custom_can_start_operation'] = result.can_start
         
         if current_values.custom_material_available_for_operation != result.material_available:
             updates['custom_material_available_for_operation'] = result.material_available

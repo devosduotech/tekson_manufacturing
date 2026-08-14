@@ -219,7 +219,20 @@ def update_job_card_status(doc, method=None):
     
     service = JobCardService()
     
-    # Update all status fields
+    # Set all status fields based on JC state
+    if doc.status == "Completed":
+        doc.custom_start_status = "Completed"
+        doc.custom_can_start_operation = 0
+        doc.custom_material_available_for_operation = 0
+        return
+    
+    if doc.status == "Work In Progress":
+        doc.custom_start_status = "In Progress"
+        doc.custom_can_start_operation = 0
+        doc.custom_material_available_for_operation = 0
+        return
+    
+    # Open JC — evaluate readiness
     service.update_start_status(doc)
     service.update_dependency_status(doc)
     service.update_material_status(doc)
@@ -264,6 +277,10 @@ def validate_job_card_start(doc, method=None):
         from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
         engine = MaterialReadinessEngine(work_order=doc.work_order)
         readiness = engine.evaluate_material_readiness(work_order=doc.work_order, job_card=doc.name)
+        
+        # Update custom_can_start_operation based on ACTUAL live check result
+        doc.custom_can_start_operation = 1 if readiness.is_ready else 0
+        doc.custom_material_available_for_operation = 1 if readiness.is_ready else 0
         
         if not readiness.is_ready:
             # Block the start
