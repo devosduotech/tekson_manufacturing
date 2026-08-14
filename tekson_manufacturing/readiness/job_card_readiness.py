@@ -88,29 +88,29 @@ class JobCardReadinessEngine:
     
     def refresh_next_job_card(self, job_card: Any) -> None:
         """
-        Refresh only next operation (not entire downstream chain)
+        Refresh all JCs at the next sequence (supports parallel operations)
         
         Rationale:
-        - JC-20 complete → refresh JC-30
-        - JC-30 will refresh JC-40 when it completes
-        - No need to refresh JC-40 now (still blocked by JC-30)
+        - JC-001 complete → refresh ALL JCs with sequence_id = 2
+        - Each downstream JC will refresh its own next when it completes
+        - Supports parallel operations (multiple JCs at same sequence)
         
         Args:
             job_card: Job Card that was completed
         """
-        # Find NEXT operation only
-        next_jc_name = frappe.db.get_value('Job Card',
+        # Find ALL JCs at the next sequence (supports parallel operations)
+        next_jcs = frappe.get_all('Job Card',
             filters={
                 'work_order': job_card.work_order,
                 'sequence_id': job_card.sequence_id + 1,
                 'docstatus': ['!=', 2]
             },
-            fieldname='name')
+            fields=['name'])
         
-        if next_jc_name:
-            next_jc = frappe.get_doc('Job Card', next_jc_name)
+        for jc in next_jcs:
+            next_jc = frappe.get_doc('Job Card', jc.name)
             result = self.evaluate_job_card(next_jc)
-            self.apply_result_to_job_card(next_jc_name, result)
+            self.apply_result_to_job_card(jc.name, result)
     
     def evaluate_job_card(self, job_card) -> ReadinessResult:
         """
