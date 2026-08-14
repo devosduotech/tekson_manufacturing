@@ -42,7 +42,6 @@ override_doctype_class = {
 # ]
 
 doctype_list_js = {
-    "Job Card": "public/js/job_card_list.js",
     "Work Order": "public/js/material_transfer_pick_list.js",
 }
 

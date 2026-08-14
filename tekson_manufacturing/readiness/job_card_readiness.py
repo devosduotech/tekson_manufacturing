@@ -191,11 +191,23 @@ class JobCardReadinessEngine:
             'custom_readiness_status',
             'custom_can_start_operation',
             'custom_material_available_for_operation',
-            'custom_blocked_by'
+            'custom_blocked_by',
+            'custom_start_status'
         ], as_dict=True)
         
         if not current_values:
             frappe.throw(_("Job Card {0} not found").format(job_card_name))
+        
+        # Map ReadinessStatus to custom_start_status values
+        start_status_map = {
+            ReadinessStatus.READY: "Ready to Start",
+            ReadinessStatus.WAITING_MATERIAL: "Awaiting Material",
+            ReadinessStatus.WAITING_PREVIOUS_OP: "Awaiting Previous Operation",
+            ReadinessStatus.BLOCKED: "Awaiting",
+            ReadinessStatus.IN_PROGRESS: "In Progress",
+            ReadinessStatus.COMPLETED: "Completed",
+        }
+        new_start_status = start_status_map.get(result.readiness_status, "Awaiting")
         
         # Build update dict only for changed fields
         updates = {}
@@ -214,6 +226,9 @@ class JobCardReadinessEngine:
         
         if current_values.custom_blocked_by != result.blocked_by:
             updates['custom_blocked_by'] = result.blocked_by
+        
+        if current_values.custom_start_status != new_start_status:
+            updates['custom_start_status'] = new_start_status
         
         # Always update timestamp
         updates['custom_dependency_last_updated'] = result.last_updated
