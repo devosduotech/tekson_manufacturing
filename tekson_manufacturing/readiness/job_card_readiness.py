@@ -69,12 +69,15 @@ class JobCardReadinessEngine:
             result = self.evaluate_job_card(jc)
             self.apply_result_to_job_card(jc.name, result)
     
-    def refresh_job_card(self, job_card: Any) -> None:
+    def refresh_job_card(self, job_card: Any) -> ReadinessResult:
         """
         Evaluate single Job Card
         
         Args:
             job_card: Job Card name or document
+        
+        Returns:
+            ReadinessResult from evaluation
         
         Performance: < 500ms
         """
@@ -85,6 +88,7 @@ class JobCardReadinessEngine:
         
         result = self.evaluate_job_card(jc)
         self.apply_result_to_job_card(jc.name, result)
+        return result
     
     def refresh_next_job_card(self, job_card: Any) -> None:
         """

@@ -48,14 +48,24 @@ def check_can_complete(job_card):
 @frappe.whitelist()
 def refresh_job_card_status(job_card):
     """
-    Refresh Job Card status fields
+    Refresh Job Card status fields using the Readiness Engine (single evaluation)
+    
+    Re-runs the same dependency + material evaluation used by the auto-update
+    hooks, ensuring manual and automatic refresh are consistent.
     
     Args:
         job_card: Job Card name
     
-    Returns: success message
+    Returns: dict with success, readiness_status, can_start
     """
-    service = JobCardService()
-    service.refresh_status(job_card)
+    from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
     
-    return {"success": True, "message": "Job Card status refreshed"}
+    engine = JobCardReadinessEngine()
+    result = engine.refresh_job_card(job_card)
+    
+    return {
+        "success": True,
+        "message": "Job Card status refreshed",
+        "readiness_status": result.readiness_status,
+        "can_start": result.can_start,
+    }
