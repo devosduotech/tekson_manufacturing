@@ -155,24 +155,30 @@ def _get_raw_bom_items(bom_no: str) -> List[Dict]:
     return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
 
 
-def _explode_bom(bom_no: str, multiplier: float = 1.0, _seen: Optional[set] = None) -> List[Dict]:
+def _explode_bom(bom_no: str, multiplier: float = 1.0, _ancestors: Optional[set] = None) -> List[Dict]:
     """
     Recursively explode a multi-level BOM to get all raw material items.
     
     Args:
         bom_no: BOM name
         multiplier: Quantity multiplier from parent BOM
-        _seen: Set of visited BOMs to prevent infinite recursion
+        _ancestors: Set of BOMs in the current recursion path (cycle detection only)
     
     Returns:
         List of raw material items with exploded quantities
-    """
-    if _seen is None:
-        _seen = set()
     
-    if bom_no in _seen:
+    Note:
+        Uses path-based cycle detection (ancestors), NOT a global visited set.
+        This allows the same sub-assembly BOM to be exploded multiple times
+        when it legitimately appears in multiple places in the parent BOM.
+    """
+    if _ancestors is None:
+        _ancestors = set()
+    
+    # Cycle detection: only skip if this BOM is already in the current path
+    if bom_no in _ancestors:
         return []
-    _seen.add(bom_no)
+    _ancestors.add(bom_no)
     
     bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
     items = frappe.get_all("BOM Item", {"parent": bom_no},
@@ -186,9 +192,9 @@ def _explode_bom(bom_no: str, multiplier: float = 1.0, _seen: Optional[set] = No
             "name")
         
         if sub_bom:
-            # Recurse into sub-assembly BOM
+            # Recurse into sub-assembly BOM (pass a copy of ancestors for this branch)
             sub_multiplier = multiplier * (item.qty / bom_qty)
-            result.extend(_explode_bom(sub_bom, sub_multiplier, _seen))
+            result.extend(_explode_bom(sub_bom, sub_multiplier, set(_ancestors)))
         else:
             # Raw material — add with exploded quantity
             result.append({
