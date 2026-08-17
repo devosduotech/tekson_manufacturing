@@ -155,30 +155,25 @@ def _get_raw_bom_items(bom_no: str) -> List[Dict]:
     return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
 
 
-def _explode_bom(bom_no: str, multiplier: float = 1.0, _ancestors: Optional[set] = None) -> List[Dict]:
+def _explode_bom(bom_no: str, _memo: Optional[dict] = None) -> List[Dict]:
     """
-    Recursively explode a multi-level BOM to get all raw material items.
+    Recursively explode a multi-level BOM to get raw material items per 1 unit.
+    
+    Uses memoization: each BOM is exploded once (per unit), cached, and scaled
+    by the reference quantity when it appears in a parent BOM.
     
     Args:
         bom_no: BOM name
-        multiplier: Quantity multiplier from parent BOM
-        _ancestors: Set of BOMs in the current recursion path (cycle detection only)
+        _memo: Cache of BOM name -> list of raw material items (per 1 unit)
     
     Returns:
-        List of raw material items with exploded quantities
-    
-    Note:
-        Uses path-based cycle detection (ancestors), NOT a global visited set.
-        This allows the same sub-assembly BOM to be exploded multiple times
-        when it legitimately appears in multiple places in the parent BOM.
+        List of raw material items with quantities per 1 unit of this BOM
     """
-    if _ancestors is None:
-        _ancestors = set()
+    if _memo is None:
+        _memo = {}
     
-    # Cycle detection: only skip if this BOM is already in the current path
-    if bom_no in _ancestors:
-        return []
-    _ancestors.add(bom_no)
+    if bom_no in _memo:
+        return _memo[bom_no]
     
     bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
     items = frappe.get_all("BOM Item", {"parent": bom_no},
@@ -192,20 +187,24 @@ def _explode_bom(bom_no: str, multiplier: float = 1.0, _ancestors: Optional[set]
             "name")
         
         if sub_bom:
-            # Recurse into sub-assembly BOM (pass a copy of ancestors for this branch)
-            sub_multiplier = multiplier * (item.qty / bom_qty)
-            result.extend(_explode_bom(sub_bom, sub_multiplier, set(_ancestors)))
+            # Get sub-assembly's raw materials (per 1 unit of sub-assembly)
+            sub_per_unit = _explode_bom(sub_bom, _memo)
+            # Scale by how many sub-assemblies per unit of this BOM
+            scale = item.qty / bom_qty
+            for s in sub_per_unit:
+                result.append({**s, "qty": s["qty"] * scale})
         else:
-            # Raw material — add with exploded quantity
+            # Raw material — add per 1 unit of this BOM
             result.append({
                 "item_code": item.item_code,
                 "item_name": item.item_name,
-                "qty": item.qty * multiplier / bom_qty,
+                "qty": item.qty / bom_qty,
                 "uom": item.uom,
                 "source_warehouse": item.source_warehouse,
                 "operation": item.operation,
             })
     
+    _memo[bom_no] = result
     return result
 
 
