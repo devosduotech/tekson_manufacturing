@@ -73,7 +73,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 if jc_wh:
                     target_wh = jc_wh
             
-            required_qty = (item["qty"] * wo.qty) / (frappe.db.get_value("BOM", wo.bom_no, "quantity") or 1)
+            required_qty = item["qty"] * wo.qty
             in_wip = frappe.db.get_value("Bin",
                 {"item_code": item["item_code"], "warehouse": target_wh},
                 "actual_qty") or 0
@@ -148,12 +148,59 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 
 
 def _get_raw_bom_items(bom_no: str) -> List[Dict]:
-    """Get BOM items that are raw materials or BOF items only"""
-    all_items = frappe.get_all("BOM Item", {"parent": bom_no},
-        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
+    """Get BOM items that are raw materials or BOF items only (exploded multi-level)"""
+    all_items = _explode_bom(bom_no)
     
     # Filter: only items from Raw Material Stores or BOF Stores
-    return [i for i in all_items if _is_source_warehouse(i.source_warehouse)]
+    return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
+
+
+def _explode_bom(bom_no: str, multiplier: float = 1.0, _seen: Optional[set] = None) -> List[Dict]:
+    """
+    Recursively explode a multi-level BOM to get all raw material items.
+    
+    Args:
+        bom_no: BOM name
+        multiplier: Quantity multiplier from parent BOM
+        _seen: Set of visited BOMs to prevent infinite recursion
+    
+    Returns:
+        List of raw material items with exploded quantities
+    """
+    if _seen is None:
+        _seen = set()
+    
+    if bom_no in _seen:
+        return []
+    _seen.add(bom_no)
+    
+    bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
+    items = frappe.get_all("BOM Item", {"parent": bom_no},
+        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
+    
+    result = []
+    for item in items:
+        # Check if this item has its own BOM (sub-assembly)
+        sub_bom = frappe.db.get_value("BOM",
+            {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+            "name")
+        
+        if sub_bom:
+            # Recurse into sub-assembly BOM
+            sub_multiplier = multiplier * (item.qty / bom_qty)
+            result.extend(_explode_bom(sub_bom, sub_multiplier, _seen))
+        else:
+            # Raw material — add with exploded quantity
+            result.append({
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": item.qty * multiplier / bom_qty,
+                "uom": item.uom,
+                "source_warehouse": item.source_warehouse,
+                "operation": item.operation,
+            })
+    
+    return result
 
 
 def _is_source_warehouse(warehouse: str) -> bool:

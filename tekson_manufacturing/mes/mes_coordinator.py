@@ -137,6 +137,14 @@ class MESExecutionCoordinator:
             validate_stock_entry_permission(stock_entry.name)
             validate_manufacturing_role()
             
+            # Handle Manufacture SE: update WO status to Completed
+            if stock_entry.purpose == "Manufacture":
+                if stock_entry.work_order:
+                    from tekson_manufacturing.execution.execution_engine import ExecutionEngine
+                    engine = ExecutionEngine()
+                    engine.update_work_order_status(stock_entry.work_order)
+                return
+            
             # Skip if not Material Transfer for Manufacture
             if stock_entry.purpose != "Material Transfer for Manufacture":
                 return
