@@ -140,7 +140,8 @@ class JobCardService:
                 if not readiness.is_ready:
                     job_card.custom_start_status = "Awaiting Material"
                 else:
-                    job_card.custom_start_status = "Material Available"
+                    # Material available + dependencies met = Ready to Start
+                    job_card.custom_start_status = "Ready to Start"
             else:
                 job_card.custom_start_status = "Awaiting"
     

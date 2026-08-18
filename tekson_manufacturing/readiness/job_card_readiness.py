@@ -69,12 +69,15 @@ class JobCardReadinessEngine:
             result = self.evaluate_job_card(jc)
             self.apply_result_to_job_card(jc.name, result)
     
-    def refresh_job_card(self, job_card: Any) -> None:
+    def refresh_job_card(self, job_card: Any) -> ReadinessResult:
         """
         Evaluate single Job Card
         
         Args:
             job_card: Job Card name or document
+        
+        Returns:
+            ReadinessResult from evaluation
         
         Performance: < 500ms
         """
@@ -85,32 +88,33 @@ class JobCardReadinessEngine:
         
         result = self.evaluate_job_card(jc)
         self.apply_result_to_job_card(jc.name, result)
+        return result
     
     def refresh_next_job_card(self, job_card: Any) -> None:
         """
-        Refresh only next operation (not entire downstream chain)
+        Refresh all JCs at the next sequence (supports parallel operations)
         
         Rationale:
-        - JC-20 complete → refresh JC-30
-        - JC-30 will refresh JC-40 when it completes
-        - No need to refresh JC-40 now (still blocked by JC-30)
+        - JC-001 complete → refresh ALL JCs with sequence_id = 2
+        - Each downstream JC will refresh its own next when it completes
+        - Supports parallel operations (multiple JCs at same sequence)
         
         Args:
             job_card: Job Card that was completed
         """
-        # Find NEXT operation only
-        next_jc_name = frappe.db.get_value('Job Card',
+        # Find ALL JCs at the next sequence (supports parallel operations)
+        next_jcs = frappe.get_all('Job Card',
             filters={
                 'work_order': job_card.work_order,
                 'sequence_id': job_card.sequence_id + 1,
                 'docstatus': ['!=', 2]
             },
-            fieldname='name')
+            fields=['name'])
         
-        if next_jc_name:
-            next_jc = frappe.get_doc('Job Card', next_jc_name)
+        for jc in next_jcs:
+            next_jc = frappe.get_doc('Job Card', jc.name)
             result = self.evaluate_job_card(next_jc)
-            self.apply_result_to_job_card(next_jc_name, result)
+            self.apply_result_to_job_card(jc.name, result)
     
     def evaluate_job_card(self, job_card) -> ReadinessResult:
         """
@@ -189,13 +193,24 @@ class JobCardReadinessEngine:
         current_values = frappe.db.get_value('Job Card', job_card_name, [
             'custom_material_status',
             'custom_readiness_status',
-            'custom_can_start_operation',
             'custom_material_available_for_operation',
-            'custom_blocked_by'
+            'custom_blocked_by',
+            'custom_start_status'
         ], as_dict=True)
         
         if not current_values:
             frappe.throw(_("Job Card {0} not found").format(job_card_name))
+        
+        # Map ReadinessStatus to custom_start_status values
+        start_status_map = {
+            ReadinessStatus.READY: "Ready to Start",
+            ReadinessStatus.WAITING_MATERIAL: "Awaiting Material",
+            ReadinessStatus.WAITING_PREVIOUS_OP: "Awaiting Previous Operation",
+            ReadinessStatus.BLOCKED: "Awaiting",
+            ReadinessStatus.IN_PROGRESS: "In Progress",
+            ReadinessStatus.COMPLETED: "Completed",
+        }
+        new_start_status = start_status_map.get(result.readiness_status, "Awaiting")
         
         # Build update dict only for changed fields
         updates = {}
@@ -206,14 +221,14 @@ class JobCardReadinessEngine:
         if current_values.custom_readiness_status != result.readiness_status:
             updates['custom_readiness_status'] = result.readiness_status
         
-        if current_values.custom_can_start_operation != result.can_start:
-            updates['custom_can_start_operation'] = result.can_start
-        
         if current_values.custom_material_available_for_operation != result.material_available:
             updates['custom_material_available_for_operation'] = result.material_available
         
         if current_values.custom_blocked_by != result.blocked_by:
             updates['custom_blocked_by'] = result.blocked_by
+        
+        if current_values.custom_start_status != new_start_status:
+            updates['custom_start_status'] = new_start_status
         
         # Always update timestamp
         updates['custom_dependency_last_updated'] = result.last_updated

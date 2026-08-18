@@ -154,7 +154,10 @@ class MaterialReadinessEngine:
     
     def get_required_materials(self, work_order, operation=None):
         """
-        Get all materials required for the work order from BOM
+        Get raw materials required for the work order (direct BOM items only)
+        
+        Sub-assemblies (manufactured components) are SKIPPED — they are handled
+        by the child WO completion check (dependency engine), not material readiness.
         
         Optionally filtered by BOM Item.operation for per-JC evaluation.
         
@@ -166,32 +169,38 @@ class MaterialReadinessEngine:
         """
         materials = []
         
-        if work_order.bom_no:
-            bom_item_filters = {"parent": work_order.bom_no}
+        if not work_order.bom_no:
+            return materials
+        
+        bom_qty = self.get_bom_qty(work_order.bom_no)
+        direct_items = frappe.get_all(
+            "BOM Item",
+            filters={"parent": work_order.bom_no},
+            fields=["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"]
+        )
+        
+        for item in direct_items:
+            # Filter by operation if specified
+            if operation and item.operation and item.operation != operation:
+                continue
             
-            bom_items = frappe.db.get_all(
-                "BOM Item",
-                filters=bom_item_filters,
-                fields=["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"]
-            )
+            # Skip sub-assemblies (manufactured components) — handled by child WO check
+            sub_bom = frappe.db.get_value("BOM",
+                {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+                "name")
+            if sub_bom:
+                continue
             
-            bom_qty = self.get_bom_qty(work_order.bom_no)
+            required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
             
-            for item in bom_items:
-                # Filter by operation if specified
-                if operation and item.operation and item.operation != operation:
-                    continue
-                
-                required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
-                
-                materials.append({
-                    'item_code': item.item_code,
-                    'item_name': item.item_name,
-                    'qty': required_qty,
-                    'uom': item.uom,
-                    'source_warehouse': item.source_warehouse,
-                    'operation': item.operation
-                })
+            materials.append({
+                'item_code': item.item_code,
+                'item_name': item.item_name,
+                'qty': required_qty,
+                'uom': item.uom,
+                'source_warehouse': item.source_warehouse,
+                'operation': item.operation,
+            })
         
         return materials
     

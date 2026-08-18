@@ -442,7 +442,7 @@ class StockService:
             # Create Stock Entry
             stock_entry = frappe.get_doc({
                 'doctype': 'Stock Entry',
-                'stock_entry_type': 'Material Transfer',
+                'purpose': 'Material Transfer for Manufacture',
                 'work_order': work_order,
                 'from_warehouse': from_warehouse,
                 'to_warehouse': to_warehouse,

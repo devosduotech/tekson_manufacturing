@@ -65,4 +65,27 @@ def complete_job_card(job_card_name):
     jc.save(ignore_permissions=True)
     frappe.db.commit()
     
+    # Trigger downstream JC refresh (same as on_job_card_complete hook)
+    from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
+    engine = JobCardReadinessEngine()
+    engine.refresh_next_job_card(jc)
+    
+    # Complete WO if this was the last JC
+    all_jcs = frappe.get_all("Job Card",
+        {"work_order": jc.work_order},
+        ["name", "status", "docstatus"])
+    
+    pending = [j for j in all_jcs 
+               if j.name != jc.name 
+               and j.docstatus != 2 
+               and j.status != "Completed"]
+    
+    if len(pending) == 0:
+        frappe.enqueue(
+            "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
+            work_order=jc.work_order,
+            queue="short",
+            timeout=30
+        )
+    
     return {"success": True, "message": "Job Card completed successfully"}

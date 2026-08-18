@@ -54,16 +54,13 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     # MP-002: Calculate requirements per department WIP
     dept_items = {}
     
-    # Pre-fetch: JC wip_warehouse, BOM quantities, Bin stock — batched
+    # Pre-fetch: JC wip_warehouse, Bin stock — batched
     wo_names = [wo.name for wo in wos if wo.bom_no]
-    bom_nos = list(set(wo.bom_no for wo in wos if wo.bom_no))
     
     jc_map = {}
     if wo_names:
         for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]}, ["work_order", "operation", "wip_warehouse"]):
             jc_map[(jc.work_order, jc.operation)] = jc.wip_warehouse
-    
-    bom_map = {b["name"]: b["quantity"] or 1 for b in frappe.get_all("BOM", {"name": ["in", bom_nos]}, ["name", "quantity"])} if bom_nos else {}
     
     item_codes = set()
     for wo in wos:
@@ -82,7 +79,6 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             continue
         if not wo.wip_warehouse:
             continue
-        wo_bom_qty = bom_map.get(wo.bom_no, 1)
         
         for item in _get_raw_bom_items(wo.bom_no):
             source_wh = item.get("source_warehouse") or ""
@@ -92,7 +88,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             target_wh = jc_map.get((wo.name, item.get("operation"))) if item.get("operation") else None
             target_wh = target_wh or wo.wip_warehouse
             
-            required_qty = (item["qty"] * wo.qty) / wo_bom_qty
+            required_qty = item["qty"] * wo.qty
             in_wip = bin_map.get((item["item_code"], target_wh), 0)
             shortage = max(0, required_qty - in_wip)
             if shortage <= 0:
@@ -165,12 +161,64 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 
 
 def _get_raw_bom_items(bom_no: str) -> List[Dict]:
-    """Get BOM items that are raw materials or BOF items only"""
-    all_items = frappe.get_all("BOM Item", {"parent": bom_no},
-        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
+    """Get BOM items that are raw materials or BOF items only (exploded multi-level)"""
+    all_items = _explode_bom(bom_no)
     
     # Filter: only items from Raw Material Stores or BOF Stores
-    return [i for i in all_items if _is_source_warehouse(i.source_warehouse)]
+    return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
+
+
+def _explode_bom(bom_no: str, _memo: Optional[dict] = None) -> List[Dict]:
+    """
+    Recursively explode a multi-level BOM to get raw material items per 1 unit.
+    
+    Uses memoization: each BOM is exploded once (per unit), cached, and scaled
+    by the reference quantity when it appears in a parent BOM.
+    
+    Args:
+        bom_no: BOM name
+        _memo: Cache of BOM name -> list of raw material items (per 1 unit)
+    
+    Returns:
+        List of raw material items with quantities per 1 unit of this BOM
+    """
+    if _memo is None:
+        _memo = {}
+    
+    if bom_no in _memo:
+        return _memo[bom_no]
+    
+    bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
+    items = frappe.get_all("BOM Item", {"parent": bom_no},
+        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
+    
+    result = []
+    for item in items:
+        # Check if this item has its own BOM (sub-assembly)
+        sub_bom = frappe.db.get_value("BOM",
+            {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+            "name")
+        
+        if sub_bom:
+            # Get sub-assembly's raw materials (per 1 unit of sub-assembly)
+            sub_per_unit = _explode_bom(sub_bom, _memo)
+            # Scale by how many sub-assemblies per unit of this BOM
+            scale = item.qty / bom_qty
+            for s in sub_per_unit:
+                result.append({**s, "qty": s["qty"] * scale})
+        else:
+            # Raw material — add per 1 unit of this BOM
+            result.append({
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": item.qty / bom_qty,
+                "uom": item.uom,
+                "source_warehouse": item.source_warehouse,
+                "operation": item.operation,
+            })
+    
+    _memo[bom_no] = result
+    return result
 
 
 def _is_source_warehouse(warehouse: str) -> bool:

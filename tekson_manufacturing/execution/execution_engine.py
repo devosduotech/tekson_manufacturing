@@ -324,8 +324,16 @@ class ExecutionEngine:
                 else:
                     item.allow_zero_valuation_rate = 1
             
-            se.insert(ignore_permissions=True)
+            se.insert()
             se.submit()
+            
+            # Verify stock ledger entries were created
+            sle_count = frappe.db.count("Stock Ledger Entry", {"voucher_no": se.name})
+            if sle_count == 0:
+                frappe.log_error(
+                    title=f"WO Complete: No SLE created for {se.name}",
+                    message=f"Stock Entry {se.name} submitted but no stock ledger entries created"
+                )
             
             result['success'] = True
             result['message'] = "Work Order completed successfully"
