@@ -81,6 +81,26 @@ class MaterialReadinessEngine:
         for material in required_materials:
             item_code = material.get('item_code')
             required_qty = material.get('qty')
+            is_subassembly = material.get('is_subassembly', False)
+            
+            # Sub-assemblies are NOT checked against stock — they are gated
+            # by child WO completion (dependency), not by raw-material availability.
+            if is_subassembly:
+                child_wo = self.get_child_work_order(item_code, wo.name)
+                if child_wo:
+                    child_status = frappe.db.get_value("Work Order", child_wo, "status")
+                    if child_status != "Completed":
+                        shortage_details.append({
+                            'item_code': item_code,
+                            'item_name': material.get('item_name', ''),
+                            'required_qty': required_qty,
+                            'available_qty': 0,
+                            'shortage_qty': required_qty,
+                            'warehouse': department_warehouse,
+                            'reason': f"Child WO {child_wo} status: {child_status}"
+                        })
+                continue
+            
             total_required += required_qty
             
             # MR-014: Get available stock in Department WIP (Source of Truth)
@@ -102,26 +122,6 @@ class MaterialReadinessEngine:
                     'shortage_qty': shortage_qty,
                     'warehouse': department_warehouse
                 })
-            
-            # Check manufactured component: child WO incomplete + no stock = block
-            child_wo = self.get_child_work_order(item_code, wo.name)
-            if child_wo and available_qty < required_qty:
-                child_status = frappe.db.get_value("Work Order", child_wo, "status")
-                if child_status != "Completed":
-                    # Update existing shortage entry or add new one
-                    existing = next((s for s in shortage_details if s.get('item_code') == item_code), None)
-                    if existing:
-                        existing['reason'] = f"Child WO {child_wo} status: {child_status}"
-                    else:
-                        shortage_details.append({
-                            'item_code': item_code,
-                            'item_name': material.get('item_name', ''),
-                            'required_qty': required_qty,
-                            'available_qty': available_qty,
-                            'shortage_qty': required_qty,
-                            'warehouse': department_warehouse,
-                            'reason': f"Child WO {child_wo} status: {child_status}"
-                        })
         
         # Calculate totals
         shortage_qty = max(0, total_required - total_available)
@@ -154,10 +154,11 @@ class MaterialReadinessEngine:
     
     def get_required_materials(self, work_order, operation=None):
         """
-        Get raw materials required for the work order (direct BOM items only)
+        Get materials required for the work order (direct BOM items)
         
-        Sub-assemblies (manufactured components) are SKIPPED — they are handled
-        by the child WO completion check (dependency engine), not material readiness.
+        Raw materials are checked against stock; sub-assemblies (manufactured
+        components) are included with is_subassembly=True so the child-WO
+        completion check can gate the operation start.
         
         Optionally filtered by BOM Item.operation for per-JC evaluation.
         
@@ -165,7 +166,8 @@ class MaterialReadinessEngine:
             work_order: Work Order document
             operation: BOM Operation name to filter items (optional)
         
-        Returns: list of dicts with item_code, qty, uom, source_warehouse, operation
+        Returns: list of dicts with item_code, qty, uom, source_warehouse,
+                 operation, is_subassembly
         """
         materials = []
         
@@ -184,12 +186,9 @@ class MaterialReadinessEngine:
             if operation and item.operation and item.operation != operation:
                 continue
             
-            # Skip sub-assemblies (manufactured components) — handled by child WO check
             sub_bom = frappe.db.get_value("BOM",
                 {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
                 "name")
-            if sub_bom:
-                continue
             
             required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
             
@@ -200,6 +199,7 @@ class MaterialReadinessEngine:
                 'uom': item.uom,
                 'source_warehouse': item.source_warehouse,
                 'operation': item.operation,
+                'is_subassembly': bool(sub_bom),
             })
         
         return materials
@@ -839,6 +839,10 @@ def get_transfer_suggestions(work_order):
     suggestions = []
     
     for material in required_materials:
+        # Sub-assemblies are manufactured internally (child WO), not transferred from stores
+        if material.get('is_subassembly', False):
+            continue
+        
         item_code = material.get('item_code')
         required_qty = material.get('qty')
         source_warehouse = material.get('source_warehouse')
