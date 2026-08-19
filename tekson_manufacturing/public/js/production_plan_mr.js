@@ -8,7 +8,7 @@ frappe.ui.form.on('Production Plan', {
                 let d = new frappe.ui.Dialog({
                     title: __('Generate Material Requests'),
                     fields: [
-                        {fieldname: 'planned_date', fieldtype: 'Date', label: __('Planned Start Date'), 
+                        {fieldname: 'planned_date', fieldtype: 'Date', label: __('Planned Start Date'),
                          default: frappe.datetime.get_today(), reqd: 1},
                     ],
                     primary_action_label: __('Generate'),
@@ -33,12 +33,12 @@ frappe.ui.form.on('Production Plan', {
                                 } else {
                                     let msg = (res && res.message) || __('All materials already in WIP for {0}').format(values.planned_date);
                                     frappe.msgprint({title: __('No MRs'), message: msg, indicator: 'blue'});
-                                    }
                                 }
                             },
                             error: function(err) {
                                 frappe.msgprint({title: __('Error'), message: __('Failed to generate: {0}').format(err), indicator: 'red'});
                             }
+                        });
                     }
                 });
                 d.show();
