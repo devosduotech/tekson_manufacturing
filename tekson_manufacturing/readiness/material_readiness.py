@@ -123,6 +123,13 @@ class MaterialReadinessEngine:
                     'warehouse': department_warehouse
                 })
         
+        # Full-BOM child-WO gate: FG cannot start if ANY sub-assembly
+        # (at any BOM level, any operation) has an incomplete child WO.
+        # Runs regardless of operation filter so BOM Item.operation
+        # mismatches (e.g. "Assembly" vs "Final Assembly") cannot bypass it.
+        child_wo_shortages = self.check_all_child_wos_complete(wo.bom_no, wo.name)
+        shortage_details.extend(child_wo_shortages)
+        
         # Calculate totals
         shortage_qty = max(0, total_required - total_available)
         is_ready = len(shortage_details) == 0
@@ -724,6 +731,73 @@ class MaterialReadinessEngine:
         """, (item_code,), as_dict=True)
         
         return child_wo[0].name if child_wo else None
+
+    def get_all_sub_assembly_items(self, bom_no, _seen=None):
+        """
+        Collect ALL sub-assembly items across the full BOM tree (all levels).
+        
+        Returns a set of item_codes that are manufactured components
+        (have their own active BOM) anywhere in the BOM hierarchy.
+        
+        Args:
+            bom_no: BOM name to walk
+            _seen: memo set of visited BOMs (prevents infinite recursion)
+        
+        Returns: set of item_codes
+        """
+        if _seen is None:
+            _seen = set()
+        if not bom_no or bom_no in _seen:
+            return set()
+        _seen.add(bom_no)
+        
+        result = set()
+        items = frappe.get_all("BOM Item", {"parent": bom_no},
+            ["item_code"])
+        
+        for item in items:
+            sub_bom = frappe.db.get_value("BOM",
+                {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+                "name")
+            if sub_bom:
+                result.add(item.item_code)
+                result |= self.get_all_sub_assembly_items(sub_bom, _seen)
+        
+        return result
+
+    def check_all_child_wos_complete(self, bom_no, parent_wo):
+        """
+        Check ALL sub-assembly child WOs across the full BOM tree are complete.
+        
+        Business Rule: FG cannot start if ANY sub-assembly (at any BOM level)
+        has an incomplete child WO.
+        
+        Args:
+            bom_no: BOM name
+            parent_wo: parent Work Order name (for error context)
+        
+        Returns: list of shortage dicts (empty = all complete)
+        """
+        shortages = []
+        sub_items = self.get_all_sub_assembly_items(bom_no)
+        
+        for item_code in sub_items:
+            child_wo = self.get_child_work_order(item_code, parent_wo)
+            if child_wo:
+                child_status = frappe.db.get_value("Work Order", child_wo, "status")
+                if child_status != "Completed":
+                    item_name = frappe.db.get_value("Item", item_code, "item_name") or item_code
+                    shortages.append({
+                        'item_code': item_code,
+                        'item_name': item_name,
+                        'required_qty': 0,
+                        'available_qty': 0,
+                        'shortage_qty': 0,
+                        'warehouse': parent_wo,
+                        'reason': f"Child WO {child_wo} status: {child_status}"
+                    })
+        
+        return shortages
 
 
 @frappe.whitelist()
