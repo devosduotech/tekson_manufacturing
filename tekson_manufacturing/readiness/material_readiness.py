@@ -99,7 +99,7 @@ class MaterialReadinessEngine:
                             'warehouse': department_warehouse,
                             'reason': f"Child WO {child_wo} status: {child_status}"
                         })
-                continue
+                    continue
             
             total_required += required_qty
             
@@ -129,6 +129,15 @@ class MaterialReadinessEngine:
         # mismatches (e.g. "Assembly" vs "Final Assembly") cannot bypass it.
         child_wo_shortages = self.check_all_child_wos_complete(wo.bom_no, wo.name)
         shortage_details.extend(child_wo_shortages)
+        
+        # Deduplicate shortage_details by item_code
+        seen_items = set()
+        unique_shortages = []
+        for s in shortage_details:
+            if s['item_code'] not in seen_items:
+                seen_items.add(s['item_code'])
+                unique_shortages.append(s)
+        shortage_details = unique_shortages
         
         # Calculate totals
         shortage_qty = max(0, total_required - total_available)
@@ -722,13 +731,14 @@ class MaterialReadinessEngine:
         return 0
     
     def get_child_work_order(self, item_code, parent_wo):
-        """Get child work order for a manufactured component"""
+        """Get child work order for a manufactured component (excludes parent WO itself)"""
         child_wo = frappe.db.sql("""
             SELECT name FROM `tabWork Order`
             WHERE production_item = %s AND docstatus = 1
+            AND name != %s
             AND status NOT IN ('Stopped', 'Completed')
             ORDER BY creation DESC LIMIT 1
-        """, (item_code,), as_dict=True)
+        """, (item_code, parent_wo), as_dict=True)
         
         return child_wo[0].name if child_wo else None
 
