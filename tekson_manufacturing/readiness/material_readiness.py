@@ -731,14 +731,31 @@ class MaterialReadinessEngine:
         return 0
     
     def get_child_work_order(self, item_code, parent_wo):
-        """Get child work order for a manufactured component (excludes parent WO itself)"""
-        child_wo = frappe.db.sql("""
-            SELECT name FROM `tabWork Order`
-            WHERE production_item = %s AND docstatus = 1
-            AND name != %s
-            AND status NOT IN ('Stopped', 'Completed')
-            ORDER BY creation DESC LIMIT 1
-        """, (item_code, parent_wo), as_dict=True)
+        """
+        Get child work order for a manufactured component.
+        
+        Filters by parent WO's production_plan to avoid blocking on
+        unrelated WOs (e.g. old test data from a different plan).
+        If parent has no production_plan, finds any active WO for the item.
+        """
+        parent_plan = frappe.db.get_value("Work Order", parent_wo, "production_plan")
+        
+        if parent_plan:
+            child_wo = frappe.db.sql("""
+                SELECT name FROM `tabWork Order`
+                WHERE production_item = %s AND docstatus = 1
+                AND name != %s AND production_plan = %s
+                AND status NOT IN ('Stopped', 'Completed')
+                ORDER BY creation DESC LIMIT 1
+            """, (item_code, parent_wo, parent_plan), as_dict=True)
+        else:
+            child_wo = frappe.db.sql("""
+                SELECT name FROM `tabWork Order`
+                WHERE production_item = %s AND docstatus = 1
+                AND name != %s
+                AND status NOT IN ('Stopped', 'Completed')
+                ORDER BY creation DESC LIMIT 1
+            """, (item_code, parent_wo), as_dict=True)
         
         return child_wo[0].name if child_wo else None
 
