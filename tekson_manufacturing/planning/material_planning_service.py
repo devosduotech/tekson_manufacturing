@@ -131,6 +131,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 "doctype": "Material Request",
                 "material_request_type": "Material Transfer",
                 "schedule_date": planned_date,
+                "company": frappe.defaults.get_defaults().company,
                 "custom_production_plan": production_plan,
             })
         
@@ -168,40 +169,48 @@ def _get_raw_bom_items(bom_no: str) -> List[Dict]:
     return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
 
 
-def _explode_bom(bom_no: str, _memo: Optional[dict] = None) -> List[Dict]:
+def _explode_bom(bom_no: str, _memo: Optional[dict] = None, _seen: Optional[set] = None) -> List[Dict]:
     """
     Recursively explode a multi-level BOM to get raw material items per 1 unit.
-    
+
     Uses memoization: each BOM is exploded once (per unit), cached, and scaled
     by the reference quantity when it appears in a parent BOM.
-    
+
     Args:
         bom_no: BOM name
         _memo: Cache of BOM name -> list of raw material items (per 1 unit)
-    
+        _seen: Set of BOM names already visited (circular reference guard)
+
     Returns:
         List of raw material items with quantities per 1 unit of this BOM
     """
     if _memo is None:
         _memo = {}
-    
+    if _seen is None:
+        _seen = set()
+
     if bom_no in _memo:
         return _memo[bom_no]
-    
+
+    if bom_no in _seen:
+        frappe.log_error(f"Circular BOM reference detected: {bom_no}", "Material Planning")
+        return []
+    _seen.add(bom_no)
+
     bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
     items = frappe.get_all("BOM Item", {"parent": bom_no},
         ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"])
-    
+
     result = []
     for item in items:
         # Check if this item has its own BOM (sub-assembly)
         sub_bom = frappe.db.get_value("BOM",
             {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
             "name")
-        
+
         if sub_bom:
             # Get sub-assembly's raw materials (per 1 unit of sub-assembly)
-            sub_per_unit = _explode_bom(sub_bom, _memo)
+            sub_per_unit = _explode_bom(sub_bom, _memo, _seen)
             # Scale by how many sub-assemblies per unit of this BOM
             scale = item.qty / bom_qty
             for s in sub_per_unit:
@@ -216,7 +225,7 @@ def _explode_bom(bom_no: str, _memo: Optional[dict] = None) -> List[Dict]:
                 "source_warehouse": item.source_warehouse,
                 "operation": item.operation,
             })
-    
+
     _memo[bom_no] = result
     return result
 

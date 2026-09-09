@@ -27,6 +27,6 @@ frappe.pages['material-planning'].on_page_load = function(wrapper) {
                 area.append('<div class="alert alert-success"><b>'+res.created_mrs.length+'</b> MR(s) for <b>'+res.planned_date+'</b></div>');
                 (res.details||[]).forEach(function(d){area.append('<div class="alert alert-info" style="margin:3px 0"><a href="/app/material-request/'+d.name+'"><b>'+d.name+'</b></a> &mdash; '+d.department_wip+' ('+d.items+' items)</div>');});
             }else{area.append('<div class="alert alert-warning">'+(res.message||'All materials in WIP')+'</div>');}
-        },error:function(err){btn.prop('disabled',false).text('Generate Material Requests');frappe.msgprint('Error: '+err);}});
+        },error:function(xhr){btn.prop('disabled',false).text('Generate Material Requests');var msg='Unknown error';try{var d=JSON.parse(xhr.responseText);if(d._error_message)msg=d._error_message;else if(d.message)msg=d.message;}catch(e){if(xhr.statusText)msg=xhr.statusText;}frappe.msgprint({message:msg,indicator:'red',title:'Error'});}});
     });
 };

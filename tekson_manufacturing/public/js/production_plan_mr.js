@@ -35,8 +35,14 @@ frappe.ui.form.on('Production Plan', {
                                     frappe.msgprint({title: __('No MRs'), message: msg, indicator: 'blue'});
                                 }
                             },
-                            error: function(err) {
-                                frappe.msgprint({title: __('Error'), message: __('Failed to generate: {0}').format(err), indicator: 'red'});
+                            error: function(xhr) {
+                                var msg = 'Unknown error';
+                                try {
+                                    var d = JSON.parse(xhr.responseText);
+                                    if (d._error_message) msg = d._error_message;
+                                    else if (d.message) msg = d.message;
+                                } catch(e) { if (xhr.statusText) msg = xhr.statusText; }
+                                frappe.msgprint({title: __('Error'), message: msg, indicator: 'red'});
                             }
                         });
                     }
