@@ -46,7 +46,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         wo_filters["production_plan"] = production_plan
     
     wos = frappe.get_all("Work Order", wo_filters,
-        ["name", "bom_no", "wip_warehouse", "qty", "planned_start_date"])
+        ["name", "bom_no", "wip_warehouse", "qty", "planned_start_date", "source_warehouse"])
     
     if not wos:
         return {"created_mrs": [], "total_items": 0, "message": _("No Work Orders found for {0}").format(planned_date)}
@@ -81,7 +81,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             continue
         
         for item in _get_raw_bom_items(wo.bom_no):
-            source_wh = item.get("source_warehouse") or ""
+            source_wh = item.get("source_warehouse") or getattr(wo, 'source_warehouse', '') or _get_default_source_warehouse()
             if not _is_source_warehouse(source_wh):
                 continue
             
@@ -163,10 +163,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 
 def _get_raw_bom_items(bom_no: str) -> List[Dict]:
     """Get BOM items that are raw materials or BOF items only (exploded multi-level)"""
-    all_items = _explode_bom(bom_no)
-    
-    # Filter: only items from Raw Material Stores or BOF Stores
-    return [i for i in all_items if _is_source_warehouse(i.get("source_warehouse"))]
+    return _explode_bom(bom_no)
 
 
 def _explode_bom(bom_no: str, _memo: Optional[dict] = None, _seen: Optional[set] = None) -> List[Dict]:
@@ -236,3 +233,12 @@ def _is_source_warehouse(warehouse: str) -> bool:
         return False
     wh_name = frappe.db.get_value("Warehouse", warehouse, "warehouse_name") or ""
     return wh_name in ("Raw Material Stores", "BOF Stores")
+
+
+def _get_default_source_warehouse() -> str:
+    """Find a valid default source warehouse (Raw Material Stores or BOF Stores)"""
+    for wh_name in ("Raw Material Stores", "BOF Stores"):
+        wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": frappe.defaults.get_defaults().company}, "name")
+        if wh:
+            return wh
+    return ""
