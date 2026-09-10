@@ -63,6 +63,11 @@ class JobCardReadinessEngine:
             filters={'work_order': wo.name, 'docstatus': ['!=', 2]},
             order_by='sequence_id')
         
+        frappe.log_error(
+            title="MES refresh_work_order",
+            message=f"WO: {wo.name} | JC count: {len(job_cards)} | JC names: {[j.name for j in job_cards]}"
+        )
+        
         # Evaluate each Job Card
         for jc_data in job_cards:
             jc = frappe.get_doc('Job Card', jc_data.name)
@@ -236,3 +241,12 @@ class JobCardReadinessEngine:
         # Apply updates if any changed
         if updates:
             frappe.db.set_value('Job Card', job_card_name, updates)
+            frappe.log_error(
+                title="MES JC Status Updated",
+                message=f"JC: {job_card_name} | Updates: {updates}"
+            )
+        else:
+            frappe.log_error(
+                title="MES JC Status: No Change",
+                message=f"JC: {job_card_name} | Current: material={current_values.custom_material_status}, readiness={current_values.custom_readiness_status}, start={current_values.custom_start_status} | Result: material={result.material_status}, readiness={result.readiness_status}, mapped_start={new_start_status}"
+            )

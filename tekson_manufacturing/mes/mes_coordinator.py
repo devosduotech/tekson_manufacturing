@@ -133,9 +133,19 @@ class MESExecutionCoordinator:
         - Logs security event
         """
         try:
+            frappe.log_error(
+                title="MES Stock Entry Hook FIRED",
+                message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose} | WO: {stock_entry.work_order or 'None'} | User: {frappe.session.user}"
+            )
+
             # Security: Validate permissions
             validate_stock_entry_permission(stock_entry.name)
             validate_manufacturing_role()
+            
+            frappe.log_error(
+                title="MES SE Hook: Role validation passed",
+                message=f"SE: {stock_entry.name} | User: {frappe.session.user}"
+            )
             
             # Handle Manufacture SE: update WO status to Completed
             if stock_entry.purpose == "Manufacture":
@@ -147,9 +157,17 @@ class MESExecutionCoordinator:
             
             # Skip if not Material Transfer for Manufacture
             if stock_entry.purpose != "Material Transfer for Manufacture":
+                frappe.log_error(
+                    title="MES SE Hook: Skipped (wrong purpose)",
+                    message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"
+                )
                 return
             
             if not stock_entry.work_order:
+                frappe.log_error(
+                    title="MES SE Hook: Skipped (no work order)",
+                    message=f"SE: {stock_entry.name}"
+                )
                 return
             
             # Step 1: Execution Engine (legacy tracking)
@@ -168,6 +186,11 @@ class MESExecutionCoordinator:
             
             # Refresh all JCs in this WO
             engine.refresh_work_order(wo)
+            
+            frappe.log_error(
+                title="MES SE Hook: Readiness refresh completed",
+                message=f"WO: {wo.name} | SE: {stock_entry.name}"
+            )
             
             # Log success
             log_security_event(
