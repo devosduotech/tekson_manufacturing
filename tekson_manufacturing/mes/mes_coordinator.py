@@ -149,41 +149,48 @@ class MESExecutionCoordinator:
                     engine.update_work_order_status(stock_entry.work_order)
                 return
             
-            # Skip if not Material Transfer for Manufacture
-            if stock_entry.purpose != "Material Transfer for Manufacture":
+            # Handle Material Transfer and Material Transfer for Manufacture
+            if stock_entry.purpose not in ("Material Transfer", "Material Transfer for Manufacture"):
                 frappe.log_error(
                     title="MES SE Hook: Skipped (wrong purpose)",
                     message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"
                 )
                 return
             
-            if not stock_entry.work_order:
-                frappe.log_error(
-                    title="MES SE Hook: Skipped (no work order)",
-                    message=f"SE: {stock_entry.name}"
-                )
-                return
-            
-            # Step 1: Execution Engine (legacy tracking)
-            from tekson_manufacturing.execution.execution_engine import on_stock_entry_submit as exec_handler
-            exec_handler(stock_entry, method=None)
-            
-            # Step 2: Readiness Engine (refresh affected WO)
             from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
             engine = JobCardReadinessEngine()
             
-            # Get Work Order
-            wo = frappe.get_doc('Work Order', stock_entry.work_order)
+            # Find affected WOs: from SE work_order, or from target warehouse
+            wo_names = set()
             
-            # Validate WO permission
-            validate_user_permission_for_work_order(wo.name)
+            if stock_entry.work_order:
+                wo_names.add(stock_entry.work_order)
             
-            # Refresh all JCs in this WO
-            engine.refresh_work_order(wo)
+            # For Material Transfer (MR flow): find WOs by target warehouse
+            if not wo_names and stock_entry.items:
+                target_warehouses = set(item.t_warehouse for item in stock_entry.items if item.t_warehouse)
+                if target_warehouses:
+                    jc_list = frappe.get_all("Job Card",
+                        filters={"wip_warehouse": ["in", list(target_warehouses)]},
+                        fields=["work_order"])
+                    for jc in jc_list:
+                        if jc.work_order:
+                            wo_names.add(jc.work_order)
+            
+            if not wo_names:
+                frappe.log_error(
+                    title="MES SE Hook: Skipped (no WOs found)",
+                    message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"
+                )
+                return
+            
+            for wo_name in wo_names:
+                wo = frappe.get_doc("Work Order", wo_name)
+                engine.refresh_work_order(wo)
             
             frappe.log_error(
                 title="MES SE Hook: Readiness refresh completed",
-                message=f"WO: {wo.name} | SE: {stock_entry.name}"
+                message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose} | WOs: {wo_names}"
             )
             
             # Log success
