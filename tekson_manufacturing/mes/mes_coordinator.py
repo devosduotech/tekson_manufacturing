@@ -138,14 +138,8 @@ class MESExecutionCoordinator:
                 message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose} | WO: {stock_entry.work_order or 'None'} | User: {frappe.session.user}"
             )
 
-            # Security: Validate permissions
+            # Security: Validate SE submit permission (manufacturing role not required for material transfers)
             validate_stock_entry_permission(stock_entry.name)
-            validate_manufacturing_role()
-            
-            frappe.log_error(
-                title="MES SE Hook: Role validation passed",
-                message=f"SE: {stock_entry.name} | User: {frappe.session.user}"
-            )
             
             # Handle Manufacture SE: update WO status to Completed
             if stock_entry.purpose == "Manufacture":
