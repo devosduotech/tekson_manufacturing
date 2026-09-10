@@ -4,3 +4,4 @@
 
 [post_model_sync]
 tekson_manufacturing.patches.create_pp_mr_link
+tekson_manufacturing.patches.update_job_card_start_status_options
