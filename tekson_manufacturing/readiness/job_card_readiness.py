@@ -211,11 +211,11 @@ class JobCardReadinessEngine:
             ReadinessStatus.READY: "Ready to Start",
             ReadinessStatus.WAITING_MATERIAL: "Awaiting Material",
             ReadinessStatus.WAITING_PREVIOUS_OP: "Awaiting Previous Operation",
-            ReadinessStatus.BLOCKED: "Awaiting",
+            ReadinessStatus.BLOCKED: "Awaiting Material",
             ReadinessStatus.IN_PROGRESS: "In Progress",
             ReadinessStatus.COMPLETED: "Completed",
         }
-        new_start_status = start_status_map.get(result.readiness_status, "Awaiting")
+        new_start_status = start_status_map.get(result.readiness_status, "Awaiting Material")
         
         # Build update dict only for changed fields
         updates = {}

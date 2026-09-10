@@ -509,7 +509,17 @@ class ExecutionEngine:
                 prev_result = self.dependency_engine.validate_previous_operation(next_jc_doc)
                 
                 if prev_result.get('is_valid'):
-                    next_jc_doc.custom_start_status = "Ready to Start"
+                    # Previous op done — also check material before setting Ready to Start
+                    from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
+                    mat_engine = MaterialReadinessEngine()
+                    mat_result = mat_engine.evaluate_material_readiness(
+                        work_order=next_jc_doc.work_order,
+                        job_card=next_jc_doc.name
+                    )
+                    if mat_result.is_ready:
+                        next_jc_doc.custom_start_status = "Ready to Start"
+                    else:
+                        next_jc_doc.custom_start_status = "Awaiting Material"
                 else:
                     next_jc_doc.custom_start_status = "Awaiting Previous Operation"
             

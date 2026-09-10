@@ -110,10 +110,8 @@ class JobCardService:
         Update custom_start_status field based on UAT requirements
         
         Status Values:
-        - Awaiting
-        - Awaiting Previous Operation
         - Awaiting Material
-        - Material Available
+        - Awaiting Previous Operation
         - Ready to Start
         - In Progress
         - Completed
@@ -143,7 +141,7 @@ class JobCardService:
                     # Material available + dependencies met = Ready to Start
                     job_card.custom_start_status = "Ready to Start"
             else:
-                job_card.custom_start_status = "Awaiting"
+                job_card.custom_start_status = "Awaiting Material"
     
     def update_dependency_status(self, job_card):
         """

@@ -24,9 +24,9 @@ class MaterialStatus:
 class ReadinessStatus:
     """Job Card readiness status constants"""
     READY = "Ready to Start"
-    WAITING_MATERIAL = "Waiting for Material"
-    WAITING_PREVIOUS_OP = "Waiting for Previous Operation"
-    BLOCKED = "Blocked"
+    WAITING_MATERIAL = "Awaiting Material"
+    WAITING_PREVIOUS_OP = "Awaiting Previous Operation"
+    BLOCKED = "Awaiting Material"  # Fallback: material+dependency check failed
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
     HOLD = "On Hold"  # Reserved for future: QC Hold, Engineering Hold, etc.
