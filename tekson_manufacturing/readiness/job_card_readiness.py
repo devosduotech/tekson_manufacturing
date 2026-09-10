@@ -185,68 +185,19 @@ class JobCardReadinessEngine:
     
     def apply_result_to_job_card(self, job_card_name: str, result: ReadinessResult):
         """
-        Apply ReadinessResult to Job Card (optimized persistence)
+        Apply ReadinessResult to Job Card
         
-        Uses frappe.db.set_value() for efficiency (no validations/notifications).
-        Only updates fields that have actually changed.
+        Loads the doc and saves it so the validate hook (update_job_card_status)
+        recalculates all status fields correctly.
         
         Args:
             job_card_name: Job Card name
             result: ReadinessResult from evaluation
         """
-        # Get current values
-        current_values = frappe.db.get_value('Job Card', job_card_name, [
-            'custom_material_status',
-            'custom_readiness_status',
-            'custom_material_available_for_operation',
-            'custom_blocked_by',
-            'custom_start_status'
-        ], as_dict=True)
+        jc = frappe.get_doc('Job Card', job_card_name)
         
-        if not current_values:
+        if not jc:
             frappe.throw(_("Job Card {0} not found").format(job_card_name))
         
-        # Map ReadinessStatus to custom_start_status values
-        start_status_map = {
-            ReadinessStatus.READY: "Ready to Start",
-            ReadinessStatus.WAITING_MATERIAL: "Awaiting Material",
-            ReadinessStatus.WAITING_PREVIOUS_OP: "Awaiting Previous Operation",
-            ReadinessStatus.BLOCKED: "Awaiting Material",
-            ReadinessStatus.IN_PROGRESS: "In Progress",
-            ReadinessStatus.COMPLETED: "Completed",
-        }
-        new_start_status = start_status_map.get(result.readiness_status, "Awaiting Material")
-        
-        # Build update dict only for changed fields
-        updates = {}
-        
-        if current_values.custom_material_status != result.material_status:
-            updates['custom_material_status'] = result.material_status
-        
-        if current_values.custom_readiness_status != result.readiness_status:
-            updates['custom_readiness_status'] = result.readiness_status
-        
-        if current_values.custom_material_available_for_operation != result.material_available:
-            updates['custom_material_available_for_operation'] = result.material_available
-        
-        if current_values.custom_blocked_by != result.blocked_by:
-            updates['custom_blocked_by'] = result.blocked_by
-        
-        if current_values.custom_start_status != new_start_status:
-            updates['custom_start_status'] = new_start_status
-        
-        # Always update timestamp
-        updates['custom_dependency_last_updated'] = result.last_updated
-        
-        # Apply updates if any changed
-        if updates:
-            frappe.db.set_value('Job Card', job_card_name, updates)
-            frappe.log_error(
-                title="MES JC Status Updated",
-                message=f"JC: {job_card_name} | Updates: {updates}"
-            )
-        else:
-            frappe.log_error(
-                title="MES JC Status: No Change",
-                message=f"JC: {job_card_name} | Current: material={current_values.custom_material_status}, readiness={current_values.custom_readiness_status}, start={current_values.custom_start_status} | Result: material={result.material_status}, readiness={result.readiness_status}, mapped_start={new_start_status}"
-            )
+        # Save triggers validate hook → update_job_card_status → recalculates everything
+        jc.save(ignore_permissions=True)
