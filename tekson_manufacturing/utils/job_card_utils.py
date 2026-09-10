@@ -215,6 +215,11 @@ def update_job_card_status(doc, method=None):
     if doc.is_new() or doc.flags.ignore_validate:
         return
     
+    frappe.log_error(
+        title="MES validate hook: update_job_card_status",
+        message=f"JC: {doc.name} | status: {doc.status} | is_new: {doc.is_new()} | ignore_validate: {doc.flags.ignore_validate}"
+    )
+    
     from tekson_manufacturing.services.job_card_service import JobCardService
     
     service = JobCardService()

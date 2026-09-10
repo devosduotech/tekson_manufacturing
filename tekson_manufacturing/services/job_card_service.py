@@ -124,6 +124,11 @@ class JobCardService:
             # Check dependencies first
             prev_op_result = self.get_previous_operation_status(job_card)
             
+            frappe.log_error(
+                title="MES update_start_status",
+                message=f"JC: {job_card.name} | seq: {job_card.sequence_id} | prev_op: {prev_op_result} | status: {job_card.status}"
+            )
+            
             if prev_op_result and prev_op_result.get('status') != "Completed":
                 job_card.custom_start_status = "Awaiting Previous Operation"
                 return
@@ -134,6 +139,11 @@ class JobCardService:
                 
                 engine = MaterialReadinessEngine(work_order=job_card.work_order)
                 readiness = engine.evaluate_material_readiness()
+                
+                frappe.log_error(
+                    title="MES update_start_status material check",
+                    message=f"JC: {job_card.name} | is_ready: {readiness.is_ready} | status: {readiness.status} | available: {readiness.available_qty} | required: {readiness.required_qty}"
+                )
                 
                 if not readiness.is_ready:
                     job_card.custom_start_status = "Awaiting Material"
