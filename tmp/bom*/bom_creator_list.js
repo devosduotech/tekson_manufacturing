@@ -1,4 +1,4 @@
-frappe.listview_settings["BOM Bulk Creator"] = {
+frappe.listview_settings["BOM Creator"] = {
 	add_fields: ["status"],
 	get_indicator: function (doc) {
 		if (doc.status === "Draft") {
@@ -11,6 +11,8 @@ frappe.listview_settings["BOM Bulk Creator"] = {
 			return [__("Cancelled"), "red", "status,=,Cancelled"];
 		} else if (doc.status === "Failed") {
 			return [__("Failed"), "red", "status,=,Failed"];
+		} else if (doc.status === "Submitted") {
+			return [__("Submitted"), "blue", "status,=,Submitted"];
 		}
 	},
 };

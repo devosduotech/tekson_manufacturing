@@ -33,7 +33,7 @@ BOM_ITEM_FIELDS = [
 ]
 
 
-class BOMBulkCreator(Document):
+class BOMCreator(Document):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
@@ -42,8 +42,9 @@ class BOMBulkCreator(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from tekson_manufacturing.doctype.bom_bulk_creator_item.bom_bulk_creator_item import BOMBulkCreatorItem
+		from erpnext.manufacturing.doctype.bom_creator_item.bom_creator_item import BOMCreatorItem
 
+		amended_from: DF.Link | None
 		buying_price_list: DF.Link | None
 		company: DF.Link
 		conversion_rate: DF.Float
@@ -53,7 +54,7 @@ class BOMBulkCreator(Document):
 		item_code: DF.Link
 		item_group: DF.Link | None
 		item_name: DF.Data | None
-		items: DF.Table[BOMBulkCreatorItem]
+		items: DF.Table[BOMCreatorItem]
 		plc_conversion_rate: DF.Float
 		price_list_currency: DF.Link | None
 		project: DF.Link | None
@@ -62,7 +63,7 @@ class BOMBulkCreator(Document):
 		remarks: DF.TextEditor | None
 		rm_cost_as_per: DF.Literal["Valuation Rate", "Last Purchase Rate", "Price List"]
 		set_rate_based_on_warehouse: DF.Check
-		status: DF.Literal["Draft", "In Progress", "Completed", "Failed", "Cancelled"]
+		status: DF.Literal["Draft", "Submitted", "In Progress", "Completed", "Failed", "Cancelled"]
 		uom: DF.Link | None
 	# end: auto-generated types
 
@@ -105,18 +106,31 @@ class BOMBulkCreator(Document):
 			self.db_set("status", self.status)
 
 	def set_status_completed(self):
+		if self.docstatus != 1:
+			return
+
 		has_completed = True
 		for row in self.items:
 			if row.is_expandable and not row.bom_created:
 				has_completed = False
 				break
 
-		if has_completed and self.items:
+		if not frappe.get_cached_value("BOM", {"bom_creator": self.name, "item": self.item_code}, "name"):
+			has_completed = False
+
+		if has_completed:
 			self.status = "Completed"
+
+	def on_cancel(self):
+		self.set_status(True)
 
 	def set_conversion_factor(self):
 		for row in self.items:
 			row.conversion_factor = 1.0
+
+	def before_submit(self):
+		self.validate_fields()
+		self.set_status()
 
 	def set_reference_id(self):
 		parent_reference = {row.idx: row.name for row in self.items}
@@ -127,6 +141,7 @@ class BOMBulkCreator(Document):
 			if row.parent_row_no:
 				ref_id = parent_reference.get(cint(row.parent_row_no))
 
+			# Check whether the reference id of the FG Item has correct or not
 			if row.fg_reference_id and row.fg_reference_id == ref_id:
 				continue
 
@@ -137,8 +152,8 @@ class BOMBulkCreator(Document):
 
 	@frappe.whitelist()
 	def add_boms(self):
-		self.check_permission("write")
-		self.enqueue_create_boms()
+		self.check_permission("submit")
+		self.submit()
 
 	def set_rate_for_items(self):
 		amount = self.get_raw_material_cost()
@@ -185,9 +200,21 @@ class BOMBulkCreator(Document):
 			if row.item_code in fg_items:
 				row.is_expandable = 1
 
+	def validate_fields(self):
+		fields = {
+			"items": "Items",
+		}
+
+		for field, label in fields.items():
+			if not self.get(field):
+				frappe.throw(_("Please set {0} in BOM Creator {1}").format(_(label), self.name))
+
+	def on_submit(self):
+		self.enqueue_bom_creation()
+
 	@frappe.whitelist()
 	def enqueue_create_boms(self):
-		self.check_permission("write")
+		self.check_permission("submit")
 		self.enqueue_bom_creation()
 
 	def enqueue_bom_creation(self):
@@ -204,10 +231,16 @@ class BOMBulkCreator(Document):
 
 	def create_boms(self):
 		"""
-		Create multi-level BOMs as Draft (bottom-up).
-		Child BOMs are created first, then parent BOMs reference them via bom_no.
-		All BOMs are saved as Draft - user manually updates bom_no, operations, etc.
+		Sample data structure of production_item_wise_rm
+		production_item_wise_rm = {
+		        (fg_item_code, name): {
+		                "items": [],
+		                "bom_no": "",
+		                "fg_item_data": {}
+		        }
+		}
 		"""
+
 		self.db_set("status", "In Progress")
 		production_item_wise_rm = OrderedDict({})
 		production_item_wise_rm.setdefault(
@@ -241,7 +274,7 @@ class BOMBulkCreator(Document):
 				fg_item_data = production_item_wise_rm.get(d).fg_item_data
 				self.create_bom(fg_item_data, production_item_wise_rm)
 
-			frappe.msgprint(_("BOMs created successfully as Draft"))
+			frappe.msgprint(_("BOMs created successfully"))
 		except Exception:
 			traceback = frappe.get_traceback(with_context=True)
 			self.db_set(
@@ -255,8 +288,8 @@ class BOMBulkCreator(Document):
 
 	@frappe.whitelist()
 	def edit_qty(self, docname: str, qty: float):
-		if not frappe.db.exists("BOM Bulk Creator Item", {"name": docname, "parent": self.name}):
-			frappe.throw(_("BOM Bulk Creator Item {0} does not exist").format(docname))
+		if not frappe.db.exists("BOM Creator Item", {"name": docname, "parent": self.name}):
+			frappe.throw(_("BOM Creator Item {0} does not exist").format(docname))
 
 		for row in self.items:
 			if row.name == docname:
@@ -269,24 +302,16 @@ class BOMBulkCreator(Document):
 		return self
 
 	def create_bom(self, row, production_item_wise_rm):
-		"""
-		Create a single BOM as Draft.
-		Child BOMs are linked via bom_no for multi-level structure.
-		"""
+		bom_creator_item = row.name if row.name != self.name else ""
 		if frappe.db.exists(
 			"BOM",
 			{
+				"bom_creator": self.name,
 				"item": row.item_code,
-				"bom_type": "Production",
-				"docstatus": 0,
+				"bom_creator_item": bom_creator_item,
+				"docstatus": 1,
 			},
 		):
-			existing = frappe.db.get_value(
-				"BOM",
-				{"item": row.item_code, "bom_type": "Production", "docstatus": 0},
-				"name",
-			)
-			production_item_wise_rm[(row.item_code, row.name)].bom_no = existing
 			return
 
 		bom = frappe.new_doc("BOM")
@@ -295,6 +320,8 @@ class BOMBulkCreator(Document):
 				"item": row.item_code,
 				"bom_type": "Production",
 				"quantity": row.qty,
+				"bom_creator": self.name,
+				"bom_creator_item": bom_creator_item,
 			}
 		)
 
@@ -324,6 +351,7 @@ class BOMBulkCreator(Document):
 			bom.append("items", item_args)
 
 		bom.save(ignore_permissions=True)
+		bom.submit()
 
 		production_item_wise_rm[(row.item_code, row.name)].bom_no = bom.name
 
@@ -440,7 +468,7 @@ class BOMBulkCreator(Document):
 		if kwargs.docname:
 			row = next((row for row in self.items if row.name == kwargs.docname), None)
 			if not row:
-				frappe.throw(_("BOM Bulk Creator Item with name {0} does not exist").format(kwargs.docname))
+				frappe.throw(_("BOM Creator Item with name {0} does not exist").format(kwargs.docname))
 
 			row.delete()
 			self.remove(row)
@@ -469,13 +497,15 @@ class BOMBulkCreator(Document):
 
 @frappe.whitelist()
 def get_children(doctype: str | None = None, parent: str | None = None, **kwargs):
+	# by default get_children takes first parameter as doctype, so added in the function
+
 	if isinstance(kwargs, str):
 		kwargs = frappe.parse_json(kwargs)
 
 	if isinstance(kwargs, dict):
 		kwargs = frappe._dict(kwargs)
 
-	frappe.has_permission("BOM Bulk Creator", "read", doc=kwargs.parent_id, throw=True)
+	frappe.has_permission("BOM Creator", "read", doc=kwargs.parent_id, throw=True)
 
 	fields = [
 		"item_code as value",
@@ -484,7 +514,7 @@ def get_children(doctype: str | None = None, parent: str | None = None, **kwargs
 		"parent as parent_id",
 		"qty",
 		"idx",
-		"'BOM Bulk Creator Item' as doctype",
+		"'BOM Creator Item' as doctype",
 		"name",
 		"uom",
 		"rate",
@@ -499,7 +529,7 @@ def get_children(doctype: str | None = None, parent: str | None = None, **kwargs
 	if kwargs.name:
 		query_filters["name"] = kwargs.name
 
-	return frappe.get_all("BOM Bulk Creator Item", fields=fields, filters=query_filters, order_by="idx")
+	return frappe.get_all("BOM Creator Item", fields=fields, filters=query_filters, order_by="idx")
 
 
 def get_item_details(item_code):
