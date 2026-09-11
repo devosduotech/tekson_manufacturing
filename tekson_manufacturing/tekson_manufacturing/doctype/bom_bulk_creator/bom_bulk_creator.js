@@ -7,8 +7,6 @@
 
 frappe.provide("tekson_manufacturing.bom_bulk_creator");
 
-console.log("=== BOM BULK CREATOR JS LOADED ===", new Date().toISOString());
-
 frappe.ui.form.on("BOM Bulk Creator", {
 	setup(frm) {
 		frm.trigger("set_queries");
@@ -47,14 +45,12 @@ frappe.ui.form.on("BOM Bulk Creator", {
 
 		if (frm.doc.status !== "Completed" && frm.doc.status !== "Failed") {
 			frm.add_custom_button(__("Create Draft BOMs"), () => {
-				console.log("=== CREATE DRAFT BOMS CLICK ===", new Date().toISOString());
 				frm.trigger("create_draft_boms");
 			}, __("Tools"));
 		}
 	},
 
 	create_draft_boms(frm) {
-		console.log("=== create_draft_boms() CALLED ===", new Date().toISOString());
 		frm.call({
 			method: "enqueue_create_boms",
 			doc: frm.doc,

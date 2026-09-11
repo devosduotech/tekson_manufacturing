@@ -48,7 +48,6 @@ doctype_list_js = {
 
 doctype_js = {
     "Production Plan": "public/js/production_plan_mr.js",
-    "BOM Bulk Creator": "tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.js",
 }
 
 # Reports
