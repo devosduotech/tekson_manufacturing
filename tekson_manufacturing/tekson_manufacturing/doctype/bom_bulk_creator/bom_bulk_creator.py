@@ -486,10 +486,11 @@ def get_children(doctype: str | None = None, parent: str | None = None, **kwargs
 		"qty",
 		"idx",
 		"'BOM Bulk Creator Item' as doctype",
-		"name",
+		"name as docname",
 		"uom",
 		"rate",
 		"amount",
+		"fg_item",
 	]
 
 	query_filters = {
@@ -497,7 +498,7 @@ def get_children(doctype: str | None = None, parent: str | None = None, **kwargs
 		"parent": kwargs.parent_id,
 	}
 
-	if kwargs.name:
+	if kwargs.get("name"):
 		query_filters["name"] = kwargs.name
 
 	return frappe.get_all("BOM Bulk Creator Item", fields=fields, filters=query_filters, order_by="idx")
