@@ -52,8 +52,6 @@ frappe.ui.form.on("BOM Bulk Creator", {
 		frm.call({
 			method: "enqueue_create_boms",
 			doc: frm.doc,
-		}).then(() => {
-			frm.reload_doc();
 		});
 	},
 });

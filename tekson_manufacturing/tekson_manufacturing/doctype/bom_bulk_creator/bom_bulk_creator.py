@@ -188,6 +188,8 @@ class BOMBulkCreator(Document):
 	@frappe.whitelist()
 	def enqueue_create_boms(self):
 		self.check_permission("write")
+		if self.status == "In Progress":
+			frappe.throw(_("BOM creation is already in progress"))
 		self.enqueue_bom_creation()
 
 	def enqueue_bom_creation(self):
