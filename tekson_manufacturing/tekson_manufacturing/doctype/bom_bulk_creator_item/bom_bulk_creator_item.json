@@ -39,15 +39,15 @@
   "instruction"
  ],
  "fields": [
-  {
-   "columns": 2,
-   "fieldname": "item_code",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Item Code",
-   "options": "Item",
-   "reqd": 1
-  },
+   {
+    "columns": 2,
+    "fieldname": "item_code",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Raw Material",
+    "options": "Item",
+    "reqd": 1
+   },
   {
    "fetch_from": "item_code.item_name",
    "fetch_if_empty": 1,
@@ -66,15 +66,15 @@
    "fieldname": "column_break_f63f",
    "fieldtype": "Column Break"
   },
-  {
-   "columns": 2,
-   "fieldname": "fg_item",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Finished Goods Item",
-   "options": "Item",
-   "reqd": 1
-  },
+   {
+    "columns": 2,
+    "fieldname": "fg_item",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "FG Item",
+    "options": "Item",
+    "reqd": 1
+   },
   {
    "fieldname": "source_warehouse",
    "fieldtype": "Link",
