@@ -43,12 +43,12 @@ override_doctype_class = {
 
 doctype_list_js = {
     "Work Order": "public/js/material_transfer_pick_list.js",
-    "BOM Bulk Creator": "bom_bulk_creator/doctype/bom_bulk_creator/bom_bulk_creator_list.js",
+    "BOM Bulk Creator": "doctype/bom_bulk_creator/bom_bulk_creator_list.js",
 }
 
 doctype_js = {
     "Production Plan": "public/js/production_plan_mr.js",
-    "BOM Bulk Creator": "bom_bulk_creator/doctype/bom_bulk_creator/bom_bulk_creator.js",
+    "BOM Bulk Creator": "doctype/bom_bulk_creator/bom_bulk_creator.js",
 }
 
 # Reports
