@@ -135,11 +135,6 @@ class BOMBulkCreator(Document):
 			elif row.fg_item == self.item_code:
 				row.fg_reference_id = self.name
 
-	@frappe.whitelist()
-	def add_boms(self):
-		self.check_permission("write")
-		self.enqueue_create_boms()
-
 	def set_rate_for_items(self):
 		amount = self.get_raw_material_cost()
 		self.raw_material_cost = amount
