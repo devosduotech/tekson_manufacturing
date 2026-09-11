@@ -9,7 +9,7 @@
  "engine": "InnoDB",
  "field_order": [
   "tab_2_tab",
-  "bom_creator",
+  "bom_bulk_creator",
   "details_tab",
   "section_break_ylsl",
   "item_code",
@@ -125,7 +125,8 @@
    "label": "Items",
    "oldfieldname": "bom_materials",
    "oldfieldtype": "Table",
-   "options": "BOM Creator Item"
+   "options": "BOM Bulk Creator Item",
+   "reqd": 1
   },
   {
    "fieldname": "costing_detail",
@@ -222,7 +223,7 @@
    "fieldtype": "Link",
    "label": "Amended From",
    "no_copy": 1,
-   "options": "BOM Creator",
+   "options": "BOM Bulk Creator",
    "print_hide": 1,
    "read_only": 1
   },
@@ -242,7 +243,7 @@
    "options": "Warehouse"
   },
   {
-   "fieldname": "bom_creator",
+   "fieldname": "bom_bulk_creator",
    "fieldtype": "HTML"
   },
   {
@@ -283,16 +284,11 @@
  "hide_toolbar": 1,
  "icon": "fa fa-sitemap",
  "is_submittable": 1,
- "links": [
-  {
-   "link_doctype": "BOM",
-   "link_fieldname": "bom_creator"
-  }
- ],
+ "links": [],
  "modified": "2024-09-21 09:05:52.945112",
  "modified_by": "Administrator",
  "module": "Manufacturing",
- "name": "BOM Creator",
+ "name": "BOM Bulk Creator",
  "naming_rule": "Set by user",
  "owner": "Administrator",
  "permissions": [

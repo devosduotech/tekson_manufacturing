@@ -1,13 +1,18 @@
 // Copyright (c) 2023, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
-frappe.provide("erpnext.bom");
+//
+// BOM Bulk Creator — Phase 1
+// Creates multi-level BOM hierarchies as Draft.
+// Does NOT submit BOMs. Does NOT link child bom_no.
 
-frappe.ui.form.on("BOM Creator", {
+frappe.provide("tekson_manufacturing.bom_bulk_creator");
+
+frappe.ui.form.on("BOM Bulk Creator", {
 	setup(frm) {
 		frm.trigger("set_queries");
 	},
 
-	setup_bom_creator(frm) {
+	setup_bom_bulk_creator(frm) {
 		frm.dashboard.clear_comment();
 
 		if (!frm.is_new()) {
@@ -15,14 +20,14 @@ frappe.ui.form.on("BOM Creator", {
 				frm.trigger("build_tree");
 			}
 		} else if (!frm.doc.items?.length) {
-			let $parent = $(frm.fields_dict["bom_creator"].wrapper);
+			let $parent = $(frm.fields_dict["bom_bulk_creator"].wrapper);
 			$parent.empty();
 			frm.trigger("make_new_entry");
 		}
 	},
 
 	build_tree(frm) {
-		let $parent = $(frm.fields_dict["bom_creator"].wrapper);
+		let $parent = $(frm.fields_dict["bom_bulk_creator"].wrapper);
 		$parent.empty();
 		frm.toggle_enable("item_code", false);
 
@@ -38,7 +43,7 @@ frappe.ui.form.on("BOM Creator", {
 
 	make_new_entry(frm) {
 		let dialog = new frappe.ui.Dialog({
-			title: __("Multi-level BOM Creator"),
+			title: __("BOM Bulk Creator"),
 			fields: [
 				{
 					label: __("Name"),
@@ -124,7 +129,7 @@ frappe.ui.form.on("BOM Creator", {
 	},
 
 	refresh(frm) {
-		frm.trigger("setup_bom_creator");
+		frm.trigger("setup_bom_bulk_creator");
 		frm.trigger("set_root_item");
 		frm.trigger("add_custom_buttons");
 	},
@@ -140,24 +145,65 @@ frappe.ui.form.on("BOM Creator", {
 			frm.add_custom_button(__("Rebuild Tree"), () => {
 				frm.trigger("build_tree");
 			});
-		}
 
-		if (frm.doc.docstatus === 1 && frm.doc.status !== "Completed") {
-			frm.add_custom_button(__("Create Multi-level BOM"), () => {
-				frm.trigger("create_multi_level_bom");
-			});
+			// Phase 1: Preview button
+			frm.add_custom_button(__("Preview BOMs"), () => {
+				frm.trigger("preview_boms");
+			}, __("Tools"));
+
+			// Phase 1: Create Draft BOMs button
+			if (frm.doc.docstatus === 1 && frm.doc.status !== "Completed") {
+				frm.add_custom_button(__("Create Draft BOMs"), () => {
+					frm.trigger("create_draft_boms");
+				}, __("Tools"));
+			}
 		}
 	},
 
-	create_multi_level_bom(frm) {
+	preview_boms(frm) {
 		frm.call({
-			method: "enqueue_create_boms",
+			method: "preview_boms",
 			doc: frm.doc,
+			callback(r) {
+				if (r.message) {
+					let preview = r.message;
+					let msg = __("<b>Bulk BOM Creation Preview</b><br><br>");
+					msg += __("Total BOMs to create: {0}<br>", [preview.total_boms]);
+					msg += __("Existing BOMs (will skip): {0}<br><br>", [preview.existing_boms.length]);
+
+					if (preview.bom_list && preview.bom_list.length) {
+						msg += __("<b>BOM List:</b><br>");
+						preview.bom_list.forEach(bom => {
+							let status_icon = bom.status === "will_create" ? "✅" :
+								bom.status === "submitted_exists" ? "📄" : "📝";
+							msg += `${status_icon} ${bom.item_code} (Level ${bom.level}) - ${bom.child_items_count} items<br>`;
+						});
+					}
+
+					frappe.msgprint({
+						title: __("Preview"),
+						indicator: "green",
+						message: msg,
+					});
+				}
+			},
 		});
+	},
+
+	create_draft_boms(frm) {
+		frappe.confirm(
+			__("This will create all BOMs as Draft. Continue?"),
+			() => {
+				frm.call({
+					method: "enqueue_create_boms",
+					doc: frm.doc,
+				});
+			}
+		);
 	},
 });
 
-frappe.ui.form.on("BOM Creator Item", {
+frappe.ui.form.on("BOM Bulk Creator Item", {
 	item_code(frm, cdt, cdn) {
 		let item = frappe.get_doc(cdt, cdn);
 		if (item.item_code && item.is_root) {
@@ -186,7 +232,7 @@ frappe.ui.form.on("BOM Creator Item", {
 	},
 });
 
-erpnext.bom.BomConfigurator = class BomConfigurator extends erpnext.TransactionController {
+tekson_manufacturing.bom_bulk_creator.BomConfigurator = class BomConfigurator extends erpnext.TransactionController {
 	conversion_rate(doc) {
 		if (this.frm.doc.currency === this.get_company_currency()) {
 			this.frm.set_value("conversion_rate", 1.0);
@@ -216,4 +262,4 @@ erpnext.bom.BomConfigurator = class BomConfigurator extends erpnext.TransactionC
 	}
 };
 
-extend_cscript(cur_frm.cscript, new erpnext.bom.BomConfigurator({ frm: cur_frm }));
+extend_cscript(cur_frm.cscript, new tekson_manufacturing.bom_bulk_creator.BomConfigurator({ frm: cur_frm }));
