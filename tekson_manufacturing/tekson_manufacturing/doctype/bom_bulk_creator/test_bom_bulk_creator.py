@@ -1,9 +1,8 @@
-# Copyright (c) 2026, OSDuo Tech LLP and Contributors
-# See license.txt
+import frappe
+from frappe.tests import IntegrationTestCase
 
-# import frappe
-from frappe.tests.utils import FrappeTestCase
+from tekson_manufacturing.doctype.bom_bulk_creator.bom_bulk_creator import BOMBulkCreator
 
 
-class TestBOMBulkCreator(FrappeTestCase):
+class TestBOMBulkCreator(IntegrationTestCase):
 	pass
