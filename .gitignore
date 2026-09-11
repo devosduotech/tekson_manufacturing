@@ -75,3 +75,6 @@ fix_custom_field_names.sh
 *.xlsx
 *.lock
 UAT_DOCS/
+
+# Temporary reference files
+tmp/
