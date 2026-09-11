@@ -188,8 +188,10 @@ class BOMBulkCreator(Document):
 	@frappe.whitelist()
 	def enqueue_create_boms(self):
 		self.check_permission("write")
-		if self.status == "In Progress":
+		if frappe.db.get_value("BOM Bulk Creator", self.name, "status") == "In Progress":
 			frappe.throw(_("BOM creation is already in progress"))
+		frappe.db.set_value("BOM Bulk Creator", self.name, "status", "In Progress")
+		frappe.db.commit()
 		self.enqueue_bom_creation()
 
 	def enqueue_bom_creation(self):
@@ -241,7 +243,7 @@ class BOMBulkCreator(Document):
 		try:
 			for d in reverse_tree:
 				fg_item_data = production_item_wise_rm.get(d).fg_item_data
-				self.create_bom(fg_item_data, production_item_wise_rm)
+				self.create_bom(d, fg_item_data, production_item_wise_rm)
 
 			for row in self.items:
 				frappe.db.set_value("BOM Bulk Creator Item", row.name, "bom_created", 1)
@@ -274,31 +276,33 @@ class BOMBulkCreator(Document):
 
 		return self
 
-	def create_bom(self, row, production_item_wise_rm):
+	def create_bom(self, key, row, production_item_wise_rm):
 		"""
 		Create a single BOM as Draft.
 		Child BOMs are linked via bom_no for multi-level structure.
 		"""
+		fg_item_code = key[0]
+
 		if frappe.db.exists(
 			"BOM",
 			{
-				"item": row.item_code,
+				"item": fg_item_code,
 				"bom_type": "Production",
 				"docstatus": 0,
 			},
 		):
 			existing = frappe.db.get_value(
 				"BOM",
-				{"item": row.item_code, "bom_type": "Production", "docstatus": 0},
+				{"item": fg_item_code, "bom_type": "Production", "docstatus": 0},
 				"name",
 			)
-			production_item_wise_rm[(row.item_code, row.name)].bom_no = existing
+			production_item_wise_rm[key].bom_no = existing
 			return
 
 		bom = frappe.new_doc("BOM")
 		bom.update(
 			{
-				"item": row.item_code,
+				"item": fg_item_code,
 				"bom_type": "Production",
 				"quantity": row.qty,
 			}
@@ -308,7 +312,7 @@ class BOMBulkCreator(Document):
 			if self.get(field):
 				bom.set(field, self.get(field))
 
-		for item in production_item_wise_rm[(row.item_code, row.name)]["items"]:
+		for item in production_item_wise_rm[key]["items"]:
 			item.do_not_explode = 1
 
 			item_args = {}
@@ -327,7 +331,7 @@ class BOMBulkCreator(Document):
 
 		bom.save(ignore_permissions=True)
 
-		production_item_wise_rm[(row.item_code, row.name)].bom_no = bom.name
+		production_item_wise_rm[key].bom_no = bom.name
 
 	@frappe.whitelist()
 	def get_default_bom(self, item_code: str) -> str:
