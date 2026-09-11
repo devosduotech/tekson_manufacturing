@@ -105,14 +105,14 @@ class BOMBulkCreator(Document):
 			self.db_set("status", self.status)
 
 	def set_status_completed(self):
-		has_completed = True
-		for row in self.items:
-			if row.is_expandable and not row.bom_created:
-				has_completed = False
-				break
+		if not self.items:
+			return
 
-		if has_completed and self.items:
-			self.status = "Completed"
+		for row in self.items:
+			if not row.bom_created:
+				return
+
+		self.status = "Completed"
 
 	def set_conversion_factor(self):
 		for row in self.items:
@@ -241,6 +241,10 @@ class BOMBulkCreator(Document):
 				fg_item_data = production_item_wise_rm.get(d).fg_item_data
 				self.create_bom(fg_item_data, production_item_wise_rm)
 
+			for row in self.items:
+				frappe.db.set_value("BOM Bulk Creator Item", row.name, "bom_created", 1)
+
+			self.db_set("status", "Completed")
 			frappe.msgprint(_("BOMs created successfully as Draft"))
 		except Exception:
 			traceback = frappe.get_traceback(with_context=True)
