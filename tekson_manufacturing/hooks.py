@@ -43,6 +43,7 @@ override_doctype_class = {
 
 doctype_list_js = {
     "Work Order": "public/js/material_transfer_pick_list.js",
+    "BOM Bulk Creator": "tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator_list.js",
 }
 
 doctype_js = {
