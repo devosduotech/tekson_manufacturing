@@ -37,6 +37,8 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	},
 
 	add_custom_buttons(frm) {
+		frm.clear_custom_buttons();
+
 		if (frm.is_new()) {
 			return;
 		}
