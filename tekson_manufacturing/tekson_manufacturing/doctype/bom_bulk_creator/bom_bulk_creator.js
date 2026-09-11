@@ -51,7 +51,6 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	},
 
 	create_draft_boms(frm) {
-		frm.clear_custom_buttons();
 		frm.call({
 			method: "enqueue_create_boms",
 			doc: frm.doc,
