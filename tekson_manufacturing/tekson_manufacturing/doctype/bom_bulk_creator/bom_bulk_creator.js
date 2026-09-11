@@ -49,15 +49,12 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	},
 
 	create_draft_boms(frm) {
-		frappe.confirm(
-			__("This will create all BOMs as Draft. Continue?"),
-			() => {
-				frm.call({
-					method: "enqueue_create_boms",
-					doc: frm.doc,
-				});
-			}
-		);
+		frm.call({
+			method: "enqueue_create_boms",
+			doc: frm.doc,
+		}).then(() => {
+			frm.reload_doc();
+		});
 	},
 });
 
