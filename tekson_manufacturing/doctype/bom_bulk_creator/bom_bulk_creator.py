@@ -28,7 +28,7 @@ class BOMBulkCreator(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from tekson_manufacturing.bom_bulk_creator.bom_bulk_creator_item.bom_bulk_creator_item import BOMBulkCreatorItem
+		from tekson_manufacturing.doctype.bom_bulk_creator_item.bom_bulk_creator_item import BOMBulkCreatorItem
 
 		amended_from: DF.Link | None
 		buying_price_list: DF.Link | None
