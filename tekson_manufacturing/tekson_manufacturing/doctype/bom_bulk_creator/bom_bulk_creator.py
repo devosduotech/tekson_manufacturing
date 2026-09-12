@@ -270,7 +270,7 @@ class BOMBulkCreator(Document):
 
 		# Root FG
 		bom_queue[self.item_code] = frappe._dict({
-			"items": fg_children.get(self.item_code, []),
+			"bom_items": fg_children.get(self.item_code, []),
 			"bom_no": "",
 			"fg_item_data": self,
 		})
@@ -279,7 +279,7 @@ class BOMBulkCreator(Document):
 		for row in self.items:
 			if row.is_expandable and row.item_code not in bom_queue:
 				bom_queue[row.item_code] = frappe._dict({
-					"items": fg_children.get(row.item_code, []),
+					"bom_items": fg_children.get(row.item_code, []),
 					"bom_no": "",
 					"fg_item_data": row,
 				})
@@ -289,9 +289,9 @@ class BOMBulkCreator(Document):
 
 		try:
 			for item_code, data in reverse_queue.items():
-				if not data.items:
+				if not data.bom_items:
 					continue
-				self.create_bom(item_code, data.fg_item_data, data.items, bom_queue)
+				self.create_bom(item_code, data.fg_item_data, data.bom_items, bom_queue)
 
 			for row in self.items:
 				frappe.db.set_value("BOM Bulk Creator Item", row.name, "bom_created", 1)
