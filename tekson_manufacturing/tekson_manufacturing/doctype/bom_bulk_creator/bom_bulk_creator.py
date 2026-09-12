@@ -70,7 +70,6 @@ class BOMBulkCreator(Document):
 
 	def before_save(self):
 		self.set_status()
-		self.set_parent_row_no()
 		self.set_is_expandable()
 		self.set_conversion_factor()
 		self.set_reference_id()
@@ -189,18 +188,6 @@ class BOMBulkCreator(Document):
 			amount += flt(row.amount)
 
 		return amount
-
-	def set_parent_row_no(self):
-		"""Auto-calculate parent_row_no from fg_item mapping."""
-		# Build map: item_code → row.idx (for expandable rows that are parents)
-		item_row_map = {}
-		for row in self.items:
-			if row.item_code not in item_row_map:
-				item_row_map[row.item_code] = row.idx
-
-		for row in self.items:
-			if row.fg_item and row.fg_item != self.item_code:
-				row.parent_row_no = item_row_map.get(row.fg_item, "")
 
 	def set_is_expandable(self):
 		fg_items = [row.fg_item for row in self.items if row.fg_item != self.item_code]
@@ -372,7 +359,7 @@ class BOMBulkCreator(Document):
 				bom.set(field, value)
 
 		# Push routing to BOM — ERPNext auto-populates operations from routing
-		routing = fg_item_data.get("routing") if hasattr(fg_item_data, "get") else None
+		routing = getattr(fg_item_data, "routing", None)
 		if routing:
 			bom.with_operations = 1
 			bom.routing = routing

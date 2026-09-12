@@ -62,8 +62,7 @@
    {
     "fieldname": "parent_row_no",
     "fieldtype": "Data",
-    "label": "Parent Row No",
-    "read_only": 1
+    "label": "Parent Row No"
    },
     {
      "fieldname": "source_warehouse",
