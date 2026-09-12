@@ -366,7 +366,14 @@ class BOMBulkCreator(Document):
 				bom.set(field, value)
 
 		# Push routing to BOM — ERPNext auto-populates operations from routing
-		routing = getattr(fg_item_data, "routing", None)
+		# Look up routing from child rows where fg_item matches this BOM's item
+		routing = None
+		for child_row in self.items:
+			if child_row.fg_item == item_code and child_row.routing:
+				routing = child_row.routing
+				break
+		if not routing:
+			routing = getattr(fg_item_data, "routing", None)
 		if routing:
 			bom.with_operations = 1
 			bom.routing = routing
