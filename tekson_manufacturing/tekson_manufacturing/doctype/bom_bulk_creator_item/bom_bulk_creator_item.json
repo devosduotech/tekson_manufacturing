@@ -9,8 +9,9 @@
   "item_code",
   "fg_item",
   "parent_row_no",
-  "source_warehouse",
-  "qty",
+   "source_warehouse",
+   "target_fg_warehouse",
+   "qty",
   "stock_uom",
   "is_expandable",
   "column_break_f63f",
@@ -63,13 +64,20 @@
    "in_list_view": 1,
    "label": "Parent Row No"
   },
-  {
-   "fieldname": "source_warehouse",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Source Warehouse",
-   "options": "Warehouse"
-  },
+   {
+    "fieldname": "source_warehouse",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Source Warehouse",
+    "options": "Warehouse"
+   },
+   {
+    "fieldname": "target_fg_warehouse",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Target FG Warehouse",
+    "options": "Warehouse"
+   },
   {
    "fieldname": "qty",
    "fieldtype": "Float",

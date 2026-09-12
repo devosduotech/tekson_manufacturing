@@ -17,6 +17,7 @@ BOM_FIELDS = [
 	"currency",
 	"conversion_rate",
 	"buying_price_list",
+	"target_fg_warehouse",
 ]
 
 BOM_ITEM_FIELDS = [
@@ -63,6 +64,7 @@ class BOMBulkCreator(Document):
 		rm_cost_as_per: DF.Literal["Valuation Rate", "Last Purchase Rate", "Price List"]
 		set_rate_based_on_warehouse: DF.Check
 		status: DF.Literal["Draft", "In Progress", "Completed", "Failed", "Cancelled"]
+		target_fg_warehouse: DF.Link
 		uom: DF.Link | None
 	# end: auto-generated types
 
@@ -75,6 +77,7 @@ class BOMBulkCreator(Document):
 
 	def validate(self):
 		self.validate_items()
+		self.validate_hierarchy_cycles()
 
 	def validate_items(self):
 		for row in self.items:
@@ -92,6 +95,24 @@ class BOMBulkCreator(Document):
 					_("At row {0}: Parent Row No cannot be set for item {1}").format(row.idx, row.item_code),
 					title=_("Remove Parent Row No in Items Table"),
 				)
+
+	def validate_hierarchy_cycles(self):
+		parent_map = {}
+		for row in self.items:
+			if row.fg_reference_id and row.fg_reference_id != self.name:
+				parent_map[row.name] = row.fg_reference_id
+
+		for row_name, parent_name in parent_map.items():
+			visited = set()
+			current = parent_name
+			while current and current != self.name:
+				if current in visited:
+					frappe.throw(
+						_("Cycle detected in hierarchy involving row {0}").format(row_name),
+						title=_("Invalid Hierarchy"),
+					)
+				visited.add(current)
+				current = parent_map.get(current)
 
 	def set_status(self, save=False):
 		self.status = {
@@ -183,11 +204,42 @@ class BOMBulkCreator(Document):
 	@frappe.whitelist()
 	def enqueue_create_boms(self):
 		self.check_permission("write")
-		if frappe.db.get_value("BOM Bulk Creator", self.name, "status") == "In Progress":
-			frappe.throw(_("BOM creation is already in progress"))
-		frappe.db.set_value("BOM Bulk Creator", self.name, "status", "In Progress")
+		self.validate_for_bom_creation()
+
+		result = frappe.db.sql(
+			"""UPDATE `tabBOM Bulk Creator` SET status = 'In Progress'
+			WHERE name = %s AND status != 'In Progress'""",
+			self.name,
+			return_dict=True,
+		)
+
+		if not result or result[0].get("affected_rows", 0) == 0:
+			current_status = frappe.db.get_value("BOM Bulk Creator", self.name, "status")
+			if current_status == "In Progress":
+				frappe.throw(_("BOM creation is already in progress"))
+			frappe.throw(_("Cannot start BOM creation in current status: {0}").format(current_status))
+
 		frappe.db.commit()
 		self.enqueue_bom_creation()
+
+	def validate_for_bom_creation(self):
+		if not self.target_fg_warehouse:
+			frappe.throw(_("Target FG Warehouse is required for BOM creation"))
+
+		if not self.company:
+			frappe.throw(_("Company is required for BOM creation"))
+
+		for row in self.items:
+			if not row.item_code:
+				frappe.throw(_("Row {0}: Item Code is required").format(row.idx))
+			if flt(row.qty) <= 0:
+				frappe.throw(_("Row {0}: Quantity must be greater than zero").format(row.idx))
+			if row.is_expandable and not row.target_fg_warehouse:
+				frappe.throw(
+					_("Row {0}: Target FG Warehouse is required for sub-assembly {1}").format(
+						row.idx, row.item_code
+					)
+				)
 
 	def enqueue_bom_creation(self):
 		frappe.enqueue(
@@ -203,9 +255,10 @@ class BOMBulkCreator(Document):
 
 	def create_boms(self):
 		"""
-		Create multi-level BOMs as Draft (bottom-up).
-		Child BOMs are created first, then parent BOMs reference them via bom_no.
-		All BOMs are saved as Draft - user manually updates bom_no, operations, etc.
+		Create all BOMs as Draft (bottom-up).
+		All BOMs are saved as Draft — child bom_no references are intentionally
+		left blank because ERPNext requires referenced BOMs to be submitted.
+		User manually updates bom_no, operations, quality inspection templates, etc.
 		"""
 		self.db_set("status", "In Progress")
 		production_item_wise_rm = OrderedDict({})
@@ -258,6 +311,11 @@ class BOMBulkCreator(Document):
 
 	@frappe.whitelist()
 	def edit_qty(self, docname: str, qty: float):
+		self.check_permission("write")
+
+		if flt(qty) <= 0:
+			frappe.throw(_("Quantity must be greater than zero"))
+
 		if not frappe.db.exists("BOM Bulk Creator Item", {"name": docname, "parent": self.name}):
 			frappe.throw(_("BOM Bulk Creator Item {0} does not exist").format(docname))
 
@@ -274,7 +332,7 @@ class BOMBulkCreator(Document):
 	def create_bom(self, key, row, production_item_wise_rm):
 		"""
 		Create a single BOM as Draft.
-		Child BOMs are linked via bom_no for multi-level structure.
+		bom_no is intentionally left blank — ERPNext requires referenced BOMs to be submitted.
 		"""
 		fg_item_code = key[0]
 
@@ -304,8 +362,9 @@ class BOMBulkCreator(Document):
 		)
 
 		for field in BOM_FIELDS:
-			if self.get(field):
-				bom.set(field, self.get(field))
+			value = row.get(field) if hasattr(row, "get") and row.get(field) else self.get(field)
+			if value:
+				bom.set(field, value)
 
 		for item in production_item_wise_rm[key]["items"]:
 			item.do_not_explode = 1
@@ -335,6 +394,8 @@ class BOMBulkCreator(Document):
 
 	@frappe.whitelist()
 	def add_item(self, **kwargs):
+		self.check_permission("write")
+
 		if isinstance(kwargs, str):
 			kwargs = frappe.parse_json(kwargs)
 
@@ -369,6 +430,8 @@ class BOMBulkCreator(Document):
 
 	@frappe.whitelist()
 	def add_sub_assembly(self, **kwargs):
+		self.check_permission("write")
+
 		if isinstance(kwargs, str):
 			kwargs = frappe.parse_json(kwargs)
 
@@ -437,35 +500,43 @@ class BOMBulkCreator(Document):
 		if isinstance(kwargs, dict):
 			kwargs = frappe._dict(kwargs)
 
-		updated = False
-		if kwargs.docname:
-			row = next((row for row in self.items if row.name == kwargs.docname), None)
-			if not row:
-				frappe.throw(_("BOM Bulk Creator Item with name {0} does not exist").format(kwargs.docname))
+		self.check_permission("write")
 
+		if not kwargs.docname:
+			frappe.throw(_("Docname is required to delete a node"))
+
+		row = next((row for row in self.items if row.name == kwargs.docname), None)
+		if not row:
+			frappe.throw(_("BOM Bulk Creator Item with name {0} does not exist").format(kwargs.docname))
+
+		descendants = self._get_descendants(kwargs.docname)
+		descendants_to_delete = [d for d in descendants if d != kwargs.docname]
+
+		for desc_name in reversed(descendants_to_delete):
+			desc_row = next((r for r in self.items if r.name == desc_name), None)
+			if desc_row:
+				desc_row.delete()
+				self.remove(desc_row)
+
+		row = next((r for r in self.items if r.name == kwargs.docname), None)
+		if row:
 			row.delete()
 			self.remove(row)
-			updated = True
 
-		items = get_children(parent=kwargs.fg_item, parent_id=self.name)
-		if items:
-			for item in items:
-				updated = True
-				child_row = next((row for row in self.items if row.name == item.name), None)
-				if child_row:
-					child_row.delete()
-					self.remove(child_row)
+		self.set_rate_for_items()
+		self.save()
 
-				if item.expandable:
-					self.delete_node(fg_item=item.value)
+		return self
 
-		if updated:
-			self.set_rate_for_items()
-			self.save()
-
-			return self
-
-		return frappe._dict()
+	def _get_descendants(self, node_name):
+		children = [
+			row.name for row in self.items
+			if row.fg_reference_id == node_name
+		]
+		descendants = list(children)
+		for child_name in children:
+			descendants.extend(self._get_descendants(child_name))
+		return descendants
 
 
 @frappe.whitelist()
@@ -491,6 +562,8 @@ def get_children(doctype: str | None = None, parent: str | None = None, **kwargs
 		"rate",
 		"amount",
 		"fg_item",
+		"target_fg_warehouse",
+		"source_warehouse",
 	]
 
 	query_filters = {

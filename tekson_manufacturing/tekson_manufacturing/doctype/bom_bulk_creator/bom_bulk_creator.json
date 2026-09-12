@@ -29,10 +29,11 @@
   "column_break_ivyw",
   "currency",
   "conversion_rate",
-  "section_break_zcfg",
-  "default_warehouse",
-  "column_break_tzot",
-  "company",
+   "section_break_zcfg",
+   "default_warehouse",
+   "target_fg_warehouse",
+   "column_break_tzot",
+   "company",
   "materials_section",
   "items",
   "costing_detail",
@@ -218,12 +219,19 @@
    "fieldname": "column_break_tzot",
    "fieldtype": "Column Break"
   },
-  {
-   "fieldname": "default_warehouse",
-   "fieldtype": "Link",
-   "label": "Default Source Warehouse",
-   "options": "Warehouse"
-  },
+   {
+    "fieldname": "default_warehouse",
+    "fieldtype": "Link",
+    "label": "Default Source Warehouse",
+    "options": "Warehouse"
+   },
+   {
+    "fieldname": "target_fg_warehouse",
+    "fieldtype": "Link",
+    "label": "Target FG Warehouse",
+    "options": "Warehouse",
+    "reqd": 1
+   },
   {
    "fieldname": "bom_bulk_creator",
    "fieldtype": "HTML"
