@@ -84,6 +84,12 @@ class BOMBulkCreator(Document):
 			if row.is_expandable and row.item_code == self.item_code:
 				frappe.throw(_("Item {0} cannot be added as a sub-assembly of itself").format(row.item_code))
 
+			if not row.parent_row_no and row.fg_item and row.fg_item != self.item_code:
+				frappe.throw(
+					_("At row {0}: set Parent Row No for item {1}").format(row.idx, row.item_code),
+					title=_("Set Parent Row No in Items Table"),
+				)
+
 			if row.parent_row_no and row.fg_item == self.item_code:
 				frappe.throw(
 					_("At row {0}: Parent Row No cannot be set for item {1}").format(row.idx, row.item_code),
