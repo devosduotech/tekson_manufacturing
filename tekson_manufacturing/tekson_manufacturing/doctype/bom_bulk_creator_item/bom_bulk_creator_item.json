@@ -5,16 +5,16 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
-  "field_order": [
-   "item_code",
-   "fg_item",
-   "parent_row_no",
-   "source_warehouse",
-   "target_fg_warehouse",
-   "qty",
-   "stock_uom",
-   "is_expandable",
-   "routing",
+   "field_order": [
+    "item_code",
+    "fg_item",
+    "parent_row_no",
+    "source_warehouse",
+    "target_fg_warehouse",
+    "qty",
+    "stock_uom",
+    "routing",
+    "operation",
    "column_break_f63f",
   "item_name",
   "item_group",
@@ -110,6 +110,14 @@
     "in_list_view": 1,
     "label": "Routing",
     "options": "Routing"
+   },
+   {
+    "columns": 1.5,
+    "fieldname": "operation",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Operation",
+    "options": "Operation"
    },
    {
     "fieldname": "column_break_f63f",

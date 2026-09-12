@@ -31,6 +31,7 @@ BOM_ITEM_FIELDS = [
 	"do_not_explode",
 	"source_warehouse",
 	"allow_alternative_item",
+	"operation",
 ]
 
 
