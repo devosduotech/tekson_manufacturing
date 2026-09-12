@@ -75,7 +75,7 @@ frappe.ui.form.on("BOM Bulk Creator Item", {
 		let row = locals[cdt][cdn];
 		if (row.routing) {
 			frappe.call({
-				method: "tekson_manufacturing.tekson_manufacturing.doctype.bom_bulk_creator.bom_bulk_creator.get_routing_operations",
+				method: "tekson_manufacturing.api.get_routing_operations",
 				args: { routing_name: row.routing },
 				callback(r) {
 					if (r.message && r.message.length === 1) {
