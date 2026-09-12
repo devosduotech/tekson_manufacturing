@@ -14,7 +14,6 @@ frappe.ui.form.on("BOM Bulk Creator", {
 
 	refresh(frm) {
 		frm.trigger("add_custom_buttons");
-		frm.trigger("set_root_item");
 	},
 
 	set_queries(frm) {
@@ -28,12 +27,6 @@ frappe.ui.form.on("BOM Bulk Creator", {
 				query: "erpnext.controllers.queries.item_query",
 			};
 		});
-	},
-
-	set_root_item(frm) {
-		if (frm.is_new() && frm.doc.items?.length) {
-			frappe.model.set_value(frm.doc.items[0].doctype, frm.doc.items[0].name, "is_root", 1);
-		}
 	},
 
 	add_custom_buttons(frm) {
@@ -62,11 +55,4 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	},
 });
 
-frappe.ui.form.on("BOM Bulk Creator Item", {
-	item_code(frm, cdt, cdn) {
-		let item = frappe.get_doc(cdt, cdn);
-		if (item.item_code && item.is_root) {
-			frappe.model.set_value(cdt, cdn, "fg_item", item.item_code);
-		}
-	},
-});
+
