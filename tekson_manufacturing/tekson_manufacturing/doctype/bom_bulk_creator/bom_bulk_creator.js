@@ -14,6 +14,7 @@ frappe.ui.form.on("BOM Bulk Creator", {
 
 	refresh(frm) {
 		frm.trigger("add_custom_buttons");
+		frm.trigger("set_child_list_view");
 	},
 
 	set_queries(frm) {
@@ -27,20 +28,23 @@ frappe.ui.form.on("BOM Bulk Creator", {
 				query: "erpnext.controllers.queries.item_query",
 			};
 		});
-		frm.set_query("operation", "items", function (doc, cdt, cdn) {
-			let row = locals[cdt][cdn];
-			if (!row.routing) {
-				frappe.msgprint(__("Please select a Routing first"));
-				return false;
-			}
-			return {
-				query: "frappe.client.get_list",
-				filters: {
-					parenttype: "Routing",
-					parent: row.routing,
-				},
-				fields: ["operation"],
-			};
+	},
+
+	set_child_list_view(frm) {
+		if (!frm.fields_dict.items || !frm.fields_dict.items.grid) return;
+		let grid = frm.fields_dict.items.grid;
+		let columns = [
+			{ fieldname: "item_code", label: __("Raw Material"), columns: 2 },
+			{ fieldname: "fg_item", label: __("FG Item"), columns: 2 },
+			{ fieldname: "source_warehouse", label: __("Source WH"), columns: 1 },
+			{ fieldname: "target_fg_warehouse", label: __("Target WH"), columns: 1 },
+			{ fieldname: "qty", label: __("Qty"), columns: 1 },
+			{ fieldname: "stock_uom", label: __("UOM"), columns: 1 },
+			{ fieldname: "routing", label: __("Routing"), columns: 1.5 },
+			{ fieldname: "operation", label: __("Operation"), columns: 1.5 },
+		];
+		columns.forEach(col => {
+			grid.set_column_in_list_view(col.fieldname, col.columns);
 		});
 	},
 
@@ -75,13 +79,8 @@ frappe.ui.form.on("BOM Bulk Creator Item", {
 		let row = locals[cdt][cdn];
 		if (row.routing) {
 			frappe.call({
-				method: "frappe.client.get_list",
-				args: {
-					doctype: "BOM Operation",
-					filters: { parenttype: "Routing", parent: row.routing },
-					fields: ["operation"],
-					limit_page_length: 0,
-				},
+				method: "tekson_manufacturing.tekson_manufacturing.doctype.bom_bulk_creator.bom_bulk_creator.get_routing_operations",
+				args: { routing_name: row.routing },
 				callback(r) {
 					if (r.message && r.message.length === 1) {
 						frappe.model.set_value(cdt, cdn, "operation", r.message[0].operation);
