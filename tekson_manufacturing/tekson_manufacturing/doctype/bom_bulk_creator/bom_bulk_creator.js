@@ -33,18 +33,27 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	set_child_list_view(frm) {
 		if (!frm.fields_dict.items || !frm.fields_dict.items.grid) return;
 		let grid = frm.fields_dict.items.grid;
-		let columns = [
-			{ fieldname: "item_code", label: __("Raw Material"), columns: 2 },
-			{ fieldname: "fg_item", label: __("FG Item"), columns: 2 },
-			{ fieldname: "source_warehouse", label: __("Source WH"), columns: 1 },
-			{ fieldname: "target_fg_warehouse", label: __("Target WH"), columns: 1 },
-			{ fieldname: "qty", label: __("Qty"), columns: 1 },
-			{ fieldname: "stock_uom", label: __("UOM"), columns: 1 },
-			{ fieldname: "routing", label: __("Routing"), columns: 1.5 },
-			{ fieldname: "operation", label: __("Operation"), columns: 1.5 },
-		];
-		columns.forEach(col => {
-			grid.set_column_in_list_view(col.fieldname, col.columns);
+		// Clear user's grid config to reset to JSON defaults
+		frappe.call({
+			method: "frappe.client.delete",
+			args: {
+				doctype: "User Document Setting",
+				filters: {
+					user: frappe.session.user,
+					document_type: "BOM Bulk Creator Item",
+				},
+			},
+			callback() {
+				grid.set_column_in_list_view("item_code", 2);
+				grid.set_column_in_list_view("fg_item", 2);
+				grid.set_column_in_list_view("source_warehouse", 1);
+				grid.set_column_in_list_view("target_fg_warehouse", 1);
+				grid.set_column_in_list_view("qty", 1);
+				grid.set_column_in_list_view("stock_uom", 1);
+				grid.set_column_in_list_view("routing", 1.5);
+				grid.set_column_in_list_view("operation", 1.5);
+				grid.refresh();
+			},
 		});
 	},
 
