@@ -33,28 +33,15 @@ frappe.ui.form.on("BOM Bulk Creator", {
 	set_child_list_view(frm) {
 		if (!frm.fields_dict.items || !frm.fields_dict.items.grid) return;
 		let grid = frm.fields_dict.items.grid;
-		// Clear user's grid config to reset to JSON defaults
-		frappe.call({
-			method: "frappe.client.delete",
-			args: {
-				doctype: "User Document Setting",
-				filters: {
-					user: frappe.session.user,
-					document_type: "BOM Bulk Creator Item",
-				},
-			},
-			callback() {
-				grid.set_column_in_list_view("item_code", 2);
-				grid.set_column_in_list_view("fg_item", 2);
-				grid.set_column_in_list_view("source_warehouse", 1);
-				grid.set_column_in_list_view("target_fg_warehouse", 1);
-				grid.set_column_in_list_view("qty", 1);
-				grid.set_column_in_list_view("stock_uom", 1);
-				grid.set_column_in_list_view("routing", 1.5);
-				grid.set_column_in_list_view("operation", 1.5);
-				grid.refresh();
-			},
-		});
+		grid.set_column_in_list_view("item_code", 2);
+		grid.set_column_in_list_view("fg_item", 2);
+		grid.set_column_in_list_view("source_warehouse", 1);
+		grid.set_column_in_list_view("target_fg_warehouse", 1);
+		grid.set_column_in_list_view("qty", 1);
+		grid.set_column_in_list_view("stock_uom", 1);
+		grid.set_column_in_list_view("routing", 1.5);
+		grid.set_column_in_list_view("operation", 1.5);
+		grid.refresh();
 	},
 
 	add_custom_buttons(frm) {
