@@ -75,13 +75,17 @@ frappe.ui.form.on("BOM Bulk Creator Item", {
 		let row = locals[cdt][cdn];
 		if (row.routing) {
 			frappe.call({
-				method: "tekson_manufacturing.api.get_routing_operations",
-				args: { routing_name: row.routing },
+				method: "frappe.client.get",
+				args: {
+					doctype: "Routing",
+					name: row.routing,
+				},
 				callback(r) {
-					if (r.message && r.message.length === 1) {
-						frappe.model.set_value(cdt, cdn, "operation", r.message[0].operation);
-					} else {
-						frappe.model.set_value(cdt, cdn, "operation", "");
+					if (r.message && r.message.operations) {
+						let ops = r.message.operations;
+						if (ops.length === 1) {
+							frappe.model.set_value(cdt, cdn, "operation", ops[0].operation);
+						}
 					}
 				},
 			});
