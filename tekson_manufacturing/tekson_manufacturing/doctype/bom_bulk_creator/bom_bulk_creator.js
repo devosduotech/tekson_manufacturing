@@ -34,12 +34,8 @@ frappe.ui.form.on("BOM Bulk Creator", {
 				return { filters: { name: ["like", "__none__"] } };
 			}
 			return {
-				query: "frappe.client.get_list",
-				filters: {
-					parenttype: "Routing",
-					parent: row.routing,
-				},
-				fields: ["operation as name"],
+				query: "tekson_manufacturing.utils.routing_utils.get_routing_operations_query",
+				filters: { routing_name: row.routing },
 			};
 		});
 	},
@@ -89,22 +85,16 @@ frappe.ui.form.on("BOM Bulk Creator Item", {
 		let row = locals[cdt][cdn];
 		if (row.routing) {
 			frappe.call({
-				method: "frappe.client.get",
-				args: {
-					doctype: "Routing",
-					name: row.routing,
-				},
+				method: "tekson_manufacturing.utils.routing_utils.get_routing_operations",
+				args: { routing_name: row.routing },
 				callback(r) {
-					if (r.message && r.message.operations) {
-						let ops = r.message.operations;
-						if (ops.length === 1) {
-							frappe.model.set_value(cdt, cdn, "operation", ops[0].operation);
-						} else if (ops.length > 1) {
-							frappe.show_alert({
-								message: __("Routing has {0} operations. Please select one.", [ops.length]),
-								indicator: "blue",
-							});
-						}
+					if (r.message && r.message.length === 1) {
+						frappe.model.set_value(cdt, cdn, "operation", r.message[0].operation);
+					} else if (r.message && r.message.length > 1) {
+						frappe.show_alert({
+							message: __("Routing has {0} operations. Please select one.", [r.message.length]),
+							indicator: "blue",
+						});
 					}
 				},
 			});
