@@ -70,6 +70,7 @@ class BOMBulkCreator(Document):
 
 	def before_save(self):
 		self.set_status()
+		self.set_parent_row_no()
 		self.set_is_expandable()
 		self.set_conversion_factor()
 		self.set_reference_id()
@@ -84,13 +85,7 @@ class BOMBulkCreator(Document):
 			if row.is_expandable and row.item_code == self.item_code:
 				frappe.throw(_("Item {0} cannot be added as a sub-assembly of itself").format(row.item_code))
 
-			if not row.parent_row_no and row.fg_item and row.fg_item != self.item_code:
-				frappe.throw(
-					_("At row {0}: set Parent Row No for item {1}").format(row.idx, row.item_code),
-					title=_("Set Parent Row No in Items Table"),
-				)
-
-			elif row.parent_row_no and row.fg_item == self.item_code:
+			if row.parent_row_no and row.fg_item == self.item_code:
 				frappe.throw(
 					_("At row {0}: Parent Row No cannot be set for item {1}").format(row.idx, row.item_code),
 					title=_("Remove Parent Row No in Items Table"),
@@ -194,6 +189,18 @@ class BOMBulkCreator(Document):
 			amount += flt(row.amount)
 
 		return amount
+
+	def set_parent_row_no(self):
+		"""Auto-calculate parent_row_no from fg_item mapping."""
+		# Build map: item_code → row.idx (for expandable rows that are parents)
+		item_row_map = {}
+		for row in self.items:
+			if row.item_code not in item_row_map:
+				item_row_map[row.item_code] = row.idx
+
+		for row in self.items:
+			if row.fg_item and row.fg_item != self.item_code:
+				row.parent_row_no = item_row_map.get(row.fg_item, "")
 
 	def set_is_expandable(self):
 		fg_items = [row.fg_item for row in self.items if row.fg_item != self.item_code]
