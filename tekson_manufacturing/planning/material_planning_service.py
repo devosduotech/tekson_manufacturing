@@ -240,13 +240,19 @@ def _is_source_warehouse(warehouse: str) -> bool:
     if not warehouse:
         return False
     wh_name = frappe.db.get_value("Warehouse", warehouse, "warehouse_name") or ""
-    return wh_name in ("Raw Material Stores", "BOF Stores")
+    return "Raw Material Stores" in wh_name or "BOF Stores" in wh_name
 
 
 def _get_default_source_warehouse() -> str:
     """Find a valid default source warehouse (Raw Material Stores or BOF Stores)"""
+    company = frappe.defaults.get_defaults().company
     for wh_name in ("Raw Material Stores", "BOF Stores"):
-        wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": frappe.defaults.get_defaults().company}, "name")
+        # Try exact match first
+        wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
+        if wh:
+            return wh
+        # Try contains match (e.g. "Raw Material Stores - TPL")
+        wh = frappe.db.get_value("Warehouse", {"warehouse_name": ["like", f"%{wh_name}%"], "company": company}, "name")
         if wh:
             return wh
     return ""
