@@ -1,8 +1,8 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
-**Date:** Aug 10, 2026
-**Version:** v15.1.3
-**Fixed in v15.1.3:** 4 HIGH items
+**Date:** Sep 12, 2026
+**Version:** v15.1.26
+**Status:** HIGH items resolved
 
 ---
 
@@ -29,22 +29,30 @@
 
 ---
 
-## Phase 1.1 — Planning (v15.1.x) — 7 remaining
+## Phase 1.1 — Planning (v15.1.x) — 4 remaining
 
-### MEDIUM (4)
+### MEDIUM (2)
 | ID | File | Issue |
 |----|------|-------|
 | M10 | `material_planning_service.py:96` | Raw SQL for duplicate MR check |
 | M11 | `material_planning_service.py:47` | N+1 queries in generation loop |
-| M12 | Page JS | No `.fail()` on `frappe.call()` |
-| M13 | `hooks.py` | `production_plan_mr.js` loads globally |
 
-### LOW (3)
+### LOW (2)
 | ID | File | Issue |
 |----|------|-------|
-| L6 | `material_planning_service.py` | Redundant `target_wh` assignment |
 | L7 | Page JS | Browser timezone date |
 | L8 | Page JS | Inline HTML |
+
+---
+
+## Resolved This Session
+
+| ID | Issue | Fixed In |
+|----|-------|----------|
+| ~~M12~~ | Page JS no `.fail()` on `frappe.call()` | v15.1.26 |
+| ~~M13~~ | `production_plan_mr.js` loads globally | v15.1.26 |
+| ~~NEW~~ | MR qty double-counting | v15.1.25 |
+| ~~NEW~~ | Source warehouse exact match | v15.1.26 |
 
 ---
 
@@ -53,9 +61,10 @@
 | Phase | HIGH | MEDIUM | LOW | Total |
 |-------|------|--------|-----|-------|
 | Phase 1 (v15.0.x) | 0 | 8 | 3 | **11** |
-| Phase 1.1 (v15.1.x) | 0 | 4 | 3 | **7** |
-| **Total** | **0** | **12** | **6** | **18** |
+| Phase 1.1 (v15.1.x) | 0 | 2 | 2 | **4** |
+| **Total** | **0** | **10** | **5** | **15** |
 
 ### Already Fixed
 - ✅ v15.1.2: 4 × `frappe.db.commit()` + JS hardening
-- ✅ v15.2.0: H1-H4 (permission doc, warehouse match, UI consolidation, dead code)
+- ✅ v15.1.25: MR qty double-counting (wo_bom_nos filter)
+- ✅ v15.1.26: Source warehouse contains match fix

@@ -1,13 +1,28 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.9 (develop + main)
+## Current Version: v15.1.26 (main) | v15.1.26 (develop)
 
 ---
 
 ## Completed Features
 
-### 1. Daily Material Planning (MR Generation)
-**Status: ✅ Working**
+### 1. MES Execution Engine (Phase 1 — v15.0.x)
+**Status: ✅ Complete**
+
+- Material Readiness Engine — checks stock before JC start
+- Dependency Engine — enforces operation sequence
+- Job Card Readiness Engine — auto-updates JC status
+- MES Coordinator — single entry point for all hooks
+- Stock Entry hook — auto-updates JC on material transfer
+
+**Key Files:**
+- `mes/mes_coordinator.py` — Hook coordinator
+- `readiness/material_readiness.py` — Material check
+- `readiness/job_card_readiness.py` — JC readiness
+- `validation/dependency_engine.py` — Operation dependencies
+
+### 2. Daily Material Planning (Phase 1.1 — v15.1.x)
+**Status: ✅ Complete (v15.1.26)**
 
 - Generates Material Requests grouped by department WIP warehouse
 - Source warehouse fallback chain: `item.source_warehouse → wo.source_warehouse → default warehouse`
@@ -15,12 +30,41 @@
 - Company field added to Material Request (required in ERPNext v15)
 - Frontend error handlers fixed for frappe v15 (`xhr.responseText` parsing)
 
+**v15.1.25 — MR Qty Double-Counting Fix:**
+- `_explode_bom` now receives `wo_bom_nos` set (BOMs with their own WOs)
+- Skips recursion into sub-assemblies that have their own Work Orders
+- Each leaf WO only requests its direct raw materials
+- Prevents same raw material from being counted at every level of hierarchy
+
+**v15.1.26 — Source Warehouse Filter Fix:**
+- `_is_source_warehouse` now uses contains match (`"Raw Material Stores" in wh_name`)
+- Handles warehouse names with suffixes (e.g., "Raw Material Stores - TPL")
+- `_get_default_source_warehouse` also uses contains match with fallback
+- MR now correctly checks WIP stock and only requests actual shortages
+
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
 - `public/js/production_plan_mr.js` — Production Plan MR button
 - `page/material_planning/material_planning.js` — Material Planning page
 
-### 2. BOM Routing Corrections (R215 Combi Cooler)
+### 3. BOM Bulk Creator (v15.1.20–v15.1.24)
+**Status: ✅ Complete**
+
+- Creates multi-level BOM hierarchies as Draft only
+- Routing field on parent and child doctypes
+- Routing reads from child rows where `fg_item == item_code`
+- Operation field with routing-based filtering via `routing_utils.py`
+- `do_not_explode` set to 0 for expandable items, 1 for RMs
+- `parent_row_no` editable (user enters manually)
+- Item deduplication — first occurrence only
+- BOM quantity fixed to 1
+
+**Key Files:**
+- `tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.py`
+- `tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.js`
+- `tekson_manufacturing/utils/routing_utils.py`
+
+### 4. BOM Routing Corrections (R215 Combi Cooler)
 **Status: ✅ Applied**
 
 Corrected department routing for 7 end plate BOMs:
@@ -29,11 +73,7 @@ Corrected department routing for 7 end plate BOMs:
 - **Folding** → RP Dept (WIP-RP)
 - **Core Assembly** → Ralu In Dept (WIP-Ralu In)
 
-**Key Files:**
-- `BOMs/BOM_full r215 combi cooler.csv` — Corrected BOM data
-- `BOMs/R215_Combi_Cooler_Workflow.drawio` — Workflow diagram
-
-### 3. custom_start_status Field Standardization
+### 5. custom_start_status Field Standardization
 **Status: ✅ Applied**
 
 Reduced from 7 values to 5:
@@ -43,14 +83,7 @@ Reduced from 7 values to 5:
 4. `In Progress` — JC status is "Work In Progress"
 5. `Completed` — JC status is "Completed"
 
-**Key Files:**
-- `mes/dataclasses.py` — ReadinessStatus enum aligned to display values
-- `readiness/job_card_readiness.py` — Status mapping in `apply_result_to_job_card`
-- `services/job_card_service.py` — `update_start_status` logic
-- `execution/execution_engine.py` — Material check before "Ready to Start"
-- `patches/update_job_card_start_status_options.py` — DB patch for Select field options
-
-### 4. Stock Entry Hook - custom_start_status Auto-Update
+### 6. Stock Entry Hook - custom_start_status Auto-Update
 **Status: ✅ Working**
 
 After Material Transfer to department WIP, Job Cards now auto-update:
@@ -58,83 +91,64 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 - `custom_can_start_operation` → 1
 - `custom_material_available_for_operation` → 1
 
-**Root Causes Fixed:**
-1. `validate_manufacturing_role()` blocked Stock Users — removed from SE hook
-2. `apply_result_to_job_card` used `frappe.db.set_value()` bypassing validate hook — changed to `doc.save()`
-3. SE hook only handled "Material Transfer for Manufacture" — now also handles "Material Transfer" (MR flow)
-4. For "Material Transfer" SEs (no work_order linked), finds WOs by matching `t_warehouse` against Job Card `wip_warehouse`
+---
 
-**Key Files:**
-- `mes/mes_coordinator.py` — `on_stock_entry_submit` hook handler
-- `readiness/job_card_readiness.py` — `apply_result_to_job_card` (uses `doc.save()`)
-- `utils/job_card_utils.py` — `update_job_card_status` validate hook
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v15.0.1–v15.0.3 | Aug 2026 | Core MES engine, hooks, tests |
+| v15.1.1–v15.1.9 | Aug 2026 | Planning module, MR generation, status standardization |
+| v15.1.20–v15.1.24 | Sep 2026 | BOM Bulk Creator, routing, operation field |
+| v15.1.25 | Sep 12, 2026 | MR qty double-counting fix (wo_bom_nos filter) |
+| v15.1.26 | Sep 12, 2026 | Source warehouse contains match fix |
 
 ---
 
-## Architecture Summary
+## Deployment
 
-### MES Hook Chain (Stock Entry Submit)
-```
-Stock Entry on_submit
-  → mes_coordinator.on_stock_entry_submit()
-    → validate_stock_entry_permission()
-    → Find affected WOs (by work_order or target warehouse)
-    → JobCardReadinessEngine.refresh_work_order()
-      → For each JC: evaluate_job_card() → apply_result_to_job_card()
-        → doc.save() triggers validate hook
-          → update_job_card_status()
-            → update_start_status() — sets custom_start_status
-            → update_dependency_status() — sets custom_can_start_operation
-            → update_material_status() — sets custom_material_available_for_operation
+### Dev Machine (karthic@teksons-development)
+```bash
+cd ~/frappe-bench/apps/tekson_manufacturing
+git fetch upstream && git merge upstream/bom-bulk-creator --no-edit
+cd ~/frappe-bench && bench --site teksons.dev migrate
 ```
 
-### JC Start Validation
+### UAT Machine (cwd_admin@cwd)
+```bash
+cd ~/cwd-bench/apps/tekson_manufacturing
+git pull origin main
+cd ~/cwd-bench && bench --site tekson.site migrate && bench build --app tekson_manufacturing
 ```
-Job Card before_save
-  → validate_job_card_start()
-    → Check previous operation (DependencyEngine)
-    → Check material availability (MaterialReadinessEngine)
-    → Block start if either fails
+
+### Local Development
+```bash
+cd /home/karthic/Desktop/new_applications/tekson_manufacturing
+git pull origin main
 ```
 
 ---
 
 ## Testing Checklist
 
-### UAT Testing
-- [ ] Material Request generation from Production Plan
-- [ ] Stock Entry creation from Material Request
-- [ ] custom_start_status updates to "Ready to Start" after SE submit
-- [ ] JC start blocked when materials not available
-- [ ] JC start allowed when materials available
-- [ ] JC completion updates status to "Completed"
-- [ ] Multiple WOs in same WIP warehouse refresh correctly
+### Material Planning
+- [x] MR generation from Production Plan (PP)
+- [x] MR grouped by department WIP warehouse
+- [x] Source warehouse contains match (- TPL suffix)
+- [x] MR only requests actual shortages (WIP stock deducted)
+- [x] No double-counting of sub-assembly materials
+- [x] Leaf WOs request only direct raw materials
 
----
+### BOM Bulk Creator
+- [x] Create multi-level BOM hierarchy as Draft
+- [x] Routing field on parent/child doctypes
+- [x] Operation field filtered by routing
+- [x] `do_not_explode` logic (0 for expandable, 1 for RMs)
+- [x] Item deduplication
+- [x] Grid list view columns forced on refresh
 
-## Known Issues (Resolved)
-1. ~~MR Generation "Error: undefined"~~ — Fixed frappe v15 error handlers
-2. ~~MR Generation "no MRs generated"~~ — Fixed source_warehouse fallback
-3. ~~custom_start_status not updating after SE~~ — Fixed SE hook purpose handling
-4. ~~"Refresh Dependency Status" button not working~~ — Not implemented (validate hook handles this on save)
-
----
-
-## Deployment Notes
-
-```bash
-git pull origin main
-bench build --app tekson_manufacturing
-bench migrate  # Runs patches including custom_start_status options update
-bench restart
-```
-
----
-
-## Git History (Recent)
-- `aab8f12` — Handle Material Transfer purpose in SE hook
-- `395883f` — Add diagnostic logging to update_start_status and validate hook
-- `02d4afe` — Fix apply_result_to_job_card to use doc.save()
-- `6429540` — Remove validate_manufacturing_role from SE hook
-- `c6e2372` — Patch: update custom_start_status options from 7 to 5 values
-- `d601343` — Align custom_start_status to 5 values
+### MES Execution
+- [x] Job Card readiness status updates
+- [x] Stock Entry hook triggers JC refresh
+- [x] Dependency blocking (previous op must complete)
+- [x] Material availability check before JC start
