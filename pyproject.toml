@@ -1,6 +1,6 @@
 [project]
 name = "tekson_manufacturing"
-version = "15.1.21"
+version = "15.1.22"
 authors = [
     { name = "OSDuo Tech LLP", email = "developer@osduotech.com"}
 ]
