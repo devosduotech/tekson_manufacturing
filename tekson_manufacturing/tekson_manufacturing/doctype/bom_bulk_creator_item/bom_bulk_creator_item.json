@@ -5,16 +5,17 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
-  "item_code",
-  "fg_item",
-  "parent_row_no",
+  "field_order": [
+   "item_code",
+   "fg_item",
+   "parent_row_no",
    "source_warehouse",
    "target_fg_warehouse",
    "qty",
-  "stock_uom",
-  "is_expandable",
-  "column_break_f63f",
+   "stock_uom",
+   "is_expandable",
+   "routing",
+   "column_break_f63f",
   "item_name",
   "item_group",
   "sourced_by_supplier",
@@ -94,16 +95,23 @@
    "options": "UOM",
    "read_only": 1
   },
-  {
-   "default": "0",
-   "fieldname": "is_expandable",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Is Expandable",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_f63f",
+   {
+    "default": "0",
+    "fieldname": "is_expandable",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Is Expandable",
+    "read_only": 1
+   },
+   {
+    "fieldname": "routing",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Routing",
+    "options": "Routing"
+   },
+   {
+    "fieldname": "column_break_f63f",
    "fieldtype": "Column Break"
   },
   {

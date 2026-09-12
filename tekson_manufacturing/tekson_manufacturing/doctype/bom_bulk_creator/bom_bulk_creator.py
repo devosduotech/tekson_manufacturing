@@ -364,6 +364,12 @@ class BOMBulkCreator(Document):
 			if value:
 				bom.set(field, value)
 
+		# Push routing to BOM — ERPNext auto-populates operations from routing
+		routing = fg_item_data.get("routing") if hasattr(fg_item_data, "get") else None
+		if routing:
+			bom.with_operations = 1
+			bom.routing = routing
+
 		# Deduplicate items by item_code (same RM under same parent)
 		# Don't aggregate - take first occurrence only (BOM is shared across instances)
 		seen_items = {}
