@@ -15,10 +15,11 @@
   "item_code",
   "item_name",
   "item_group",
-  "column_break_ikj7",
-  "qty",
-  "project",
-  "uom",
+   "column_break_ikj7",
+   "qty",
+   "project",
+   "routing",
+   "uom",
   "raw_materials_tab",
   "currency_detail",
   "rm_cost_as_per",
@@ -143,14 +144,20 @@
    "fieldname": "column_break_ikj7",
    "fieldtype": "Column Break"
   },
-  {
-   "fieldname": "project",
-   "fieldtype": "Link",
-   "label": "Project",
-   "options": "Project"
-  },
-  {
-   "fieldname": "item_code",
+   {
+    "fieldname": "project",
+    "fieldtype": "Link",
+    "label": "Project",
+    "options": "Project"
+   },
+   {
+    "fieldname": "routing",
+    "fieldtype": "Link",
+    "label": "Routing",
+    "options": "Routing"
+   },
+   {
+    "fieldname": "item_code",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
