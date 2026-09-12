@@ -31,6 +31,7 @@ BOM_ITEM_FIELDS = [
 	"do_not_explode",
 	"source_warehouse",
 	"allow_alternative_item",
+	"operation",
 ]
 
 
@@ -90,7 +91,7 @@ class BOMBulkCreator(Document):
 					title=_("Set Parent Row No in Items Table"),
 				)
 
-			elif row.parent_row_no and row.fg_item == self.item_code:
+			if row.parent_row_no and row.fg_item == self.item_code:
 				frappe.throw(
 					_("At row {0}: Parent Row No cannot be set for item {1}").format(row.idx, row.item_code),
 					title=_("Remove Parent Row No in Items Table"),
@@ -365,7 +366,14 @@ class BOMBulkCreator(Document):
 				bom.set(field, value)
 
 		# Push routing to BOM — ERPNext auto-populates operations from routing
-		routing = fg_item_data.get("routing") if hasattr(fg_item_data, "get") else None
+		# Look up routing from child rows where fg_item matches this BOM's item
+		routing = None
+		for child_row in self.items:
+			if child_row.fg_item == item_code and child_row.routing:
+				routing = child_row.routing
+				break
+		if not routing:
+			routing = getattr(fg_item_data, "routing", None)
 		if routing:
 			bom.with_operations = 1
 			bom.routing = routing
@@ -378,7 +386,8 @@ class BOMBulkCreator(Document):
 				seen_items[item.item_code] = item
 
 		for item_code_key, item in seen_items.items():
-			item.do_not_explode = 1
+			# do_not_explode=0 for expandable items so ERPNext links child BOM
+			item.do_not_explode = 0 if item.is_expandable else 1
 
 			item_args = {}
 			for field in BOM_ITEM_FIELDS:
@@ -610,3 +619,16 @@ def get_parent_row_no(doc, name):
 	frappe.msgprint(_("Parent Row No not found for {0}").format(name), alert=True)
 
 	return None
+
+
+@frappe.whitelist()
+def get_routing_operations(routing_name):
+	"""Get operations from a Routing document for child table filtering."""
+	if not routing_name:
+		return []
+	return frappe.get_all(
+		"BOM Operation",
+		filters={"parenttype": "Routing", "parent": routing_name},
+		fields=["operation", "workstation", "time_in_mins"],
+		order_by="sequence_id, idx",
+	)
