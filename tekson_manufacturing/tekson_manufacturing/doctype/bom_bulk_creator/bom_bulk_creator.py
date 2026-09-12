@@ -386,7 +386,8 @@ class BOMBulkCreator(Document):
 				seen_items[item.item_code] = item
 
 		for item_code_key, item in seen_items.items():
-			item.do_not_explode = 1
+			# do_not_explode=0 for expandable items so ERPNext links child BOM
+			item.do_not_explode = 0 if item.is_expandable else 1
 
 			item_args = {}
 			for field in BOM_ITEM_FIELDS:
