@@ -188,7 +188,8 @@ class BOMBulkCreator(Document):
 			else:
 				row.amount = 0.0
 				row.amount = self.get_raw_material_cost(row.item_code, row.amount)
-				row.rate = flt(row.amount) / (flt(row.qty) * flt(row.conversion_factor))
+				divisor = flt(row.qty) * flt(row.conversion_factor)
+				row.rate = flt(row.amount) / divisor if divisor else 0
 
 			amount += flt(row.amount)
 
