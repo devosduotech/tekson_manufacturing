@@ -28,6 +28,20 @@ frappe.ui.form.on("BOM Bulk Creator", {
 				query: "erpnext.controllers.queries.item_query",
 			};
 		});
+		frm.set_query("operation", "items", function (doc, cdt, cdn) {
+			let row = locals[cdt][cdn];
+			if (!row.routing) {
+				return { filters: { name: ["like", "__none__"] } };
+			}
+			return {
+				query: "frappe.client.get_list",
+				filters: {
+					parenttype: "Routing",
+					parent: row.routing,
+				},
+				fields: ["operation as name"],
+			};
+		});
 	},
 
 	set_child_list_view(frm) {
@@ -85,6 +99,11 @@ frappe.ui.form.on("BOM Bulk Creator Item", {
 						let ops = r.message.operations;
 						if (ops.length === 1) {
 							frappe.model.set_value(cdt, cdn, "operation", ops[0].operation);
+						} else if (ops.length > 1) {
+							frappe.show_alert({
+								message: __("Routing has {0} operations. Please select one.", [ops.length]),
+								indicator: "blue",
+							});
 						}
 					}
 				},
