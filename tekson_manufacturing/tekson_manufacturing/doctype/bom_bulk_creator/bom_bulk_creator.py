@@ -355,7 +355,7 @@ class BOMBulkCreator(Document):
 			{
 				"item": item_code,
 				"bom_type": "Production",
-				"quantity": fg_item_data.qty,
+				"quantity": 1,
 			}
 		)
 
@@ -364,7 +364,16 @@ class BOMBulkCreator(Document):
 			if value:
 				bom.set(field, value)
 
+		# Deduplicate items by item_code (same RM under same parent)
+		seen_items = {}
 		for item in items:
+			if item.item_code in seen_items:
+				# Aggregate quantity for duplicate items
+				seen_items[item.item_code].qty += item.qty
+			else:
+				seen_items[item.item_code] = item
+
+		for item_code_key, item in seen_items.items():
 			item.do_not_explode = 1
 
 			item_args = {}
