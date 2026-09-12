@@ -206,18 +206,11 @@ class BOMBulkCreator(Document):
 		self.check_permission("write")
 		self.validate_for_bom_creation()
 
-		updated = frappe.db.sql(
-			"""UPDATE `tabBOM Bulk Creator` SET status = 'In Progress'
-			WHERE name = %s AND status != 'In Progress'""",
-			self.name,
-		)
+		current_status = frappe.db.get_value("BOM Bulk Creator", self.name, "status")
+		if current_status == "In Progress":
+			frappe.throw(_("BOM creation is already in progress"))
 
-		if not updated:
-			current_status = frappe.db.get_value("BOM Bulk Creator", self.name, "status")
-			if current_status == "In Progress":
-				frappe.throw(_("BOM creation is already in progress"))
-			frappe.throw(_("Cannot start BOM creation in current status: {0}").format(current_status))
-
+		frappe.db.set_value("BOM Bulk Creator", self.name, "status", "In Progress")
 		frappe.db.commit()
 		self.enqueue_bom_creation()
 
