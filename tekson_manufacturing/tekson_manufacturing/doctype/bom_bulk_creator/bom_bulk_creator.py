@@ -365,12 +365,10 @@ class BOMBulkCreator(Document):
 				bom.set(field, value)
 
 		# Deduplicate items by item_code (same RM under same parent)
+		# Don't aggregate - take first occurrence only (BOM is shared across instances)
 		seen_items = {}
 		for item in items:
-			if item.item_code in seen_items:
-				# Aggregate quantity for duplicate items
-				seen_items[item.item_code].qty += item.qty
-			else:
+			if item.item_code not in seen_items:
 				seen_items[item.item_code] = item
 
 		for item_code_key, item in seen_items.items():
