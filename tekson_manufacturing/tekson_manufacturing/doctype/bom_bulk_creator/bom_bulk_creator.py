@@ -188,7 +188,8 @@ class BOMBulkCreator(Document):
 			else:
 				row.amount = 0.0
 				row.amount = self.get_raw_material_cost(row.item_code, row.amount)
-				row.rate = flt(row.amount) / (flt(row.qty) * flt(row.conversion_factor))
+				divisor = flt(row.qty) * flt(row.conversion_factor)
+				row.rate = flt(row.amount) / divisor if divisor else 0
 
 			amount += flt(row.amount)
 
@@ -251,39 +252,46 @@ class BOMBulkCreator(Document):
 		All BOMs are saved as Draft — child bom_no references are intentionally
 		left blank because ERPNext requires referenced BOMs to be submitted.
 		User manually updates bom_no, operations, quality inspection templates, etc.
+
+		For sub-assemblies used in multiple parents (same item_code), only ONE BOM
+		is created and shared across all parents.
 		"""
 		self.db_set("status", "In Progress")
-		production_item_wise_rm = OrderedDict({})
-		production_item_wise_rm.setdefault(
-			(self.item_code, self.name), frappe._dict({"items": [], "bom_no": "", "fg_item_data": self})
-		)
 
+		# Step 1: Group items by their parent fg_item
+		# Key: fg_item (item_code), Value: list of child rows
+		fg_children = OrderedDict()
 		for row in self.items:
-			if row.is_expandable:
-				if (row.item_code, row.name) not in production_item_wise_rm:
-					production_item_wise_rm.setdefault(
-						(row.item_code, row.name),
-						frappe._dict({"items": [], "bom_no": "", "fg_item_data": row}),
-					)
+			fg_children.setdefault(row.fg_item, []).append(row)
 
-			if not row.fg_reference_id and production_item_wise_rm.get((row.fg_item, row.fg_reference_id)):
-				frappe.throw(_("Please set Parent Row No for item {0}").format(row.fg_item))
+		# Step 2: Build BOM creation queue (bottom-up)
+		# Key: item_code, Value: dict with items list and fg_item_data
+		bom_queue = OrderedDict()
 
-			key = (row.fg_item, row.fg_reference_id)
-			if key not in production_item_wise_rm:
-				production_item_wise_rm.setdefault(
-					key,
-					frappe._dict({"items": [], "bom_no": "", "fg_item_data": row}),
-				)
+		# Root FG
+		bom_queue[self.item_code] = frappe._dict({
+			"bom_items": fg_children.get(self.item_code, []),
+			"bom_no": "",
+			"fg_item_data": self,
+		})
 
-			production_item_wise_rm[(row.fg_item, row.fg_reference_id)]["items"].append(row)
+		# Sub-assemblies (expandable items) - one entry per unique item_code
+		for row in self.items:
+			if row.is_expandable and row.item_code not in bom_queue:
+				bom_queue[row.item_code] = frappe._dict({
+					"bom_items": fg_children.get(row.item_code, []),
+					"bom_no": "",
+					"fg_item_data": row,
+				})
 
-		reverse_tree = OrderedDict(reversed(list(production_item_wise_rm.items())))
+		# Reverse for bottom-up processing (leaf sub-assemblies first, root last)
+		reverse_queue = OrderedDict(reversed(list(bom_queue.items())))
 
 		try:
-			for d in reverse_tree:
-				fg_item_data = production_item_wise_rm.get(d).fg_item_data
-				self.create_bom(d, fg_item_data, production_item_wise_rm)
+			for item_code, data in reverse_queue.items():
+				if not data.bom_items:
+					continue
+				self.create_bom(item_code, data.fg_item_data, data.bom_items, bom_queue)
 
 			for row in self.items:
 				frappe.db.set_value("BOM Bulk Creator Item", row.name, "bom_created", 1)
@@ -321,53 +329,63 @@ class BOMBulkCreator(Document):
 
 		return self
 
-	def create_bom(self, key, row, production_item_wise_rm):
+	def create_bom(self, item_code, fg_item_data, items, bom_queue):
 		"""
 		Create a single BOM as Draft.
 		bom_no is intentionally left blank — ERPNext requires referenced BOMs to be submitted.
 		"""
-		fg_item_code = key[0]
-
 		if frappe.db.exists(
 			"BOM",
 			{
-				"item": fg_item_code,
+				"item": item_code,
 				"bom_type": "Production",
 				"docstatus": 0,
 			},
 		):
 			existing = frappe.db.get_value(
 				"BOM",
-				{"item": fg_item_code, "bom_type": "Production", "docstatus": 0},
+				{"item": item_code, "bom_type": "Production", "docstatus": 0},
 				"name",
 			)
-			production_item_wise_rm[key].bom_no = existing
+			bom_queue[item_code].bom_no = existing
 			return
 
 		bom = frappe.new_doc("BOM")
 		bom.update(
 			{
-				"item": fg_item_code,
+				"item": item_code,
 				"bom_type": "Production",
-				"quantity": row.qty,
+				"quantity": 1,
 			}
 		)
 
 		for field in BOM_FIELDS:
-			value = row.get(field) if hasattr(row, "get") and row.get(field) else self.get(field)
+			value = fg_item_data.get(field) if hasattr(fg_item_data, "get") and fg_item_data.get(field) else self.get(field)
 			if value:
 				bom.set(field, value)
 
-		for item in production_item_wise_rm[key]["items"]:
+		# Deduplicate items by item_code (same RM under same parent)
+		# Don't aggregate - take first occurrence only (BOM is shared across instances)
+		seen_items = {}
+		for item in items:
+			if item.item_code not in seen_items:
+				seen_items[item.item_code] = item
+
+		for item_code_key, item in seen_items.items():
 			item.do_not_explode = 1
 
 			item_args = {}
 			for field in BOM_ITEM_FIELDS:
 				item_args[field] = item.get(field)
 
+			# For expandable child items, set bom_no from the queue
+			if item.is_expandable and item.item_code in bom_queue:
+				item_args["bom_no"] = bom_queue[item.item_code].bom_no
+			else:
+				item_args["bom_no"] = ""
+
 			item_args.update(
 				{
-					"bom_no": "",
 					"allow_scrap_items": 1,
 					"include_item_in_manufacturing": 1,
 				}
@@ -377,7 +395,7 @@ class BOMBulkCreator(Document):
 
 		bom.save(ignore_permissions=True)
 
-		production_item_wise_rm[key].bom_no = bom.name
+		bom_queue[item_code].bom_no = bom.name
 
 	@frappe.whitelist()
 	def get_default_bom(self, item_code: str) -> str:
