@@ -1,7 +1,7 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
-**Date:** Sep 12, 2026
-**Version:** v15.1.26
+**Date:** Sep 16, 2026
+**Version:** v15.1.27
 **Status:** HIGH items resolved
 
 ---
@@ -53,6 +53,7 @@
 | ~~M13~~ | `production_plan_mr.js` loads globally | v15.1.26 |
 | ~~NEW~~ | MR qty double-counting | v15.1.25 |
 | ~~NEW~~ | Source warehouse exact match | v15.1.26 |
+| ~~NEW~~ | BOM Bulk Creator bom_no links to Draft BOMs | v15.1.27 |
 
 ---
 
@@ -68,3 +69,4 @@
 - ✅ v15.1.2: 4 × `frappe.db.commit()` + JS hardening
 - ✅ v15.1.25: MR qty double-counting (wo_bom_nos filter)
 - ✅ v15.1.26: Source warehouse contains match fix
+- ✅ v15.1.27: BOM Bulk Creator bom_no fix (child BOM links left blank)

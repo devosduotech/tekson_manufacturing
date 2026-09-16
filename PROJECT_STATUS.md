@@ -1,6 +1,6 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.26 (main) | v15.1.26 (develop)
+## Current Version: v15.1.27 (main) | v15.1.27 (develop)
 
 ---
 
@@ -47,7 +47,7 @@
 - `public/js/production_plan_mr.js` — Production Plan MR button
 - `page/material_planning/material_planning.js` — Material Planning page
 
-### 3. BOM Bulk Creator (v15.1.20–v15.1.24)
+### 3. BOM Bulk Creator (v15.1.20–v15.1.27)
 **Status: ✅ Complete**
 
 - Creates multi-level BOM hierarchies as Draft only
@@ -58,6 +58,12 @@
 - `parent_row_no` editable (user enters manually)
 - Item deduplication — first occurrence only
 - BOM quantity fixed to 1
+
+**v15.1.27 — Child BOM Link Fix:**
+- `bom_no` intentionally left blank during bulk creation
+- ERPNext requires referenced BOMs to be submitted — Draft BOMs cannot link to each other
+- Users manually select/link child BOMs after review
+- `bom_queue` still tracks generated BOM names internally for sequencing
 
 **Key Files:**
 - `tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.py`
@@ -102,6 +108,7 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 | v15.1.20–v15.1.24 | Sep 2026 | BOM Bulk Creator, routing, operation field |
 | v15.1.25 | Sep 12, 2026 | MR qty double-counting fix (wo_bom_nos filter) |
 | v15.1.26 | Sep 12, 2026 | Source warehouse contains match fix |
+| v15.1.27 | Sep 16, 2026 | BOM Bulk Creator bom_no fix (child BOM links blank) |
 
 ---
 
@@ -110,15 +117,15 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 ### Dev Machine (karthic@teksons-development)
 ```bash
 cd ~/frappe-bench/apps/tekson_manufacturing
-git fetch upstream && git merge upstream/bom-bulk-creator --no-edit
-cd ~/frappe-bench && bench --site teksons.dev migrate
+git fetch upstream && git reset --hard upstream/bom-bulk-creator
+cd ~/frappe-bench && bench --site teksons.dev migrate && bench build --clear && bench restart
 ```
 
 ### UAT Machine (cwd_admin@cwd)
 ```bash
 cd ~/cwd-bench/apps/tekson_manufacturing
 git pull origin main
-cd ~/cwd-bench && bench --site tekson.site migrate && bench build --app tekson_manufacturing
+cd ~/cwd-bench && bench --site tekson.site migrate && bench build --clear && bench restart
 ```
 
 ### Local Development
@@ -146,6 +153,7 @@ git pull origin main
 - [x] `do_not_explode` logic (0 for expandable, 1 for RMs)
 - [x] Item deduplication
 - [x] Grid list view columns forced on refresh
+- [x] Child BOM Item.bom_no left blank during bulk creation
 
 ### MES Execution
 - [x] Job Card readiness status updates
