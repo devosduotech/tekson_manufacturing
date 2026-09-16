@@ -250,12 +250,17 @@ class BOMBulkCreator(Document):
 	def create_boms(self):
 		"""
 		Create all BOMs as Draft (bottom-up).
-		All BOMs are saved as Draft — child bom_no references are intentionally
-		left blank because ERPNext requires referenced BOMs to be submitted.
-		User manually updates bom_no, operations, quality inspection templates, etc.
 
-		For sub-assemblies used in multiple parents (same item_code), only ONE BOM
-		is created and shared across all parents.
+		All BOMs are saved as Draft. Child BOM Item.bom_no references are
+		intentionally left blank because ERPNext requires referenced BOMs
+		to be submitted. The bom_queue tracks generated BOM names internally
+		but does NOT populate BOM Item.bom_no.
+
+		User manually updates bom_no, operations, quality inspection
+		templates, etc. before submission.
+
+		For sub-assemblies used in multiple parents (same item_code), only
+		ONE BOM is created and shared across all parents.
 		"""
 		self.db_set("status", "In Progress")
 
@@ -333,7 +338,13 @@ class BOMBulkCreator(Document):
 	def create_bom(self, item_code, fg_item_data, items, bom_queue):
 		"""
 		Create a single BOM as Draft.
-		bom_no is intentionally left blank — ERPNext requires referenced BOMs to be submitted.
+
+		The Bulk Creator intentionally does NOT establish BOM Item.bom_no
+		links to child BOMs. Child BOMs are also created as Draft and must
+		be manually reviewed and linked by the user before submission.
+
+		bom_queue is used only to track generated/existing BOM records
+		internally; it is not used to populate BOM Item.bom_no.
 		"""
 		if frappe.db.exists(
 			"BOM",
@@ -393,11 +404,10 @@ class BOMBulkCreator(Document):
 			for field in BOM_ITEM_FIELDS:
 				item_args[field] = item.get(field)
 
-			# For expandable child items, set bom_no from the queue
-			if item.is_expandable and item.item_code in bom_queue:
-				item_args["bom_no"] = bom_queue[item.item_code].bom_no
-			else:
-				item_args["bom_no"] = ""
+			# Do not establish child BOM links during bulk creation.
+			# The queue tracks generated BOMs, but BOM Item.bom_no remains blank.
+			# Users manually establish the required sub-assembly links after review.
+			item_args["bom_no"] = ""
 
 			item_args.update(
 				{
