@@ -112,6 +112,57 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 
 ---
 
+## Pending Features (Not Yet Implemented)
+
+### 1. MES Dashboard
+**Status: ❌ Not Started**
+
+Planned URL: `/mes/dashboard`
+
+Planned features:
+- Production status counts (WOs + JCs by status)
+- KPIs (on-time %, efficiency, quality, material availability)
+- Active alerts (negative stock, stale JCs, material shortages)
+- Recent activity (completed JCs, recent SEs)
+- Department-wise production summary
+
+**Backend APIs exist** (`www/mes/dashboard.py`) but no frontend dashboard page has been built.
+
+### 2. Material Transfer Pick List Report
+**Status: ❌ Not Started**
+
+Planned URL: `/app/query-report/Material%20Transfer%20Pick%20List`
+
+Planned features:
+- Shows materials to transfer for submitted WOs within a date range
+- Per-item: required qty, available qty at source, already-in-WIP qty, balance-to-transfer
+- Filters: from_date, to_date
+
+**Report definition exists** (`reports/material_transfer_pick_list/`) but needs testing and possible UI work.
+
+### 3. Planner Intelligence / Analytics
+**Status: ❌ Not Started**
+
+Planned features:
+- Planner KPIs (on-time %, readiness %, WO counts)
+- Production Calendar (upcoming WOs by date)
+- Exceptions (overdue WOs, blocked JCs, material shortages)
+- Department Workload (WO count + qty per WIP warehouse)
+- Stores KPIs (MR count, items short per department)
+
+**Backend APIs exist** (`api/intelligence.py`) but no frontend dashboard or page has been built.
+
+### 4. Job Card Start/Complete API
+**Status: ❌ Not Started**
+
+Planned features:
+- `start_job_card(name)` — validated start with material + dependency checks
+- `complete_job_card(name)` — validated complete with next-JC refresh + auto WO completion
+
+**API definitions exist** (`api/job_card_start.py`) but not yet wired to UI or tested end-to-end.
+
+---
+
 ## Deployment
 
 ### Dev Machine (karthic@teksons-development)

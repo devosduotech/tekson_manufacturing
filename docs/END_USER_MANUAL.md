@@ -341,29 +341,31 @@ If multiple Job Cards share the same sequence number (parallel operations), they
 
 ## 7. Dashboards & Reports
 
-### 7.1 MES Dashboard
+> **Note:** Dashboards and reports are planned features and are not yet available. The section below describes what will be built.
 
-**URL:** `/mes/dashboard`
+### 7.1 MES Dashboard (Planned)
 
-The dashboard shows:
+**URL:** `/mes/dashboard` *(not yet implemented)*
+
+The dashboard will show:
 
 - **Production Status** — Count of Work Orders and Job Cards by status
 - **Active Alerts** — Negative stock, stale Job Cards, material shortages
 - **Recent Activity** — Recently completed Job Cards and Stock Entries
 - **Department-wise Production** — Work Orders by department/WIP warehouse
 
-### 7.2 Material Transfer Pick List
+### 7.2 Material Transfer Pick List (Planned)
 
-**URL:** `/app/query-report/Material%20Transfer%20Pick%20List`
+**URL:** `/app/query-report/Material%20Transfer%20Pick%20List` *(not yet implemented)*
 
-Shows materials to transfer for submitted Work Orders within a date range. Use this to plan daily material transfers.
+Will show materials to transfer for submitted Work Orders within a date range. Use this to plan daily material transfers.
 
-### 7.3 Planner Intelligence
+### 7.3 Planner Intelligence (Planned)
 
-These APIs power the planning dashboards:
+Backend APIs are ready but no frontend page exists yet. Planned features:
 
-| Feature | What it shows |
-|---------|--------------|
+| Feature | What it will show |
+|---------|------------------|
 | Planner KPIs | On-time %, readiness %, WO counts |
 | Production Calendar | Upcoming WOs grouped by date |
 | Exceptions | Overdue WOs, blocked JCs, material shortages |
