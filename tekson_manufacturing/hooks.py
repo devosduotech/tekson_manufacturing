@@ -35,10 +35,6 @@ override_doctype_class = {
     "Production Plan": "tekson_manufacturing.overrides.production_plan.TeksonProductionPlan"
 }
 
-patches = [
-    "tekson_manufacturing.patches.create_rm_loss_pct_fields.execute",
-]
-
 # Global JS - disabled as it was breaking PP UI
 # app_include_js = [
 #     "/assets/tekson_manufacturing/js/job_card_list.js",
