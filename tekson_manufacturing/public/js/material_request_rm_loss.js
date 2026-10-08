@@ -7,6 +7,20 @@ frappe.ui.form.on("Material Request Item", {
     }
 });
 
+frappe.ui.form.on("Material Request", {
+    refresh(frm) {
+        // Make RM Loss fields read-only in UI
+        frm.fields_dict["items"].grid.wrapper.find('.grid-row').each(function() {
+            const row = $(this).data('row');
+            if (row) {
+                frm.set_df_property('custom_bom_qty', 'read_only', 1, row.name);
+                frm.set_df_property('custom_rm_loss_pct', 'read_only', 1, row.name);
+                frm.set_df_property('custom_rm_loss_qty', 'read_only', 1, row.name);
+            }
+        });
+    }
+});
+
 function calculate_rm_loss_qty(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
