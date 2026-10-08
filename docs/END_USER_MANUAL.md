@@ -163,6 +163,7 @@ The **BOM Tree** tab shows your hierarchy visually. Use it to verify the parent-
 3. Work Orders are created with warehouses auto-set:
    - **FG Warehouse** = from BOM's target FG warehouse
    - **WIP Warehouse** = from first operation's workstation plant floor
+   - **Scrap Warehouse** = same as WIP Warehouse (auto-copied on save)
    - **Source Warehouse** = Raw Material Stores
 
 **Manual Creation:**
@@ -171,7 +172,11 @@ The **BOM Tree** tab shows your hierarchy visually. Use it to verify the parent-
 2. Select the Item Code (finished good)
 3. Select the BOM
 4. Set quantities and dates
-5. Warehouses auto-populate based on the BOM and workstation configuration
+5. Warehouses auto-populate based on the BOM and workstation configuration:
+   - **WIP Warehouse** → from first operation's workstation
+   - **Scrap Warehouse** → auto-copied from WIP Warehouse on save
+   - **FG Warehouse** → from BOM's target FG warehouse
+   - **Source Warehouse** → defaults to Raw Material Stores
 
 ### 4.2 Submitting a Work Order (Production Release)
 

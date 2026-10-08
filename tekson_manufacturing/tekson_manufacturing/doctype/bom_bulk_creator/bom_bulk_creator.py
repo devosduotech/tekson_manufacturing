@@ -30,6 +30,7 @@ BOM_ITEM_FIELDS = [
 	"conversion_factor",
 	"do_not_explode",
 	"source_warehouse",
+	"custom_rm_loss_pct",
 	"allow_alternative_item",
 	"operation",
 ]

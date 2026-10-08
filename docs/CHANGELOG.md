@@ -394,6 +394,48 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 1.0.4 | 2026-08-01 | Development | Documentation governance |
 | 15.1.25 | 2026-09-12 | Development | MR qty double-counting fix |
 | 15.1.26 | 2026-09-12 | Development | Source warehouse contains match fix |
+| 15.1.27 | 2026-10-07 | Development | Work Order warehouse auto-set (WIP/FG/Source) |
+| 15.1.28 | 2026-10-07 | Development | Work Order Scrap Warehouse auto-copied from WIP Warehouse |
+
+---
+
+## Version 15.1.27 — Work Order Warehouse Auto-Set
+
+**Date:** 2026-10-07  
+**Status:** Released  
+**Type:** Feature
+
+### Changes
+- Work Order warehouses auto-populated on creation via `before_insert` hook
+- FG Warehouse from BOM's `target_fg_warehouse`
+- WIP Warehouse from first operation's workstation → plant floor → department WIP
+- Source Warehouse defaults to "Stores - TPL"
+
+### Files Changed
+- `tekson_manufacturing/services/work_order_service.py` — `set_warehouses()`
+- `tekson_manufacturing/hooks.py` — Work Order `before_insert` event
+
+---
+
+## Version 15.1.28 — Work Order Scrap Warehouse Auto-Copy
+
+**Date:** 2026-10-07  
+**Status:** Released  
+**Type:** Feature
+
+### Changes
+- Scrap Warehouse automatically set to WIP Warehouse during Work Order insertion
+- Overrides any form default (e.g., "Scrap Stores - TPL") on save
+- No synchronization after insertion — user changes to either warehouse are retained
+
+### Logic
+```python
+if doc.wip_warehouse:
+    doc.scrap_warehouse = doc.wip_warehouse
+```
+
+### Files Changed
+- `tekson_manufacturing/services/work_order_service.py` — `set_warehouses()`
 
 ---
 

@@ -91,7 +91,10 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             target_wh = jc_map.get((wo.name, item.get("operation"))) if item.get("operation") else None
             target_wh = target_wh or wo.wip_warehouse
 
-            required_qty = item["qty"] * wo.qty
+            base_qty = item["qty"] * wo.qty
+            loss_pct = (item.get("rm_loss_pct", 0) or 0) / 100.0
+            required_qty = base_qty * (1 + loss_pct)
+            loss_qty = base_qty * loss_pct
             in_wip = bin_map.get((item["item_code"], target_wh), 0)
             shortage = max(0, required_qty - in_wip)
             if shortage <= 0:
@@ -105,10 +108,13 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                     "item_code": item["item_code"],
                     "item_name": item.get("item_name", ""),
                     "qty": 0,
+                    "rm_loss_pct": item.get("rm_loss_pct", 0),
+                    "rm_loss_qty": 0,
                     "from_warehouse": source_wh,
                     "uom": item.get("uom", "Nos"),
                 }
             dept_items[target_wh][key]["qty"] += shortage
+            dept_items[target_wh][key]["rm_loss_qty"] += loss_qty
 
     if not dept_items:
         return {"created_mrs": [], "total_items": 0, "message": _("All materials already in WIP for {0}").format(planned_date)}
@@ -142,7 +148,9 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             mr.append("items", {
                 "item_code": item_data["item_code"],
                 "item_name": item_data.get("item_name", ""),
-                "qty": math.ceil(item_data["qty"]),
+                "qty": math.ceil(round(item_data["qty"], 10)),
+                "custom_rm_loss_pct": item_data.get("rm_loss_pct", 0),
+                "custom_rm_loss_qty": item_data.get("rm_loss_qty", 0),
                 "from_warehouse": item_data["from_warehouse"],
                 "warehouse": target_wh,
                 "uom": item_data.get("uom", "Nos"),
@@ -204,7 +212,7 @@ def _explode_bom(bom_no: str, _memo: Optional[dict] = None, _seen: Optional[set]
 
     bom_qty = frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
     items = frappe.get_all("BOM Item", {"parent": bom_no},
-        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation", "do_not_explode", "bom_no"])
+        ["item_code", "item_name", "qty", "uom", "source_warehouse", "operation", "do_not_explode", "bom_no", "custom_rm_loss_pct"])
 
     result = []
     for item in items:
@@ -226,6 +234,7 @@ def _explode_bom(bom_no: str, _memo: Optional[dict] = None, _seen: Optional[set]
                 "item_code": item.item_code,
                 "item_name": item.item_name,
                 "qty": item.qty / bom_qty,
+                "rm_loss_pct": item.custom_rm_loss_pct or 0,
                 "uom": item.uom,
                 "source_warehouse": item.source_warehouse,
                 "operation": item.operation,
