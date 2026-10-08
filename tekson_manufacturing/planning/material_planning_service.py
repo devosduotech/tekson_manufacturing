@@ -100,6 +100,9 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             if shortage <= 0:
                 continue
 
+            # Qty as per BOM (without RM loss)
+            bom_qty_shortage = max(0, base_qty - in_wip)
+
             key = (target_wh, item["item_code"], source_wh)
             if target_wh not in dept_items:
                 dept_items[target_wh] = {}
@@ -108,12 +111,14 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                     "item_code": item["item_code"],
                     "item_name": item.get("item_name", ""),
                     "qty": 0,
+                    "base_qty": 0,
                     "rm_loss_pct": item.get("rm_loss_pct", 0),
                     "rm_loss_qty": 0,
                     "from_warehouse": source_wh,
                     "uom": item.get("uom", "Nos"),
                 }
             dept_items[target_wh][key]["qty"] += shortage
+            dept_items[target_wh][key]["base_qty"] += bom_qty_shortage
             dept_items[target_wh][key]["rm_loss_qty"] += loss_qty
 
     if not dept_items:
@@ -145,12 +150,17 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             })
 
         for item_key, item_data in items.items():
+            base_qty = item_data.get("base_qty", 0)
+            rm_loss_qty = item_data.get("rm_loss_qty", 0)
+            final_qty = base_qty + rm_loss_qty
+
             mr.append("items", {
                 "item_code": item_data["item_code"],
                 "item_name": item_data.get("item_name", ""),
-                "qty": math.ceil(round(item_data["qty"], 10)),
+                "qty": math.ceil(round(final_qty, 10)),
+                "custom_bom_qty": base_qty,
                 "custom_rm_loss_pct": item_data.get("rm_loss_pct", 0),
-                "custom_rm_loss_qty": item_data.get("rm_loss_qty", 0),
+                "custom_rm_loss_qty": rm_loss_qty,
                 "from_warehouse": item_data["from_warehouse"],
                 "warehouse": target_wh,
                 "uom": item_data.get("uom", "Nos"),
