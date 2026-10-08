@@ -324,6 +324,10 @@ class ExecutionEngine:
                 else:
                     item.allow_zero_valuation_rate = 1
             
+            # Apply RM Loss % to raw material quantities
+            if wo.bom_no:
+                apply_rm_loss_to_manufacture_entry(se, wo.bom_no, wo.qty)
+            
             se.insert()
             se.submit()
             
@@ -691,6 +695,59 @@ def on_stock_entry_submit(doc, method=None):
     # Refresh Work Order status using Execution Engine
     engine = ExecutionEngine()
     engine.refresh_work_order_status(doc.work_order)
+
+
+def apply_rm_loss_to_manufacture_entry(stock_entry, bom_no, wo_qty):
+    """
+    Apply RM Loss % to raw material quantities in manufacture stock entry.
+    
+    Raw material qty = BOM qty * WO qty * (1 + RM Loss %)
+    This matches what was transferred via Material Request.
+    """
+    if not bom_no:
+        return
+    
+    # Get BOM Items with RM Loss %
+    bom_items = frappe.get_all("BOM Item",
+        {"parent": bom_no},
+        ["item_code", "qty", "custom_rm_loss_pct", "bom_no", "do_not_explode"])
+    
+    # Build lookup: item_code -> (qty_per_unit, rm_loss_pct)
+    loss_map = {}
+    for bi in bom_items:
+        if bi.bom_no and not bi.do_not_explode:
+            # Sub-assembly - skip (will be exploded separately or has own WO)
+            continue
+        loss_map[bi.item_code] = {
+            "qty_per_unit": bi.qty,
+            "rm_loss_pct": bi.custom_rm_loss_pct or 0
+        }
+    
+    # Also check sub-assemblies for raw materials
+    for bi in bom_items:
+        if bi.bom_no and not bi.do_not_explode:
+            sub_bom_items = frappe.get_all("BOM Item",
+                {"parent": bi.bom_no},
+                ["item_code", "qty", "custom_rm_loss_pct", "do_not_explode"])
+            scale = bi.qty / (frappe.db.get_value("BOM", bi.bom_no, "quantity") or 1)
+            for sbi in sub_bom_items:
+                if sbi.do_not_explode:
+                    continue
+                if sbi.item_code not in loss_map:
+                    loss_map[sbi.item_code] = {
+                        "qty_per_unit": sbi.qty * scale,
+                        "rm_loss_pct": sbi.custom_rm_loss_pct or 0
+                    }
+    
+    # Apply loss to stock entry raw material items
+    for item in stock_entry.items:
+        if not item.is_finished_item and item.item_code in loss_map:
+            loss_info = loss_map[item.item_code]
+            loss_pct = loss_info["rm_loss_pct"] / 100.0
+            if loss_pct > 0:
+                # qty from make_stock_entry is already BOM qty * wo_qty
+                # Apply RM loss: qty = qty * (1 + loss_pct)
+                item.qty = item.qty * (1 + loss_pct)
 
 
 def on_stock_entry_cancel(doc, method=None):
