@@ -32,7 +32,7 @@ def set_warehouses(doc, method=None):
                     if frappe.db.exists("Warehouse", wh):
                         doc.wip_warehouse = wh
 
-    if doc.wip_warehouse and not doc.scrap_warehouse:
+    if doc.wip_warehouse:
         doc.scrap_warehouse = doc.wip_warehouse
 
     if not doc.source_warehouse:
