@@ -100,9 +100,6 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             if shortage <= 0:
                 continue
 
-            # Qty as per BOM (without RM loss)
-            bom_qty_shortage = max(0, base_qty - in_wip)
-
             key = (target_wh, item["item_code"], source_wh)
             if target_wh not in dept_items:
                 dept_items[target_wh] = {}
@@ -118,7 +115,8 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                     "uom": item.get("uom", "Nos"),
                 }
             dept_items[target_wh][key]["qty"] += shortage
-            dept_items[target_wh][key]["base_qty"] += bom_qty_shortage
+            # Store full theoretical BOM qty for reporting (not just shortage)
+            dept_items[target_wh][key]["base_qty"] += base_qty
             dept_items[target_wh][key]["rm_loss_qty"] += loss_qty
 
     if not dept_items:
