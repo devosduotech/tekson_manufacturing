@@ -48,6 +48,7 @@ doctype_list_js = {
 
 doctype_js = {
     "Production Plan": "public/js/production_plan_mr.js",
+    "Material Request": "public/js/material_request_rm_loss.js",
 }
 
 # Reports
