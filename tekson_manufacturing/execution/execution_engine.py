@@ -313,22 +313,29 @@ class ExecutionEngine:
             se_dict = make_stock_entry(wo.name, "Manufacture", wo.qty)
             se = frappe.get_doc(se_dict)
             
-            # Fix s_warehouse for raw materials — find WIP where stock actually is
+            # Fix s_warehouse for raw materials — only override if material was transferred to WIP
             for item in se.items:
                 if not item.is_finished_item:
-                    wh = frappe.db.get_value("Bin",
+                    # Only override source warehouse if material was actually transferred to WIP
+                    transferred_wh = frappe.db.get_value("Bin",
                         {"item_code": item.item_code, "actual_qty": [">", 0], "warehouse": ["like", "%WIP%"]},
                         "warehouse", order_by="actual_qty desc")
-                    if wh:
-                        item.s_warehouse = wh
+                    if transferred_wh:
+                        item.s_warehouse = transferred_wh
+                    # Else: keep original s_warehouse from make_stock_entry (e.g., Raw Materials Stores)
                 else:
                     item.allow_zero_valuation_rate = 1
+            
+            # Set FG warehouse to wo.fg_warehouse (from BOM's target_fg_warehouse)
+            for item in se.items:
+                if item.is_finished_item:
+                    item.t_warehouse = wo.fg_warehouse or wo.wip_warehouse
             
             # Apply RM Loss % to raw material quantities
             if wo.bom_no:
                 apply_rm_loss_to_manufacture_entry(se, wo.bom_no, wo.qty)
             
-            se.insert()
+            se.insert(ignore_permissions=True)
             se.submit()
             
             # Verify stock ledger entries were created

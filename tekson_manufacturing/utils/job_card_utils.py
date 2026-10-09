@@ -238,9 +238,9 @@ def update_job_card_status(doc, method=None):
         return
     
     # Open JC — evaluate readiness
-    service.update_start_status(doc)
-    service.update_dependency_status(doc)
-    service.update_material_status(doc)
+        service.update_start_status(doc)
+        service.update_dependency_status(doc)
+        service.update_material_status(doc)
     
     # Debug: Log the update
     frappe.logger("tekson").info(f"Job Card {doc.name} status updated: {doc.custom_start_status}")
@@ -305,3 +305,37 @@ def validate_job_card_start(doc, method=None):
                 error_msg += "<br>".join(items)
             
             frappe.throw(error_msg, title=_("Material Not Available"))
+
+
+def update_wo_status_on_jc_start(doc, method=None):
+    """
+    Update Work Order status to "In Process" when a Job Card starts
+    
+    Business Rule: WO status should change to "In Process" when first JC starts
+    
+    Trigger: Job Card on_submit (when status changes to "Work In Progress")
+    
+    Args:
+        doc: Job Card document
+        method: Event method name (optional)
+    """
+    if not doc.work_order:
+        return
+    
+    # Only act on transition to "Work In Progress"
+    old_doc = doc.get_doc_before_save()
+    if not old_doc or old_doc.status == "Work In Progress":
+        return
+    
+    if doc.status != "Work In Progress":
+        return
+    
+    try:
+        wo = frappe.get_doc("Work Order", doc.work_order)
+        # Only update if WO is submitted and status is "Not Started"
+        if wo.docstatus == 1 and wo.status == "Not Started":
+            wo.status = "In Process"
+            wo.save(ignore_permissions=True)
+            frappe.logger("tekson").info(f"Work Order {doc.work_order} status updated to In Process on JC start")
+    except Exception as e:
+        frappe.logger("tekson").error(f"Error updating WO status on JC start: {e}")
