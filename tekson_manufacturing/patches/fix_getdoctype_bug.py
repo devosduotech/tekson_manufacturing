@@ -3,7 +3,7 @@ Monkey patch for Frappe v15.121.0 bug: getdoctype() missing 'doctype' argument
 when loading query reports with with_parent=1
 """
 
-import frappe
+import sys
 from frappe.desk.form import load as frappe_load
 
 
@@ -27,5 +27,9 @@ def patched_getdoctype(doctype=None, with_parent=False, cached_timestamp=None, *
     return _original_getdoctype(doctype, with_parent, cached_timestamp, **kwargs)
 
 
-# Apply monkey patch immediately at import time
+# Apply monkey patch immediately at import time - patch both the module and sys.modules
 frappe_load.getdoctype = patched_getdoctype
+
+# Also patch in sys.modules to ensure all references get the patched version
+if 'frappe.desk.form.load' in sys.modules:
+    sys.modules['frappe.desk.form.load'].getdoctype = patched_getdoctype
