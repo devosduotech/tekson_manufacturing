@@ -5,11 +5,6 @@ app_description = "Teksons Manufacturing Enhancements"
 app_email = "developer@osduotech.com"
 app_license = "mit"
 
-# Monkey patches for Frappe framework bugs
-override_whitelisted_methods = {
-    "frappe.desk.form.load.getdoctype": "tekson_manufacturing.patches.fix_getdoctype_bug.patched_getdoctype"
-}
-
 doc_events = {
     "Job Card": {
         "before_insert": [
