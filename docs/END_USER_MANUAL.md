@@ -224,9 +224,10 @@ Click **Generate Material Requests**. The system:
 
 1. Finds all incomplete Work Orders starting on that date
 2. Calculates raw material requirements (skipping sub-assemblies with their own Work Orders)
-3. Checks what's already in each department's WIP warehouse
-4. Creates Material Requests only for items with actual shortages
-5. Groups items by target WIP warehouse (department)
+3. **Applies RM Loss %**: For each raw material, if a RM Loss % is defined on the BOM Item, the required quantity is increased by that percentage (Required = Base × (1 + RM Loss %))
+4. Checks what's already in each department's WIP warehouse
+5. Creates Material Requests only for items with actual shortages
+6. Groups items by target WIP warehouse (department)
 
 **Step 4: Review Results**
 
@@ -234,6 +235,25 @@ You'll see a summary of created MRs:
 - Each MR is grouped by department WIP warehouse
 - Quantities are rounded up to whole numbers
 - Each MR is linked to the Production Plan
+
+### 5.1.1 RM Loss % on Material Requests
+
+When Material Requests are generated, the following fields are populated for traceability:
+
+| Field | Label | Description |
+|-------|-------|-------------|
+| **Qty as per BOM** | `custom_bom_qty` | Theoretical quantity from BOM (without RM Loss %) |
+| **RM Loss %** | `custom_rm_loss_pct` | Expected raw material loss % from BOM Item (read-only) |
+| **RM Loss Qty** | `custom_rm_loss_qty` | Calculated loss quantity = Qty as per BOM × RM Loss % (read-only) |
+| **Qty** | `qty` | **Total quantity to request** = Qty as per BOM + RM Loss Qty (rounded up) |
+
+**Example:** If BOM requires 26.6 kg of Aluminium Coil and RM Loss % = 3%:
+- Qty as per BOM = 26.6 kg
+- RM Loss % = 3%
+- RM Loss Qty = 0.798 kg
+- **Qty (requested) = 28** (rounded up from 27.398)
+
+The Manufacture Stock Entry also uses the same quantities (BOM qty + RM Loss qty) so there's enough material for production including expected wastage.
 
 ### 5.2 Material Transfer Pick List
 
@@ -254,7 +274,7 @@ The Pick List report shows what materials need to be transferred and where.
 |--------|---------|
 | Work Order | Which WO needs the material |
 | Item Code | Material item |
-| Required | Total quantity needed |
+| Required | Total quantity needed (includes RM Loss %) |
 | Available | Quantity available at source warehouse |
 | To Transfer | Quantity to transfer (Required − Already in WIP) |
 | To (WIP) | Target WIP warehouse (department) |

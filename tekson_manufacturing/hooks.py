@@ -5,6 +5,9 @@ app_description = "Teksons Manufacturing Enhancements"
 app_email = "developer@osduotech.com"
 app_license = "mit"
 
+# Monkey patches for Frappe framework bugs
+before_load = "tekson_manufacturing.patches.fix_getdoctype_bug.apply_patch"
+
 doc_events = {
     "Job Card": {
         "before_insert": [

@@ -396,6 +396,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.26 | 2026-09-12 | Development | Source warehouse contains match fix |
 | 15.1.27 | 2026-10-07 | Development | Work Order warehouse auto-set (WIP/FG/Source) |
 | 15.1.28 | 2026-10-07 | Development | Work Order Scrap Warehouse auto-copied from WIP Warehouse |
+| 15.1.29 | 2026-10-08 | Development | Raw Material Loss % (RM Loss %) on BOM Item for Material Request generation |
 
 ---
 
@@ -438,6 +439,35 @@ if doc.wip_warehouse:
 - `tekson_manufacturing/services/work_order_service.py` — `set_warehouses()`
 
 ---
+
+## Version 15.1.29 — Raw Material Loss % (RM Loss %) on BOM Item
+
+**Date:** 2026-10-08  
+**Status:** Released  
+**Type:** Feature
+
+### Changes
+- **RM Loss % field on BOM Item**: New field `custom_rm_loss_pct` (Percent, 2 decimals, default 0%) to define expected raw material loss during manufacturing (cutting, trimming, forming wastage)
+- **Material Request generation applies RM Loss**: Required Qty = Base Qty (BOM qty × WO qty) × (1 + RM Loss %)
+- **New traceability fields on Material Request Item**:
+  - `custom_bom_qty` (Qty as per BOM) — theoretical quantity from BOM without RM Loss %
+  - `custom_rm_loss_pct` (RM Loss %) — read-only, from BOM Item
+  - `custom_rm_loss_qty` (RM Loss Qty) — read-only, calculated loss quantity
+  - `qty` — auto-calculated as Base Qty + RM Loss Qty (rounded up)
+- **Manufacture Stock Entry applies RM Loss**: Raw material quantities in manufacture entry increased by RM Loss % to match transferred quantities
+- **Sub-assembly support**: RM Loss % propagates through multi-level BOMs (skips sub-assemblies with own WOs)
+
+### Files Changed
+- `tekson_manufacturing/planning/material_planning_service.py` — Core MR generation logic with RM Loss %
+- `tekson_manufacturing/execution/execution_engine.py` — `apply_rm_loss_to_manufacture_entry()` for manufacture entries
+- `tekson_manufacturing/patches/create_rm_loss_pct_fields.py` — Custom fields patch (BOM Item + MR Item)
+- `tekson_manufacturing/patches/update_rm_loss_fields.py` — Read-only UI fields patch
+- `tekson_manufacturing/public/js/material_request_rm_loss.js` — Client script for read-only UI fields
+- `tekson_manufacturing/tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.py` — BOM Item field support
+
+---
+
+## Version 15.1.25 — MR Qty Double-Counting Fix
 
 ## Version 15.1.25 — MR Qty Double-Counting Fix
 
