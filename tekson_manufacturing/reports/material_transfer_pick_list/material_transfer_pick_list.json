@@ -67,22 +67,22 @@
    "width": 80
   }
  ],
- "filters": [
-  {
-   "fieldname": "from_date",
-   "fieldtype": "Date",
-   "label": "From Date",
-   "default": "Today",
-   "mandatory": 1
-  },
-  {
-   "fieldname": "to_date",
-   "fieldtype": "Date",
-   "label": "To Date",
-   "default": "Today",
-   "mandatory": 1
-  }
- ],
+"filters": [
+   {
+    "fieldname": "from_date",
+    "fieldtype": "Date",
+    "label": "From Date",
+    "default": "2026-01-01",
+    "mandatory": 1
+   },
+   {
+    "fieldname": "to_date",
+    "fieldtype": "Date",
+    "label": "To Date",
+    "default": "2026-12-31",
+    "mandatory": 1
+   }
+  ],
  "idx": 1,
  "is_standard": "Yes",
  "modified": "2026-08-04 00:00:00",

@@ -97,9 +97,9 @@ def get_data(filters):
     to_date = filters.get('to_date')
     
     if not from_date or from_date == '':
-        from_date = frappe.utils.add_days(frappe.utils.today(), -30)
+        from_date = '2026-01-01'
     if not to_date or to_date == '':
-        to_date = frappe.utils.add_days(frappe.utils.today(), 30)
+        to_date = '2026-12-31'
     
     # Get submitted WOs not yet completed
     work_orders = frappe.db.sql("""
