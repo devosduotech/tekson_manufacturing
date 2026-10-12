@@ -83,12 +83,15 @@
     "mandatory": 1
    }
   ],
+ "disable_prepared_report_automation": 1,
  "idx": 1,
  "is_standard": "Yes",
+ "javascript": "",
  "modified": "2026-08-04 00:00:00",
  "module": "Tekson Manufacturing",
  "name": "Material Transfer Pick List",
  "owner": "Administrator",
+ "prepared_report": 0,
  "ref_doctype": "Work Order",
   "report_name": "Material Transfer Pick List",
   "report_type": "Script Report",
