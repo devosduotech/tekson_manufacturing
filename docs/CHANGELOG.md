@@ -508,6 +508,25 @@ After qty fix, MR still showed only 3 items (70 MISSING). `_is_source_warehouse`
 ### Files Changed
 - `planning/material_planning_service.py` — `_is_source_warehouse()`, `_get_default_source_warehouse()`
 
+## Version 15.1.30 — Work Order Completion & Job Card Status Fixes
+
+**Date:** 2026-10-10  
+**Status:** Released  
+**Type:** Bug Fix / Feature
+
+### Changes
+- **WO Completion Fixes**: Fixed source warehouse logic to only override if material was actually transferred to WIP; otherwise preserves original source (e.g., Raw Materials Stores)
+- **FG Warehouse Fix**: Finished goods now correctly set to BOM's `target_fg_warehouse` (via `wo.fg_warehouse`) with fallback to WIP warehouse
+- **Manufacture Stock Entry Permissions**: Added `ignore_permissions=True` for system-generated Stock Entry creation, allowing line supervisors to complete WOs
+- **RM Loss % in Manufacture Entry**: Applied RM Loss % from BOM to raw material quantities in manufacture stock entry to match transferred quantities
+- **WO Status Auto-Update**: Work Order status now automatically changes to "In Process" when first Job Card transitions to "Work In Progress" (on Job Card `on_submit` hook)
+- **Warehouse Query Fix**: Fixed `warehouse_group_name` → `warehouse_group` for Frappe 15.122.0 compatibility
+
+### Files Changed
+- `tekson_manufacturing/execution/execution_engine.py` — Fixed `complete_work_order()` source warehouse, FG warehouse, RM Loss %, permissions
+- `tekson_manufacturing/utils/job_card_utils.py` — Added `update_wo_status_on_jc_start()` function
+- `tekson_manufacturing/hooks.py` — Registered `update_wo_status_on_jc_start` in Job Card `on_submit` hook
+
 ---
 
 ## Related Documents
