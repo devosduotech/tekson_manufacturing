@@ -97,9 +97,9 @@ def get_data(filters):
     to_date = filters.get('to_date')
     
     if not from_date or from_date == '':
-        from_date = frappe.utils.add_days(frappe.utils.today(), -7)
+        from_date = frappe.utils.add_days(frappe.utils.today(), -30)
     if not to_date or to_date == '':
-        to_date = frappe.utils.today()
+        to_date = frappe.utils.add_days(frappe.utils.today(), 30)
     
     # Get submitted WOs not yet completed
     work_orders = frappe.db.sql("""
@@ -119,6 +119,8 @@ def get_data(filters):
         ORDER BY wo.planned_start_date
     """, (from_date, to_date), as_dict=True)
     
+    frappe.logger().info(f"Pick List Report: Found {len(work_orders)} WOs between {from_date} and {to_date}")
+    
     if not work_orders:
         return []
     
@@ -127,12 +129,15 @@ def get_data(filters):
     for wo in work_orders:
         # Get BOM items
         if not wo.bom_no or not frappe.db.exists('BOM', wo.bom_no):
+            frappe.logger().warning(f"WO {wo.name}: No BOM or BOM not found (bom_no={wo.bom_no})")
             continue
         
         bom_items = frappe.get_all('BOM Item',
             filters={'parent': wo.bom_no},
             fields=['item_code', 'item_name', 'qty', 'source_warehouse']
         )
+        
+        frappe.logger().info(f"WO {wo.name}: Found {len(bom_items)} BOM items for BOM {wo.bom_no}")
         
         for item in bom_items:
             required_total = flt(item.qty) * flt(wo.qty)
@@ -183,6 +188,8 @@ def get_data(filters):
     result.sort(key=lambda x: (x.get('source_warehouse', ''),
                                 x.get('item_code', ''),
                                 x.get('work_order', '')))
+    
+    frappe.logger().info(f"Pick List Report: Returning {len(result)} rows")
     
     return result
 
