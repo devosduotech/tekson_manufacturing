@@ -2,7 +2,8 @@
 Material Transfer Pick List Report
 
 Shows materials to be transferred from source warehouses to department WIP
-warehouses for submitted Work Orders within a date range.
+warehouses for submitted, open Work Orders (not Completed, Closed, Stopped or
+Cancelled) within a date range.
 
 Access:
     ERPNext UI → Reports → Material Transfer Pick List
@@ -18,10 +19,10 @@ def execute(filters=None):
     """Main report execution"""
     if not filters:
         filters = {}
-    
+
     columns = get_columns()
     data = get_data(filters)
-    
+
     return columns, data
 
 
@@ -95,15 +96,15 @@ def get_data(filters):
     """Fetch data for the report"""
     from_date = filters.get('from_date')
     to_date = filters.get('to_date')
-    
+
     if not from_date or from_date == '':
         from_date = '2026-01-01'
     if not to_date or to_date == '':
         to_date = '2026-12-31'
-    
-    # Get submitted WOs not yet completed
+
+    # Get submitted Work Orders that are still open
     work_orders = frappe.db.sql("""
-        SELECT 
+        SELECT
             wo.name,
             wo.production_item,
             wo.qty,
@@ -114,40 +115,40 @@ def get_data(filters):
             wo.bom_no
         FROM `tabWork Order` wo
         WHERE wo.docstatus = 1
-          AND wo.status NOT IN ('Completed', 'Stopped')
+          AND wo.status NOT IN ('Completed', 'Closed', 'Stopped', 'Cancelled')
           AND DATE(wo.planned_start_date) BETWEEN %s AND %s
         ORDER BY wo.planned_start_date
     """, (from_date, to_date), as_dict=True)
-    
+
     frappe.logger().info(f"Pick List Report: Found {len(work_orders)} WOs between {from_date} and {to_date}")
-    
+
     if not work_orders:
         return []
-    
+
     result = []
-    
+
     for wo in work_orders:
         # Get BOM items
         if not wo.bom_no or not frappe.db.exists('BOM', wo.bom_no):
             frappe.logger().warning(f"WO {wo.name}: No BOM or BOM not found (bom_no={wo.bom_no})")
             continue
-        
+
         bom_items = frappe.get_all('BOM Item',
             filters={'parent': wo.bom_no},
             fields=['item_code', 'item_name', 'qty', 'source_warehouse']
         )
-        
+
         frappe.logger().info(f"WO {wo.name}: Found {len(bom_items)} BOM items for BOM {wo.bom_no}")
-        
+
         for item in bom_items:
             required_total = flt(item.qty) * flt(wo.qty)
-            
+
             # Source warehouse: BOM item source → WO source → Raw Material Stores
             source_wh = item.source_warehouse or wo.source_warehouse or ''
-            
+
             # Target: WO's WIP warehouse
             target_wh = wo.wip_warehouse or ''
-            
+
             # Check stock already in target WIP (already transferred)
             already_in_wip = 0.0
             if target_wh:
@@ -157,7 +158,7 @@ def get_data(filters):
                         'actual_qty'
                     ) or 0
                 )
-            
+
             # Check stock at source
             available = 0.0
             if source_wh:
@@ -167,10 +168,10 @@ def get_data(filters):
                         'actual_qty'
                     ) or 0
                 )
-            
+
             # Balance: required - already in WIP
             balance = max(0, required_total - already_in_wip)
-            
+
             result.append({
                 'work_order': wo.name,
                 'item_code': item.item_code,
@@ -183,14 +184,14 @@ def get_data(filters):
                 'balance_to_transfer': balance,
                 'wip_warehouse': target_wh
             })
-    
+
     # Sort by warehouse then item
     result.sort(key=lambda x: (x.get('source_warehouse', ''),
                                 x.get('item_code', ''),
                                 x.get('work_order', '')))
-    
+
     frappe.logger().info(f"Pick List Report: Returning {len(result)} rows")
-    
+
     return result
 
 
@@ -199,14 +200,14 @@ def get_summary(data):
     unique_wo = len(set(d.get('work_order') for d in data))
     unique_items = len(set(d.get('item_code') for d in data))
     total_qty = sum(d.get('balance_to_transfer', 0) for d in data)
-    
+
     warehouses = set(d.get('source_warehouse', '') for d in data)
     wh_list = ', '.join(sorted(warehouses)) if warehouses else 'N/A'
-    
+
     return f"""
     <div style="margin:15px 0;">
-        <b>Summary:</b> {unique_wo} Work Orders | 
-        {unique_items} Items | 
+        <b>Summary:</b> {unique_wo} Work Orders |
+        {unique_items} Items |
         {total_qty:.1f} total qty to transfer<br>
         <b>From:</b> {wh_list}
     </div>

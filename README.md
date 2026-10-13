@@ -10,7 +10,7 @@ Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends 
 
 **Status:** ✅ Customer UAT Ready
 **Version:** v15.1.27
-**Last Updated:** September 16, 2026
+**Last Updated:** October 12, 2026
 
 ---
 
@@ -23,6 +23,7 @@ Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends 
 - Multi-department WIP — per-operation warehouse assignment
 - WO Consolidation — sub-assemblies grouped by planned start date
 - Daily Material Planning — Material Requests per department WIP
+- Material Transfer Pick List — open-WO raw material transfers, source → department WIP
 - Batch production rounding — fixed-yield BOM support
 - Clear operator error messages — shows exactly what's blocking
 

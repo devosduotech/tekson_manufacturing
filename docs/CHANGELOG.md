@@ -529,6 +529,63 @@ After qty fix, MR still showed only 3 items (70 MISSING). `_is_source_warehouse`
 
 ---
 
+## Unreleased — Material Transfer Pick List Report
+
+**Date:** 2026-10-12
+**Status:** On `develop` and `main` (not tagged)
+**Type:** Bug Fix / Feature
+
+### Problem
+The report opened with no filter fields, then with filters but no rows
+("Nothing to show"), even though the query returned 35 rows from the console.
+
+### Root Causes
+1. **Report JS never loaded.** Frappe reads Script Report JS from
+   `<app>/<module>/report/<scrub(name)>/<scrub(name)>.js`
+   (`frappe.desk.query_report.get_script`). The JS was not there, so
+   `report_doc.filters` was never applied and the filter form was not built.
+2. **Python module path did not resolve.** `Report.execute_module()` uses
+   `get_report_module_dotted_path` →
+   `<app>.<module>.report.<scrub(name)>.<scrub(name)>.execute`. The
+   implementation only existed under `tekson_manufacturing/reports/`.
+3. **Prepared-report flip.** `Report.execute_script_report()` arms a 15s timer
+   that sets `prepared_report = 1`. The prepared branch returns no
+   `columns`/`result`, which the UI shows as *"Nothing to show"*.
+4. **Open WO filter too narrow.** `Closed` and `Cancelled` Work Orders were not
+   excluded, so finished/closed orders still listed materials.
+
+### Fixes
+- Added the conventional report JS with `from_date` / `to_date` filters
+- Added the conventional report `.py` entry point (re-exports the
+  implementation in `reports/`)
+- Pinned `prepared_report = 0` and `disable_prepared_report_automation = 1`
+  in the report JSON
+- Widened defaults to `2026-01-01` … `2026-12-31`
+- Work Order filter is now `status NOT IN ('Completed','Closed','Stopped','Cancelled')`
+  with `docstatus = 1`, so only **open** WOs build the material list
+
+### Files Changed
+- `tekson_manufacturing/tekson_manufacturing/report/material_transfer_pick_list/material_transfer_pick_list.js` — filter definitions
+- `tekson_manufacturing/tekson_manufacturing/report/material_transfer_pick_list/material_transfer_pick_list.py` — Frappe entry point
+- `tekson_manufacturing/tekson_manufacturing/report/__init__.py`
+- `tekson_manufacturing/tekson_manufacturing/report/material_transfer_pick_list/__init__.py`
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py` — open-WO filter
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.json` — `prepared_report`, `disable_prepared_report_automation`, `javascript`, filter defaults
+- `docs/MATERIAL_TRANSFER_PICK_LIST_REPORT.md` — new report documentation
+
+### Site Repair (required on already-deployed sites)
+```python
+frappe.db.set_value('Report', 'Material Transfer Pick List', {
+    'prepared_report': 0,
+    'disable_prepared_report_automation': 1,
+    'javascript': '',
+})
+frappe.db.commit()
+frappe.clear_cache()
+```
+
+---
+
 ## Related Documents
 
 - PHASE1_STATUS_REPORT.md - Overall project status
