@@ -141,16 +141,16 @@ class MESExecutionCoordinator:
             # Security: Validate SE submit permission (manufacturing role not required for material transfers)
             validate_stock_entry_permission(stock_entry.name)
             
-            # Handle Manufacture SE: update WO status to Completed
+            # Handle Manufacture SE: update WO status to Completed,
+            # then fall through to JC readiness refresh below (a Manufacture
+            # SE with dual-target FG split delivers stock to OTHER WOs' WIP
+            # warehouses, whose JCs must also re-evaluate).
             if stock_entry.purpose == "Manufacture":
                 if stock_entry.work_order:
                     from tekson_manufacturing.execution.execution_engine import ExecutionEngine
                     engine = ExecutionEngine()
                     engine.update_work_order_status(stock_entry.work_order)
-                return
-            
-            # Handle Material Transfer and Material Transfer for Manufacture
-            if stock_entry.purpose not in ("Material Transfer", "Material Transfer for Manufacture"):
+            elif stock_entry.purpose not in ("Material Transfer", "Material Transfer for Manufacture"):
                 frappe.log_error(
                     title="MES SE Hook: Skipped (wrong purpose)",
                     message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"

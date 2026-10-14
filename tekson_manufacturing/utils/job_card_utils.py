@@ -238,9 +238,9 @@ def update_job_card_status(doc, method=None):
         return
     
     # Open JC — evaluate readiness
-        service.update_start_status(doc)
-        service.update_dependency_status(doc)
-        service.update_material_status(doc)
+    service.update_start_status(doc)
+    service.update_dependency_status(doc)
+    service.update_material_status(doc)
     
     # Debug: Log the update
     frappe.logger("tekson").info(f"Job Card {doc.name} status updated: {doc.custom_start_status}")

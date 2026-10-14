@@ -58,21 +58,39 @@ class JobCardReadinessEngine:
         else:
             wo = work_order
         
-        # Get all Job Cards for this WO
-        job_cards = frappe.get_all('Job Card',
-            filters={'work_order': wo.name, 'docstatus': ['!=', 2]},
-            order_by='sequence_id')
-        
-        frappe.log_error(
-            title="MES refresh_work_order",
-            message=f"WO: {wo.name} | JC count: {len(job_cards)} | JC names: {[j.name for j in job_cards]}"
-        )
-        
-        # Evaluate each Job Card
-        for jc_data in job_cards:
-            jc = frappe.get_doc('Job Card', jc_data.name)
-            result = self.evaluate_job_card(jc)
-            self.apply_result_to_job_card(jc.name, result)
+        # Re-entrancy guard: an auto inter-dept transfer SE can submit
+        # DURING a JC save (readiness validate hook), firing this hook
+        # again for the same WO. Nested re-refresh would re-save the JC
+        # mid-save; the in-flight save already writes correct post-transfer
+        # values, so skip the nested pass.
+        refreshing = getattr(frappe.local, 'mes_refreshing_wos', None)
+        if refreshing is None:
+            refreshing = frappe.local.mes_refreshing_wos = set()
+        if wo.name in refreshing:
+            frappe.log_error(
+                title="MES refresh_work_order: Re-entrant call skipped",
+                message=f"WO: {wo.name} is already being refreshed"
+            )
+            return
+        refreshing.add(wo.name)
+        try:
+            # Get all Job Cards for this WO
+            job_cards = frappe.get_all('Job Card',
+                filters={'work_order': wo.name, 'docstatus': ['!=', 2]},
+                order_by='sequence_id')
+            
+            frappe.log_error(
+                title="MES refresh_work_order",
+                message=f"WO: {wo.name} | JC count: {len(job_cards)} | JC names: {[j.name for j in job_cards]}"
+            )
+            
+            # Evaluate each Job Card
+            for jc_data in job_cards:
+                jc = frappe.get_doc('Job Card', jc_data.name)
+                result = self.evaluate_job_card(jc)
+                self.apply_result_to_job_card(jc.name, result)
+        finally:
+            refreshing.discard(wo.name)
     
     def refresh_job_card(self, job_card: Any) -> ReadinessResult:
         """
