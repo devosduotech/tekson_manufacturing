@@ -327,9 +327,14 @@ class ExecutionEngine:
                     item.allow_zero_valuation_rate = 1
             
             # Set FG warehouse to wo.fg_warehouse (from BOM's target_fg_warehouse)
+            # If item's BOM has target_fg_warehouse_2, split the FG output
             for item in se.items:
                 if item.is_finished_item:
                     item.t_warehouse = wo.fg_warehouse or wo.wip_warehouse
+            
+            # Split FG output if item's BOM has target_fg_warehouse_2
+            if wo.bom_no:
+                self._split_fg_output_for_dual_target(se, wo)
             
             # Apply RM Loss % to raw material quantities
             if wo.bom_no:
@@ -360,6 +365,93 @@ class ExecutionEngine:
             )
         
         return result
+    
+    def _split_fg_output_for_dual_target(self, stock_entry, work_order):
+        """
+        Split FG output between target_fg_warehouse and target_fg_warehouse_2.
+        
+        When the item's BOM has target_fg_warehouse_2 set, the produced qty
+        is split between the two warehouses based on demand from parent BOMs.
+        
+        Example:
+            Core End Plate BOM: Target1=Ralu In, Target2=RP
+            CNC WO qty=2
+            Parent BOMs: Core needs 1 from Ralu In, RP needs 1 from RP
+            → SE sends 1 to Ralu In, 1 to RP
+        
+        Args:
+            stock_entry: Stock Entry document (Manufacture)
+            work_order: Work Order document
+        """
+        meta = frappe.get_meta("BOM")
+        if not meta.has_field("target_fg_warehouse_2"):
+            return
+        
+        fg_item_code = work_order.production_item
+        
+        # Get the item's own BOM dual targets
+        item_bom = frappe.db.get_value("BOM",
+            {"item": fg_item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+            ["target_fg_warehouse", "target_fg_warehouse_2"], as_dict=True)
+        
+        if not item_bom or not item_bom.target_fg_warehouse_2:
+            return
+        
+        target1 = item_bom.target_fg_warehouse
+        target2 = item_bom.target_fg_warehouse_2
+        
+        # Find FG rows in the SE
+        fg_rows = [item for item in stock_entry.items if item.is_finished_item and item.item_code == fg_item_code]
+        if not fg_rows:
+            return
+        
+        fg_row = fg_rows[0]
+        total_qty = fg_row.qty
+        
+        # Calculate Target2 qty from parent BOM demand
+        # Find parent BOMs that use this item with source_warehouse = target2
+        parent_demand = frappe.db.sql("""
+            SELECT SUM(bi.qty * b.quantity) as total_qty
+            FROM `tabBOM Item` bi
+            INNER JOIN `tabBOM` b ON bi.parent = b.name
+            WHERE bi.item_code = %s
+            AND b.is_active = 1 AND b.docstatus = 1
+            AND bi.source_warehouse = %s
+        """, (fg_item_code, target2), as_dict=True)
+        
+        target2_demand = parent_demand[0].total_qty if parent_demand and parent_demand[0].total_qty else 0
+        
+        if target2_demand <= 0 or target2_demand >= total_qty:
+            # No split needed — all goes to Target1
+            return
+        
+        target1_qty = total_qty - target2_demand
+        target2_qty = target2_demand
+        
+        # Set Target1 qty on existing row
+        fg_row.qty = target1_qty
+        fg_row.t_warehouse = target1 or fg_row.t_warehouse
+        
+        # Add Target2 row
+        stock_entry.append("items", {
+            "item_code": fg_item_code,
+            "qty": target2_qty,
+            "s_warehouse": None,
+            "t_warehouse": target2,
+            "is_finished_item": 1,
+            "allow_zero_valuation_rate": 1,
+            "basic_rate": fg_row.basic_rate,
+            "uom": fg_row.uom,
+            "stock_uom": fg_row.stock_uom,
+            "conversion_factor": fg_row.conversion_factor,
+            "stock_qty": target2_qty * (fg_row.conversion_factor or 1),
+        })
+        
+        frappe.log_error(
+            title="MES Dual-Target FG Split",
+            message=f"WO: {work_order.name} | Item: {fg_item_code} | Total: {total_qty} | "
+                    f"Target1({target1}): {target1_qty} | Target2({target2}): {target2_qty}"
+        )
     
     def check_all_job_cards_completed(self, work_order):
         """Check if all Job Cards for the Work Order are completed"""
