@@ -114,28 +114,19 @@ class MaterialReadinessEngine:
             if available_qty < required_qty:
                 shortage_qty = required_qty - available_qty
                 
-                # Check if material can be transferred from another department's WIP warehouse
-                source_warehouse = material.get('source_warehouse')
-                
-                frappe.log_error(
-                    title="MES Inter-Dept Transfer Check",
-                    message=f"Item: {item_code} | Required: {required_qty} | InTarget({department_warehouse}): {available_qty} | source_warehouse: {source_warehouse!r} | is_dept_wip: {self.is_department_wip_warehouse(source_warehouse) if source_warehouse else 'N/A'}"
+                # Try to auto-transfer from another WIP warehouse that has stock
+                transferred = self.check_and_create_inter_department_transfer(
+                    item_code=item_code,
+                    required_qty=shortage_qty,
+                    target_warehouse=department_warehouse,
+                    work_order=wo.name
                 )
-                
-                if source_warehouse and self.is_department_wip_warehouse(source_warehouse):
-                    transferred = self.check_and_create_inter_department_transfer(
-                        item_code=item_code,
-                        required_qty=shortage_qty,
-                        target_warehouse=department_warehouse,
-                        source_warehouse=source_warehouse,
-                        work_order=wo.name
-                    )
-                    if transferred:
-                        # Re-check availability after transfer
-                        available_qty = self.get_available_stock_in_wip(item_code, department_warehouse)
-                        if available_qty >= required_qty:
-                            total_available += available_qty
-                            continue  # No shortage after transfer
+                if transferred:
+                    # Re-check availability after transfer
+                    available_qty = self.get_available_stock_in_wip(item_code, department_warehouse)
+                    if available_qty >= required_qty:
+                        total_available += available_qty
+                        continue  # No shortage after transfer
                 
                 total_available += available_qty
                 shortage_details.append({
@@ -277,57 +268,63 @@ class MaterialReadinessEngine:
         
         return warehouse.startswith("WIP-")
 
-    def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
+    def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, work_order):
         """
-        Check if material is available in source department WIP warehouse and create transfer if so.
+        Find the item in any WIP warehouse (excluding target) and transfer to target.
         
-        This handles the case where a Work Order's BOM specifies a source_warehouse that is
-        another department's output warehouse (e.g., Ralu In for RP department).
+        Searches Bin table for stock of item_code in all warehouses matching
+        the WIP-* pattern, excluding the target warehouse. Transfers from the
+        first warehouse with sufficient stock.
         
         Args:
             item_code: Item code to transfer
             required_qty: Quantity needed
-            target_warehouse: Target department WIP warehouse (where Job Card runs)
-            source_warehouse: Source department WIP warehouse (from BOM Item.source_warehouse)
+            target_warehouse: Target department WIP warehouse
             work_order: Work Order name
         
         Returns: bool - True if transfer was created, False otherwise
         """
-        # Check if transfer already exists for this item and work order
-        existing_transfer = frappe.db.exists("Stock Entry", {
-            "work_order": work_order,
-            "purpose": "Material Transfer for Manufacture",
-            "docstatus": 1,
-            "from_warehouse": source_warehouse,
-            "to_warehouse": target_warehouse
-        })
+        # Check if a transfer for this item + target already exists (prevents duplicates)
+        existing = frappe.db.sql("""
+            SELECT sed.parent
+            FROM `tabStock Entry Detail` sed
+            INNER JOIN `tabStock Entry` se ON sed.parent = se.name
+            WHERE sed.item_code = %s
+            AND se.work_order = %s
+            AND se.purpose = 'Material Transfer for Manufacture'
+            AND se.docstatus = 1
+            AND sed.t_warehouse = %s
+            LIMIT 1
+        """, (item_code, work_order, target_warehouse), as_dict=True)
         
-        if existing_transfer:
-            # Check if the existing transfer has this item
-            existing_item = frappe.db.exists("Stock Entry Detail", {
-                "parent": existing_transfer,
-                "item_code": item_code,
-                "s_warehouse": source_warehouse,
-                "t_warehouse": target_warehouse
-            })
-            if existing_item:
-                frappe.log_error(
-                    title="MES Inter-Department Transfer: Already Exists",
-                    message=f"Transfer already exists for {item_code} | SE: {existing_transfer} | {source_warehouse} → {target_warehouse} | WO: {work_order}"
-                )
-                return True  # Transfer already exists, consider it done
-        
-        # Check available stock in source warehouse
-        source_stock = self.get_available_stock_in_wip(item_code, source_warehouse)
-        
-        if source_stock < required_qty:
+        if existing:
             frappe.log_error(
-                title="MES Inter-Department Transfer: Insufficient Source Stock",
-                message=f"Item: {item_code} | Required: {required_qty} | Available in {source_warehouse}: {source_stock}"
+                title="MES Inter-Dept Transfer: Already Exists",
+                message=f"Item: {item_code} | SE: {existing[0].parent} → {target_warehouse} | WO: {work_order}"
             )
+            return True
+        
+        # Find all WIP warehouses with stock of this item (excluding target)
+        bins = frappe.db.sql("""
+            SELECT warehouse, actual_qty
+            FROM `tabBin`
+            WHERE item_code = %s
+            AND actual_qty >= %s
+            AND warehouse LIKE 'WIP-%%'
+            AND warehouse != %s
+            ORDER BY actual_qty DESC
+        """, (item_code, required_qty, target_warehouse), as_dict=True)
+        
+        if not bins:
             return False
         
-        # Create Stock Entry for inter-department transfer
+        source_warehouse = bins[0].warehouse
+        
+        frappe.log_error(
+            title="MES Inter-Dept Transfer: Found Stock",
+            message=f"Item: {item_code} | Need: {required_qty} | Found {bins[0].actual_qty} in {source_warehouse} → {target_warehouse} | WO: {work_order}"
+        )
+        
         try:
             company = frappe.db.get_value("Work Order", work_order, "company")
             
@@ -337,7 +334,7 @@ class MaterialReadinessEngine:
             stock_entry.from_warehouse = source_warehouse
             stock_entry.to_warehouse = target_warehouse
             stock_entry.company = company
-            stock_entry.remarks = f"Inter-department transfer: {source_warehouse} → {target_warehouse} for {item_code} (WO: {work_order})"
+            stock_entry.remarks = f"Auto inter-dept transfer: {source_warehouse} → {target_warehouse} for {item_code} (WO: {work_order})"
             
             stock_entry.append("items", {
                 "item_code": item_code,
@@ -352,7 +349,7 @@ class MaterialReadinessEngine:
             stock_entry.submit()
             
             frappe.log_error(
-                title="MES Inter-Department Transfer Created",
+                title="MES Inter-Dept Transfer Created",
                 message=f"SE: {stock_entry.name} | Item: {item_code} | Qty: {required_qty} | {source_warehouse} → {target_warehouse} | WO: {work_order}"
             )
             
@@ -360,7 +357,7 @@ class MaterialReadinessEngine:
             
         except Exception as e:
             frappe.log_error(
-                title="MES Inter-Department Transfer Failed",
+                title="MES Inter-Dept Transfer Failed",
                 message=f"Item: {item_code} | Error: {str(e)} | {source_warehouse} → {target_warehouse} | WO: {work_order}"
             )
             return False
