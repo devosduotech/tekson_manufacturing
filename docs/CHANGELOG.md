@@ -644,6 +644,50 @@ split routing is required.
 
 ---
 
+## Version 15.1.31 — Split Routing Diagnostic & Unrouted-Demand Warning
+
+**Date:** 2026-10-14
+**Status:** On `develop` (v15.1.31)
+**Type:** Tooling + Guard
+
+### Problem
+UAT: releasing Core Assembly (1 × core end plate + 1 × core end plate sr.no.)
+created only **one** core end plate Work Order instead of two
+(`WIP-Ralu In` + `WIP-RP`), blocking the sr.no. Job Card — no raw material
+reached `WIP-RP`. The demand silently merged because its `source_warehouse`
+matched neither target, and nothing reported it.
+
+### Changes
+- **New** `scripts/diagnose_split_routing.py` — read-only `bench execute`
+  diagnostic (`diagnose` for a Production Plan, `diagnose_bom` for one BOM
+  tree). Reports:
+  1. Environment — custom field present, `TeksonProductionPlan` registered,
+     `_route_split_fg_warehouse` deployed, app version
+  2. BOM config — every dual-target demand vs its parent `source_warehouse`,
+     plus rows with no BOM No linked (demand never exploded)
+  3. Prediction — re-runs `Production Plan.get_sub_assembly_items()` in
+     memory (**never saved**) and prints the Work Orders that would be created
+  4. Verdict — `OK` / `CONFIG_MISMATCH` / `STALE_ROWS` (plan exploded before
+     config or old workers — remedy: restart + re-run Get Sub Assembly Items)
+     / `PATCH_NOT_RUN` / `OVERRIDE_NOT_ACTIVE`, each with concrete remedies
+- **`overrides/production_plan.py`** — `_route_split_fg_warehouse` now shows a
+  *Split Routing Warning* msgprint naming every dual-target demand whose
+  source matches neither Target 1 nor Target 2, instead of silently keeping
+  the default warehouse and merging into one Work Order
+- Non-dual-target BOMs are untouched: one Work Order, primary target
+
+### Files Changed
+- `tekson_manufacturing/scripts/diagnose_split_routing.py` — new
+- `tekson_manufacturing/overrides/production_plan.py` — unrouted-demand warning
+
+### Usage
+```
+bench --site <site> execute tekson_manufacturing.scripts.diagnose_split_routing.diagnose --args '["<Production Plan>"]'
+bench --site <site> execute tekson_manufacturing.scripts.diagnose_split_routing.diagnose_bom --args '["<BOM>"]'
+```
+
+---
+
 ## Related Documents
 
 - PHASE1_STATUS_REPORT.md - Overall project status

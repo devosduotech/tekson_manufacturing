@@ -4,8 +4,9 @@ Custom Production Plan — batch rounding + WO consolidation by planned date
 """
 
 import frappe
-from frappe.utils import flt
 from erpnext.manufacturing.doctype.production_plan.production_plan import ProductionPlan
+from frappe.utils import flt
+
 from tekson_manufacturing.services.batch_planning import get_production_qty
 
 
@@ -29,9 +30,9 @@ class TeksonProductionPlan(ProductionPlan):
                 existing_row.qty += flt(row.qty)
                 existing_row.stock_qty += flt(row.stock_qty)
                 existing_row.bom_level = max(existing_row.bom_level, row.bom_level)
-        
+
         return list(key_wise_data.values())
-    
+
     def set_sub_assembly_items_based_on_level(self, row, bom_data, manufacturing_type=None):
         super().set_sub_assembly_items_based_on_level(row, bom_data, manufacturing_type)
         self._route_split_fg_warehouse(row, bom_data)
@@ -52,6 +53,10 @@ class TeksonProductionPlan(ProductionPlan):
         key includes fg_warehouse), so the plan creates one Work Order per
         destination with its own quantity — no intra-WO split required.
 
+        A dual-target demand whose source matches neither target is reported
+        to the user instead of silently falling back (it would otherwise merge
+        with other default-routed demand into a single Work Order).
+
         Only immediate BOM Item rows (one level up) are inspected; demands
         from multiple parent BOMs are naturally separate rows in bom_data.
         """
@@ -67,6 +72,8 @@ class TeksonProductionPlan(ProductionPlan):
         containing_bom = {po_item_row.get("item_code"): po_item_row.get("bom_no")}
         targets_cache = {}
         sources_cache = {}
+        unrouted = []
+        unrouted_details = []
 
         for data in bom_data:
             production_item = data.get("production_item")
@@ -114,11 +121,39 @@ class TeksonProductionPlan(ProductionPlan):
             )
             if matched:
                 data.fg_warehouse = matched
+            elif cache_key not in unrouted:
+                unrouted.append(cache_key)
+                unrouted_details.append(
+                    {
+                        "item": production_item,
+                        "parent_bom": parent_bom,
+                        "source": ", ".join(sources_cache[cache_key]),
+                        "primary": primary,
+                        "secondary": secondary,
+                    }
+                )
+
+        if unrouted_details:
+            lines = [
+                f"  - {d['item']} in {d['parent_bom']}: Source Warehouse "
+                f"{d['source'] or '(empty)'} matches neither {d['primary']} (Target 1) "
+                f"nor {d['secondary']} (Target 2)"
+                for d in unrouted_details
+            ]
+            frappe.msgprint(
+                "Split routing skipped for these demands — they keep the default warehouse "
+                "and may merge with other demand into a single Work Order:\n"
+                + "\n".join(lines)
+                + "\nSet the BOM Item Source Warehouse to Target FG Warehouse or "
+                "Target FG Warehouse 2 to route them.",
+                title="Split Routing Warning",
+                indicator="orange",
+            )
 
     def make_work_order_for_subassembly_items(self, wo_list, subcontracted_po, default_warehouses):
         self._apply_batch_rounding()
         super().make_work_order_for_subassembly_items(wo_list, subcontracted_po, default_warehouses)
-    
+
     def _apply_batch_rounding(self):
         for item in self.sub_assembly_items:
             if item.bom_no and item.qty > 0:
