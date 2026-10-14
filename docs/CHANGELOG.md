@@ -529,10 +529,10 @@ After qty fix, MR still showed only 3 items (70 MISSING). `_is_source_warehouse`
 
 ---
 
-## Unreleased — Material Transfer Pick List Report
+## Version 15.1.31 — Material Transfer Pick List Report
 
 **Date:** 2026-10-12
-**Status:** On `develop` and `main` (not tagged)
+**Status:** On `develop` and `main` (v15.1.31)
 **Type:** Bug Fix / Feature
 
 ### Problem
@@ -583,6 +583,64 @@ frappe.db.set_value('Report', 'Material Transfer Pick List', {
 frappe.db.commit()
 frappe.clear_cache()
 ```
+
+---
+
+## Version 15.1.31 — Demand-Driven Split Routing (Dual Target FG Warehouse)
+
+**Date:** 2026-10-14
+**Status:** On `develop` (v15.1.31)
+**Type:** Feature
+
+### Requirement
+A single component BOM must be able to feed two destination warehouses
+(e.g., Core End Plate 100x100x20 → one unit to direct Assembly at
+`WIP-Ralu In`, one unit to Sr. No. punching at `WIP-RP`) without
+doubling the BOM quantity (BOM qty stays 1 so a single unit can always
+be produced as a replacement part).
+
+### Design
+- **`target_fg_warehouse` (Target FG Warehouse 1)** — mandatory, unchanged.
+- **`target_fg_warehouse_2` (Target FG Warehouse 2)** — new, optional
+  custom field on the BOM header.
+- When both are configured, each **BOM Item child row's `source_warehouse`**
+  decides the destination:
+  - matches Warehouse 1 → demand routes to the primary warehouse
+  - matches Warehouse 2 → demand routes to the secondary warehouse
+  - matches neither → the existing warehouse-flow error/validation still applies
+- The Production Plan keeps such demand as **separate sub-assembly rows**
+  (the combine key already includes `fg_warehouse`), so it creates
+  **one Work Order per destination with its own quantity**
+  (e.g., WO 1 → Warehouse 1 qty 10, WO 2 → Warehouse 2 qty 5).
+  Stock transfers follow each WO's qty — no intra-WO split required.
+- Split demand is computed from **immediate** BOM Item rows only
+  (no multi-level recursion); demands from multiple parent BOMs stay
+  separate rows and are never merged across destinations.
+
+### Changes
+- New patch `add_target_fg_warehouse_2` creates
+  `BOM.target_fg_warehouse_2` and `BOMBulkCreator.target_fg_warehouse_2`
+  (Link → Warehouse, non-mandatory)
+- `TeksonProductionPlan.set_sub_assembly_items_based_on_level()` routes
+  each sub-assembly row's `fg_warehouse` by matching the consuming
+  BOM Item `source_warehouse` against primary/secondary targets
+- BOM Bulk Creator copies `target_fg_warehouse_2` to every generated BOM
+  (`BOM_FIELDS`)
+- `verify_bom_flow` accepts parent `source_warehouse` matching **either**
+  target as a valid flow; a source matching neither still reports the
+  existing mismatch error; summary now counts split-configured BOMs
+
+### Files Changed
+- `tekson_manufacturing/patches/add_target_fg_warehouse_2.py` — new patch
+- `tekson_manufacturing/patches.txt` — patch registered
+- `tekson_manufacturing/overrides/production_plan.py` — split FG routing
+- `tekson_manufacturing/tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.py` — `BOM_FIELDS`
+- `tekson_manufacturing/scripts/verify_bom_flow.py` — primary/secondary match
+
+### Deployment
+Run `bench migrate` (creates the two custom fields). Existing BOMs are
+**not** modified — end users update `target_fg_warehouse_2` manually where
+split routing is required.
 
 ---
 

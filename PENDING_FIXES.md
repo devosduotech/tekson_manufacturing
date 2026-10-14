@@ -1,7 +1,7 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
 **Date:** Oct 12, 2026
-**Version:** v15.1.30 (unreleased changes on `develop`/`main`)
+**Version:** v15.1.31 (on `develop`, pending tag)
 **Status:** HIGH items resolved
 
 ---
@@ -66,7 +66,7 @@ Report now loads, filters render, open-WO filter applied. Remaining work:
 
 ## Release Preparation Checklist (v15.1.31)
 
-- [ ] Decide the version number and bump `pyproject.toml` + `hooks.py`
+- [x] Decide the version number and bump `pyproject.toml` + `tekson_manufacturing/__init__.py` (15.1.31)
 - [ ] Land P1–P5 above (or explicitly defer them in the release notes)
 - [ ] Apply the site repair snippet on **every** deployed site
       (`prepared_report = 0`, `disable_prepared_report_automation = 1`)

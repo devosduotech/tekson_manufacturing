@@ -18,6 +18,7 @@ BOM_FIELDS = [
 	"conversion_rate",
 	"buying_price_list",
 	"target_fg_warehouse",
+	"target_fg_warehouse_2",
 ]
 
 BOM_ITEM_FIELDS = [

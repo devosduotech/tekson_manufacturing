@@ -1,7 +1,8 @@
 """
 BOM Multi-Level Warehouse Flow Verification
 
-Verifies that child component's target_fg_warehouse matches parent BOM item's source_warehouse
+Verifies that child component's target_fg_warehouse (or target_fg_warehouse_2,
+when configured for split routing) matches parent BOM item's source_warehouse
 for proper multi-department material flow.
 
 Usage:
@@ -16,11 +17,33 @@ import frappe
 from typing import Dict, List
 
 
+def _bom_fields():
+    fields = ['name', 'item', 'docstatus', 'target_fg_warehouse']
+    if frappe.get_meta("BOM").has_field("target_fg_warehouse_2"):
+        fields.append('target_fg_warehouse_2')
+    return fields
+
+
+def _matched_target(parent_source_wh, child_bom):
+    """Return the child target warehouse matched by parent source, or None.
+
+    A parent source_warehouse is valid when it equals the child BOM's primary
+    target_fg_warehouse OR its secondary target_fg_warehouse_2 (split routing).
+    """
+    if not parent_source_wh:
+        return None
+    for target in (child_bom.get("target_fg_warehouse"), child_bom.get("target_fg_warehouse_2")):
+        if target and parent_source_wh == target:
+            return target
+    return None
+
+
 def check_multi_level_flow():
     """
     Check all multi-level BOMs for warehouse flow consistency
     
-    Rule: Child BOM's target_fg_warehouse should match Parent BOM item's source_warehouse
+    Rule: Child BOM's target_fg_warehouse / target_fg_warehouse_2 should match
+          Parent BOM item's source_warehouse
     """
     print("=" * 80)
     print("MULTI-LEVEL BOM WAREHOUSE FLOW VERIFICATION")
@@ -28,7 +51,7 @@ def check_multi_level_flow():
     
     # Get all BOMs
     all_boms = frappe.get_all('BOM', 
-        fields=['name', 'item', 'docstatus', 'target_fg_warehouse'],
+        fields=_bom_fields(),
         filters={'docstatus': 1},
         order_by='name'
     )
@@ -77,16 +100,19 @@ def check_multi_level_flow():
                 if child_bom_name in bom_lookup:
                     child_bom = bom_lookup[child_bom_name]
                     
-                    # Compare warehouses
+                    # Compare warehouses (primary or secondary target)
                     parent_source_wh = sub_asm.source_warehouse
                     child_target_wh = child_bom.target_fg_warehouse
+                    matched_wh = _matched_target(parent_source_wh, child_bom)
                     
-                    if parent_source_wh == child_target_wh:
+                    if matched_wh:
                         bom_flow_result['ok'].append({
                             'sub_assembly': sub_asm.item_code,
                             'child_bom': child_bom_name,
                             'parent_source_wh': parent_source_wh,
                             'child_target_wh': child_target_wh,
+                            'matched_wh': matched_wh,
+                            'split': matched_wh != child_target_wh,
                             'match': True
                         })
                     else:
@@ -95,6 +121,7 @@ def check_multi_level_flow():
                             'child_bom': child_bom_name,
                             'parent_source_wh': parent_source_wh,
                             'child_target_wh': child_target_wh,
+                            'child_target_wh_2': child_bom.get('target_fg_warehouse_2'),
                             'match': False
                         })
                         flow_issues.append({
@@ -102,7 +129,8 @@ def check_multi_level_flow():
                             'sub_assembly': sub_asm.item_code,
                             'child_bom': child_bom_name,
                             'parent_source_wh': parent_source_wh,
-                            'child_target_wh': child_target_wh
+                            'child_target_wh': child_target_wh,
+                            'child_target_wh_2': child_bom.get('target_fg_warehouse_2')
                         })
             
             if bom_flow_result['issues']:
@@ -130,7 +158,9 @@ def check_multi_level_flow():
                 print(f"  Child BOM: {issue['child_bom']}")
                 print(f"  Parent Item source_warehouse: {issue['parent_source_wh']}")
                 print(f"  Child BOM target_fg_warehouse: {issue['child_target_wh']}")
-                print(f"  ⚠️  MISMATCH! These should be the same warehouse")
+                if issue.get('child_target_wh_2'):
+                    print(f"  Child BOM target_fg_warehouse_2: {issue['child_target_wh_2']}")
+                print(f"  ⚠️  MISMATCH! Source should match primary or secondary target")
     else:
         print("\n✅ ALL MULTI-LEVEL BOMs HAVE CORRECT WAREHOUSE FLOW")
     
@@ -145,16 +175,21 @@ def check_multi_level_flow():
         
         print(f"\n{ml_bom['bom']} → {ml_bom['item']}")
         print(f"  Target FG Warehouse: {bom_doc.target_fg_warehouse}")
+        if bom_doc.get('target_fg_warehouse_2'):
+            print(f"  Target FG Warehouse 2 (split): {bom_doc.get('target_fg_warehouse_2')}")
         print(f"  Sub-assemblies: {len(sub_assemblies)}")
         
         for sub_asm in sub_assemblies:
             child_bom = frappe.get_doc('BOM', sub_asm.bom_no) if sub_asm.bom_no else None
-            status = "✅" if (child_bom and child_bom.target_fg_warehouse == sub_asm.source_warehouse) else "❌"
+            matched = _matched_target(sub_asm.source_warehouse, child_bom) if child_bom else None
+            status = "✅" if matched else "❌"
             
             print(f"  {status} {sub_asm.item_code}")
             print(f"      Parent source_warehouse: {sub_asm.source_warehouse}")
             if child_bom:
                 print(f"      Child target_fg_warehouse: {child_bom.target_fg_warehouse}")
+                if child_bom.get('target_fg_warehouse_2'):
+                    print(f"      Child target_fg_warehouse_2: {child_bom.get('target_fg_warehouse_2')}")
                 print(f"      Child BOM: {sub_asm.bom_no}")
     
     # Summary statistics
@@ -163,8 +198,10 @@ def check_multi_level_flow():
     print("=" * 80)
     
     total_sub_assemblies = sum([ml['sub_assemblies'] for ml in multi_level_boms])
+    split_boms = [b for b in all_boms if b.get('target_fg_warehouse_2')]
     print(f"Total multi-level BOMs: {len(multi_level_boms)}")
     print(f"Total sub-assembly references: {total_sub_assemblies}")
+    print(f"BOMs with split routing (Target FG Warehouse 2): {len(split_boms)}")
     print(f"Warehouse flow matches: {total_sub_assemblies - len([i for i in flow_issues if isinstance(i, dict) and 'parent_bom' in i])}")
     print(f"Warehouse flow mismatches: {len([i for i in flow_issues if isinstance(i, dict) and 'parent_bom' in i])}")
     
@@ -205,6 +242,8 @@ def check_single_bom_flow(bom_name: str):
     print(f"\nBOM: {bom.name}")
     print(f"Item: {bom.item}")
     print(f"Target FG Warehouse: {bom.target_fg_warehouse}")
+    if bom.get('target_fg_warehouse_2'):
+        print(f"Target FG Warehouse 2 (split): {bom.get('target_fg_warehouse_2')}")
     
     # Find sub-assemblies
     sub_assemblies = [item for item in bom.items if item.bom_no]
@@ -228,16 +267,21 @@ def check_single_bom_flow(bom_name: str):
                 child_bom = frappe.get_doc('BOM', sub_asm.bom_no)
                 print(f"   Child BOM: {child_bom.name}")
                 print(f"   Child target_fg_warehouse: {child_bom.target_fg_warehouse}")
+                if child_bom.get('target_fg_warehouse_2'):
+                    print(f"   Child target_fg_warehouse_2: {child_bom.get('target_fg_warehouse_2')}")
                 
-                if sub_asm.source_warehouse == child_bom.target_fg_warehouse:
-                    print(f"   ✅ WAREHOUSE MATCH")
+                matched = _matched_target(sub_asm.source_warehouse, child_bom)
+                if matched:
+                    via = " (split / secondary)" if matched != child_bom.target_fg_warehouse else ""
+                    print(f"   ✅ WAREHOUSE MATCH → {matched}{via}")
                     matches.append(sub_asm.item_code)
                 else:
                     print(f"   ❌ WAREHOUSE MISMATCH!")
                     issues.append({
                         'sub_assembly': sub_asm.item_code,
                         'parent_source_wh': sub_asm.source_warehouse,
-                        'child_target_wh': child_bom.target_fg_warehouse
+                        'child_target_wh': child_bom.target_fg_warehouse,
+                        'child_target_wh_2': child_bom.get('target_fg_warehouse_2')
                     })
             except Exception as e:
                 print(f"   ⚠️  Child BOM not found: {sub_asm.bom_no}")
@@ -252,6 +296,9 @@ def check_single_bom_flow(bom_name: str):
     if issues:
         print(f"\n⚠️  ISSUES:")
         for issue in issues:
-            print(f"   - {issue['sub_assembly']}: {issue['parent_source_wh']} ≠ {issue['child_target_wh']}")
+            line = f"   - {issue['sub_assembly']}: {issue['parent_source_wh']} ≠ {issue['child_target_wh']}"
+            if issue.get('child_target_wh_2'):
+                line += f" (or {issue['child_target_wh_2']})"
+            print(line)
     else:
         print(f"\n✅ ALL WAREHOUSE FLOWS ARE CORRECT")
