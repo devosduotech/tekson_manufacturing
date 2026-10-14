@@ -619,7 +619,7 @@ be produced as a replacement part).
 
 ### Changes
 - New patch `add_target_fg_warehouse_2` creates
-  `BOM.target_fg_warehouse_2` and `BOMBulkCreator.target_fg_warehouse_2`
+  `BOM.target_fg_warehouse_2` and `BOM Bulk Creator.target_fg_warehouse_2`
   (Link → Warehouse, non-mandatory)
 - `TeksonProductionPlan.set_sub_assembly_items_based_on_level()` routes
   each sub-assembly row's `fg_warehouse` by matching the consuming

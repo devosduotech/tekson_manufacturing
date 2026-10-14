@@ -31,7 +31,7 @@ def execute():
     )
 
     _create_field(
-        dt="BOMBulkCreator",
+        dt="BOM Bulk Creator",
         fieldname="target_fg_warehouse_2",
         label="Target FG Warehouse 2",
         fieldtype="Link",
