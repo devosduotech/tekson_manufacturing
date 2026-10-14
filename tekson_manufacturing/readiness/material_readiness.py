@@ -346,6 +346,7 @@ class MaterialReadinessEngine:
             company = frappe.db.get_value("Work Order", work_order, "company")
             
             stock_entry = frappe.new_doc("Stock Entry")
+            stock_entry.stock_entry_type = "Material Transfer for Manufacture"
             stock_entry.purpose = "Material Transfer for Manufacture"
             stock_entry.work_order = work_order
             stock_entry.from_warehouse = source_warehouse
