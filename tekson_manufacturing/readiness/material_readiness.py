@@ -265,9 +265,7 @@ class MaterialReadinessEngine:
         """
         Check if a warehouse is a department WIP warehouse.
         
-        Matches on either:
-        - warehouse_group = "Work In Progress Stores"
-        - name starts with "WIP-"
+        Matches on name pattern WIP-*.
         
         Args:
             warehouse: Warehouse name
@@ -277,15 +275,7 @@ class MaterialReadinessEngine:
         if not warehouse:
             return False
         
-        warehouse_group = frappe.db.get_value("Warehouse", warehouse, "warehouse_group")
-        if warehouse_group == "Work In Progress Stores":
-            return True
-        
-        # Fallback: name pattern WIP-*
-        if warehouse.startswith("WIP-"):
-            return True
-        
-        return False
+        return warehouse.startswith("WIP-")
 
     def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
         """
