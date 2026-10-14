@@ -116,6 +116,12 @@ class MaterialReadinessEngine:
                 
                 # Check if material can be transferred from another department's WIP warehouse
                 source_warehouse = material.get('source_warehouse')
+                
+                frappe.log_error(
+                    title="MES Inter-Dept Transfer Check",
+                    message=f"Item: {item_code} | Required: {required_qty} | InTarget({department_warehouse}): {available_qty} | source_warehouse: {source_warehouse!r} | is_dept_wip: {self.is_department_wip_warehouse(source_warehouse) if source_warehouse else 'N/A'}"
+                )
+                
                 if source_warehouse and self.is_department_wip_warehouse(source_warehouse):
                     transferred = self.check_and_create_inter_department_transfer(
                         item_code=item_code,
@@ -257,15 +263,29 @@ class MaterialReadinessEngine:
 
     def is_department_wip_warehouse(self, warehouse):
         """
-        Check if a warehouse is a department WIP warehouse (Work In Progress Stores group)
+        Check if a warehouse is a department WIP warehouse.
+        
+        Matches on either:
+        - warehouse_group = "Work In Progress Stores"
+        - name starts with "WIP-"
         
         Args:
             warehouse: Warehouse name
         
         Returns: bool - True if department WIP warehouse
         """
+        if not warehouse:
+            return False
+        
         warehouse_group = frappe.db.get_value("Warehouse", warehouse, "warehouse_group")
-        return warehouse_group == "Work In Progress Stores"
+        if warehouse_group == "Work In Progress Stores":
+            return True
+        
+        # Fallback: name pattern WIP-*
+        if warehouse.startswith("WIP-"):
+            return True
+        
+        return False
 
     def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
         """
