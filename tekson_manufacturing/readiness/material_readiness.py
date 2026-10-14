@@ -114,15 +114,20 @@ class MaterialReadinessEngine:
             if available_qty < required_qty:
                 shortage_qty = required_qty - available_qty
                 
-                # If BOM Item specifies a source_warehouse that is a different
-                # WIP warehouse, auto-transfer the shortage from there.
-                source_warehouse = material.get('source_warehouse')
-                if source_warehouse and source_warehouse != department_warehouse and source_warehouse.startswith("WIP-"):
+                # Look up the item's own BOM target_fg_warehouse as transfer source.
+                # If the item's BOM outputs to a different WIP warehouse,
+                # auto-transfer the shortage from there.
+                item_bom_target = self.get_item_bom_target_warehouse(item_code)
+                if item_bom_target and item_bom_target != department_warehouse and item_bom_target.startswith("WIP-"):
+                    frappe.log_error(
+                        title="MES Inter-Dept Transfer Attempt",
+                        message=f"Item: {item_code} | Need: {shortage_qty} | From BOM Target: {item_bom_target} → {department_warehouse} | WO: {wo.name}"
+                    )
                     transferred = self.check_and_create_inter_department_transfer(
                         item_code=item_code,
                         required_qty=shortage_qty,
                         target_warehouse=department_warehouse,
-                        source_warehouse=source_warehouse,
+                        source_warehouse=item_bom_target,
                         work_order=wo.name
                     )
                     if transferred:
@@ -270,6 +275,26 @@ class MaterialReadinessEngine:
             return False
         
         return warehouse.startswith("WIP-")
+
+    def get_item_bom_target_warehouse(self, item_code):
+        """
+        Get the target_fg_warehouse from the item's own active default BOM.
+        
+        This is where the item is produced to (e.g. Core End Plate BOM
+        outputs to WIP-Ralu In - TPL).
+        
+        Args:
+            item_code: Item code
+        
+        Returns: str - warehouse name or None
+        """
+        meta = frappe.get_meta("BOM")
+        if not meta.has_field("target_fg_warehouse"):
+            return None
+        
+        return frappe.db.get_value("BOM",
+            {"item": item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+            "target_fg_warehouse")
 
     def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
         """
