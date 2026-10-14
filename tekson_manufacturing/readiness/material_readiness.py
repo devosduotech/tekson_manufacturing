@@ -114,19 +114,22 @@ class MaterialReadinessEngine:
             if available_qty < required_qty:
                 shortage_qty = required_qty - available_qty
                 
-                # Try to auto-transfer from another WIP warehouse that has stock
-                transferred = self.check_and_create_inter_department_transfer(
-                    item_code=item_code,
-                    required_qty=shortage_qty,
-                    target_warehouse=department_warehouse,
-                    work_order=wo.name
-                )
-                if transferred:
-                    # Re-check availability after transfer
-                    available_qty = self.get_available_stock_in_wip(item_code, department_warehouse)
-                    if available_qty >= required_qty:
-                        total_available += available_qty
-                        continue  # No shortage after transfer
+                # If BOM Item specifies a source_warehouse that is a different
+                # WIP warehouse, auto-transfer the shortage from there.
+                source_warehouse = material.get('source_warehouse')
+                if source_warehouse and source_warehouse != department_warehouse and source_warehouse.startswith("WIP-"):
+                    transferred = self.check_and_create_inter_department_transfer(
+                        item_code=item_code,
+                        required_qty=shortage_qty,
+                        target_warehouse=department_warehouse,
+                        source_warehouse=source_warehouse,
+                        work_order=wo.name
+                    )
+                    if transferred:
+                        available_qty = self.get_available_stock_in_wip(item_code, department_warehouse)
+                        if available_qty >= required_qty:
+                            total_available += available_qty
+                            continue  # No shortage after transfer
                 
                 total_available += available_qty
                 shortage_details.append({
@@ -268,18 +271,18 @@ class MaterialReadinessEngine:
         
         return warehouse.startswith("WIP-")
 
-    def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, work_order):
+    def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
         """
-        Find the item in any WIP warehouse (excluding target) and transfer to target.
+        Transfer material from the BOM-specified source WIP warehouse to the target WIP.
         
-        Searches Bin table for stock of item_code in all warehouses matching
-        the WIP-* pattern, excluding the target warehouse. Transfers from the
-        first warehouse with sufficient stock.
+        Only transfers from the warehouse explicitly configured as the BOM Item's
+        source_warehouse. Does NOT search other warehouses.
         
         Args:
             item_code: Item code to transfer
             required_qty: Quantity needed
             target_warehouse: Target department WIP warehouse
+            source_warehouse: Source WIP warehouse (from BOM Item.source_warehouse)
             work_order: Work Order name
         
         Returns: bool - True if transfer was created, False otherwise
@@ -304,26 +307,15 @@ class MaterialReadinessEngine:
             )
             return True
         
-        # Find all WIP warehouses with stock of this item (excluding target)
-        bins = frappe.db.sql("""
-            SELECT warehouse, actual_qty
-            FROM `tabBin`
-            WHERE item_code = %s
-            AND actual_qty >= %s
-            AND warehouse LIKE 'WIP-%%'
-            AND warehouse != %s
-            ORDER BY actual_qty DESC
-        """, (item_code, required_qty, target_warehouse), as_dict=True)
+        # Check stock in the BOM-specified source warehouse
+        source_stock = self.get_available_stock_in_wip(item_code, source_warehouse)
         
-        if not bins:
+        if source_stock < required_qty:
+            frappe.log_error(
+                title="MES Inter-Dept Transfer: Insufficient Source Stock",
+                message=f"Item: {item_code} | Need: {required_qty} | Available in {source_warehouse}: {source_stock} | WO: {work_order}"
+            )
             return False
-        
-        source_warehouse = bins[0].warehouse
-        
-        frappe.log_error(
-            title="MES Inter-Dept Transfer: Found Stock",
-            message=f"Item: {item_code} | Need: {required_qty} | Found {bins[0].actual_qty} in {source_warehouse} → {target_warehouse} | WO: {work_order}"
-        )
         
         try:
             company = frappe.db.get_value("Work Order", work_order, "company")
