@@ -160,14 +160,16 @@ class MESExecutionCoordinator:
             from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
             engine = JobCardReadinessEngine()
             
-            # Find affected WOs: from SE work_order, or from target warehouse
+            # Find affected WOs: from SE work_order AND from target warehouses
+            # Both are needed — a Manufacture SE with work_order set may also
+            # deliver stock to OTHER WOs' WIP warehouses (dual-target FG split).
             wo_names = set()
             
             if stock_entry.work_order:
                 wo_names.add(stock_entry.work_order)
             
-            # For Material Transfer (MR flow): find WOs by target warehouse
-            if not wo_names and stock_entry.items:
+            # Always find WOs by target warehouse (covers cross-WO deliveries)
+            if stock_entry.items:
                 target_warehouses = set(item.t_warehouse for item in stock_entry.items if item.t_warehouse)
                 if target_warehouses:
                     jc_list = frappe.get_all("Job Card",
