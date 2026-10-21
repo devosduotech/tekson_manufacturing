@@ -447,10 +447,11 @@ class ExecutionEngine:
             "stock_qty": target2_qty * (fg_row.conversion_factor or 1),
         })
         
-        frappe.log_error(
-            title="MES Dual-Target FG Split",
-            message=f"WO: {work_order.name} | Item: {fg_item_code} | Total: {total_qty} | "
-                    f"Target1({target1}): {target1_qty} | Target2({target2}): {target2_qty}"
+        frappe.logger("tekson").info(
+            "MES Dual-Target FG Split: WO=%s item=%s total=%s | %s(%s)=%s | %s(%s)=%s",
+            work_order.name, fg_item_code, total_qty,
+            "Target1", target1, target1_qty,
+            "Target2", target2, target2_qty
         )
     
     def check_all_job_cards_completed(self, work_order):
@@ -598,63 +599,76 @@ class ExecutionEngine:
         if not next_jc:
             return {'success': True, 'message': 'No dependent Job Cards', 'refreshed_cards': []}
         
-        refreshed = []
+        # Single source of truth: delegate to the readiness engine (same path
+        # the on_job_card_complete hook uses). The previous inline duplicate
+        # also called DependencyResult.get('is_valid') on a dataclass, which
+        # raised AttributeError for any next JC that was not Completed.
+        from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
+        JobCardReadinessEngine().refresh_next_job_card(jc)
         
-        # Refresh next Job Card status
-        next_jc_doc = self.jc_repo.get(next_jc['name'])
+        # Preserve the legacy audit fields without a full save()
+        frappe.db.set_value("Job Card", next_jc['name'], {
+            "custom_last_refreshed": datetime.now(),
+            "custom_refreshed_by": frappe.session.user,
+        })
         
-        if next_jc_doc:
-            # Update custom_start_status
-            if next_jc_doc.status == "Completed":
-                next_jc_doc.custom_start_status = "Completed"
-            else:
-                # Check if previous is now complete
-                prev_result = self.dependency_engine.validate_previous_operation(next_jc_doc)
-                
-                if prev_result.get('is_valid'):
-                    # Previous op done — also check material before setting Ready to Start
-                    from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
-                    mat_engine = MaterialReadinessEngine()
-                    mat_result = mat_engine.evaluate_material_readiness(
-                        work_order=next_jc_doc.work_order,
-                        job_card=next_jc_doc.name
-                    )
-                    if mat_result.is_ready:
-                        next_jc_doc.custom_start_status = "Ready to Start"
-                    else:
-                        next_jc_doc.custom_start_status = "Awaiting Material"
-                else:
-                    next_jc_doc.custom_start_status = "Awaiting Previous Operation"
-            
-            next_jc_doc.custom_last_refreshed = datetime.now()
-            next_jc_doc.custom_refreshed_by = frappe.session.user
-            next_jc_doc.save(ignore_permissions=True)
-            
-            refreshed.append(next_jc['name'])
-            
-            log_mes_event(
-                module='EXECUTION',
-                level='INFO',
-                business_rule='JC-004',
-                message=f"Job Card {next_jc['name']} status refreshed",
-                context={
-                    'job_card': next_jc['name'],
-                    'triggered_by': jc.name,
-                    'new_status': next_jc_doc.custom_start_status
-                }
-            )
+        log_mes_event(
+            module='EXECUTION',
+            level='INFO',
+            business_rule='JC-004',
+            message=f"Job Card {next_jc['name']} status refreshed",
+            context={
+                'job_card': next_jc['name'],
+                'triggered_by': jc.name,
+            }
+        )
         
-        return {'success': True, 'message': 'Job Cards refreshed', 'refreshed_cards': refreshed}
+        return {'success': True, 'message': 'Job Cards refreshed', 'refreshed_cards': [next_jc['name']]}
     
     def update_work_order_status(self, work_order):
-        """Update Work Order status to Completed"""
-        frappe.db.sql("UPDATE `tabWork Order` SET status='Completed' WHERE name=%s", work_order)
-        frappe.db.commit()
-        frappe.db.set_value("Work Order", work_order, "status", "Completed")
-    
+        """
+        Recompute Work Order status from actual production state.
+
+        Delegates to ERPNext's canonical WorkOrder.update_status(), which
+        derives the status from docstatus / produced qty / transferred qty.
+        This means a cancel path REVERTS the Work Order
+        (Completed -> In Process / Not Started) and Completed is only set
+        when production is genuinely finished.
+
+        Previously this blind-wrote status = "Completed", so cancelling a
+        Job Card or Stock Entry wrongly marked the Work Order as completed
+        (ERPNext core had already reverted it a moment earlier).
+        """
+        if isinstance(work_order, str):
+            try:
+                wo = frappe.get_doc("Work Order", work_order)
+            except frappe.DoesNotExistError:
+                return None
+        else:
+            wo = work_order
+
+        # Never disturb an intentionally Closed/Stopped Work Order:
+        # ERPNext's update_status() would overwrite those with a computed one.
+        if wo.status in ("Closed", "Stopped"):
+            return wo.status
+
+        if hasattr(wo, "update_status"):
+            wo.update_status()
+        elif hasattr(wo, "get_status"):
+            # Fallback for ERPNext builds without update_status()
+            wo.db_set("status", wo.get_status())
+
+        return wo.status
+
     def refresh_work_order_status(self, work_order):
-        """Alias for update_work_order_status - refreshes WO status"""
-        self.update_work_order_status(work_order)
+        """
+        Recompute Work Order status (canonical recompute, not a force-set).
+
+        Used by the Job Card / Stock Entry cancel handlers and the
+        refresh_work_order_status API so a cancelled transaction reverts the
+        Work Order instead of leaving it stuck on "Completed".
+        """
+        return self.update_work_order_status(work_order)
 
 
 @frappe.whitelist()
@@ -771,15 +785,32 @@ def on_job_card_submit(doc, method=None):
 def on_job_card_cancel(doc, method=None):
     """
     Event handler for Job Card on_cancel
-    
-    Called when Job Card is cancelled
+
+    Called when Job Card is cancelled.
+
+    Recomputes (never force-sets) the Work Order status so cancelling the
+    last Job Card reverts the Work Order instead of leaving it "Completed",
+    and re-queues readiness so downstream Job Cards' status fields revert
+    too (e.g. "Ready to Start" -> "Awaiting Previous Operation").
     """
     if not doc.work_order:
         return
-    
-    # Refresh Work Order status using Execution Engine
+
+    # Recompute Work Order status (reverts on cancel)
     engine = ExecutionEngine()
     engine.refresh_work_order_status(doc.work_order)
+
+    # Re-evaluate Job Card readiness for this WO (queued, deduplicated)
+    try:
+        from tekson_manufacturing.readiness.job_card_readiness import (
+            enqueue_work_order_refresh,
+        )
+        enqueue_work_order_refresh(doc.work_order, reason="jc-cancel")
+    except Exception:
+        frappe.logger("tekson").exception(
+            "on_job_card_cancel: failed to queue readiness refresh for WO %s",
+            doc.work_order,
+        )
 
 
 def on_stock_entry_submit(doc, method=None):
@@ -852,12 +883,29 @@ def apply_rm_loss_to_manufacture_entry(stock_entry, bom_no, wo_qty):
 def on_stock_entry_cancel(doc, method=None):
     """
     Event handler for Stock Entry on_cancel
-    
-    Called when Stock Entry is cancelled
+
+    Called when Stock Entry is cancelled.
+
+    Recomputes (never force-sets) the Work Order status so cancelling a
+    Manufacture / material Stock Entry reverts the Work Order instead of
+    leaving it "Completed", and re-queues readiness so Job Cards re-evaluate
+    against the stock that is no longer there.
     """
     if not doc.work_order:
         return
-    
-    # Refresh Work Order status using Execution Engine
+
+    # Recompute Work Order status (reverts on cancel)
     engine = ExecutionEngine()
     engine.refresh_work_order_status(doc.work_order)
+
+    # Re-evaluate Job Card readiness for this WO (queued, deduplicated)
+    try:
+        from tekson_manufacturing.readiness.job_card_readiness import (
+            enqueue_work_order_refresh,
+        )
+        enqueue_work_order_refresh(doc.work_order, reason="se-cancel")
+    except Exception:
+        frappe.logger("tekson").exception(
+            "on_stock_entry_cancel: failed to queue readiness refresh for WO %s",
+            doc.work_order,
+        )

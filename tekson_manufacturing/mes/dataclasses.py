@@ -52,6 +52,8 @@ class MaterialResult:
         message: Human-readable message
         warnings: Non-blocking warnings
         errors: Blocking errors
+        pending_transfers: Inter-department transfers that SHOULD be executed
+            (evaluation is read-only — it never creates Stock Entries itself)
     """
     is_ready: bool
     status: str
@@ -63,7 +65,8 @@ class MaterialResult:
     message: str
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
-    
+    pending_transfers: List[Dict[str, Any]] = field(default_factory=list)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MaterialResult':
         """Create MaterialResult from dictionary (for backward compatibility)"""
@@ -77,9 +80,10 @@ class MaterialResult:
             warehouse=data.get('warehouse', ''),
             message=data.get('message', ''),
             warnings=data.get('warnings', []),
-            errors=data.get('errors', [])
+            errors=data.get('errors', []),
+            pending_transfers=data.get('pending_transfers', [])
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary (for backward compatibility)"""
         return {
@@ -92,7 +96,8 @@ class MaterialResult:
             'warehouse': self.warehouse,
             'message': self.message,
             'warnings': self.warnings,
-            'errors': self.errors
+            'errors': self.errors,
+            'pending_transfers': self.pending_transfers
         }
 
 
@@ -162,6 +167,8 @@ class ReadinessResult:
         warnings: Non-blocking warnings
         errors: Blocking errors
         messages: Informational messages
+        shortage_details: Item-wise shortage details (from MaterialResult)
+        pending_transfers: Inter-department transfers queued for execution
     """
     material_status: str
     readiness_status: str
@@ -173,6 +180,8 @@ class ReadinessResult:
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     messages: List[str] = field(default_factory=list)
+    shortage_details: List[Dict[str, Any]] = field(default_factory=list)
+    pending_transfers: List[Dict[str, Any]] = field(default_factory=list)
     
     @classmethod
     def create_completed(cls, material_status: str) -> 'ReadinessResult':

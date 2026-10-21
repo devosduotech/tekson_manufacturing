@@ -187,10 +187,10 @@ class StockService:
             se.insert(ignore_permissions=True)
             se.submit()
             
-            # Log
-            frappe.log_error(
-                message=f"[MES] [MATERIAL] [INFO] [MR-010] Material transfer created: {se.name} | Context: {{'wo': '{work_order}', 'items': {len(items)}}}",
-                title=f"MES Material Transfer - {se.name}"
+            # Log (success breadcrumb — application log, not Error Log)
+            frappe.logger("tekson").info(
+                "[MES] [MATERIAL] [MR-010] Material transfer created: %s | wo=%s items=%s",
+                se.name, work_order, len(items)
             )
             
             return {
@@ -252,10 +252,10 @@ class StockService:
             se.insert(ignore_permissions=True)
             se.submit()
             
-            # Log
-            frappe.log_error(
-                message=f"[MES] [EXECUTION] [INFO] [WO-001] Manufacture entry created: {se.name} | Context: {{'wo': '{work_order}', 'qty': {quantity}}}",
-                title=f"MES Manufacture Entry - {se.name}"
+            # Log (success breadcrumb — application log, not Error Log)
+            frappe.logger("tekson").info(
+                "[MES] [EXECUTION] [WO-001] Manufacture entry created: %s | wo=%s qty=%s",
+                se.name, work_order, quantity
             )
             
             return {

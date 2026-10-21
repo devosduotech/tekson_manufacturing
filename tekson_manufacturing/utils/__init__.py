@@ -39,11 +39,18 @@ def log_mes_event(module, level, business_rule, message, context=None):
     # Format message
     formatted_message = f"[MES] [{module}] [{level}] [{business_rule}] {message} | Context: {json.dumps(context)}"
     
-    # Log
-    frappe.log_error(
-        message=formatted_message,
-        title=f"MES {module} - {business_rule}"
-    )
+    # Only ERROR/CRITICAL deserve an Error Log document (frappe.log_error
+    # INSERTs a row every call). INFO/WARNING events — which fire on every
+    # readiness/dependency evaluation — go to the application log instead.
+    if level in ("ERROR", "CRITICAL"):
+        frappe.log_error(
+            message=formatted_message,
+            title=f"MES {module} - {business_rule}"
+        )
+    elif level == "WARNING":
+        frappe.logger("tekson").warning(formatted_message)
+    else:
+        frappe.logger("tekson").info(formatted_message)
 
 
 def get_mes_settings():

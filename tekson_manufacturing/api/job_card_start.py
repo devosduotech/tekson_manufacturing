@@ -85,7 +85,11 @@ def complete_job_card(job_card_name):
             "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
             work_order=jc.work_order,
             queue="short",
-            timeout=30
+            timeout=30,
+            job_id=f"mes-complete-wo::{jc.work_order}",
+            deduplicate=True,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test
         )
     
     return {"success": True, "message": "Job Card completed successfully"}

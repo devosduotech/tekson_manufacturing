@@ -420,7 +420,9 @@ class PermissionService:
             message += f" | Context: {context}"
         
         if success:
-            frappe.log_error(title="MES Permission Check", message=message)
+            # Routine grant — application log only (was frappe.log_error,
+            # i.e. an Error Log INSERT on every permission-checked action).
+            frappe.logger("tekson").info(message)
         else:
             frappe.log_error(title="MES Permission Denied", message=message)
     

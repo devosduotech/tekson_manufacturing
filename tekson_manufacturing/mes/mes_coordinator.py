@@ -79,10 +79,13 @@ class MESExecutionCoordinator:
             validate_user_permission_for_work_order(work_order.name)
             validate_manufacturing_role()
             
-            # Step 1: Readiness Engine (evaluate all JCs)
-            from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
-            engine = JobCardReadinessEngine()
-            engine.refresh_work_order(work_order)
+            # Readiness refresh runs on the short queue (Phase 6): a 40-Job-Card
+            # evaluation no longer executes inside the WO submit request.
+            # Deduplicated per WO, queued after commit, synchronous under tests.
+            from tekson_manufacturing.readiness.job_card_readiness import (
+                enqueue_work_order_refresh,
+            )
+            enqueue_work_order_refresh(work_order.name, reason="wo-submit")
             
             # Log success
             log_security_event(
@@ -133,9 +136,12 @@ class MESExecutionCoordinator:
         - Logs security event
         """
         try:
-            frappe.log_error(
-                title="MES Stock Entry Hook FIRED",
-                message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose} | WO: {stock_entry.work_order or 'None'} | User: {frappe.session.user}"
+            # Debug breadcrumb (was frappe.log_error — an Error Log INSERT on
+            # every Stock Entry submit site-wide).
+            frappe.logger("tekson").debug(
+                "MES Stock Entry Hook: SE=%s purpose=%s WO=%s user=%s",
+                stock_entry.name, stock_entry.purpose,
+                stock_entry.work_order or None, frappe.session.user
             )
 
             # Security: Validate SE submit permission (manufacturing role not required for material transfers)
@@ -151,14 +157,11 @@ class MESExecutionCoordinator:
                     engine = ExecutionEngine()
                     engine.update_work_order_status(stock_entry.work_order)
             elif stock_entry.purpose not in ("Material Transfer", "Material Transfer for Manufacture"):
-                frappe.log_error(
-                    title="MES SE Hook: Skipped (wrong purpose)",
-                    message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"
+                frappe.logger("tekson").debug(
+                    "MES SE Hook: skipped (wrong purpose): SE=%s purpose=%s",
+                    stock_entry.name, stock_entry.purpose
                 )
                 return
-            
-            from tekson_manufacturing.readiness.job_card_readiness import JobCardReadinessEngine
-            engine = JobCardReadinessEngine()
             
             # Find affected WOs: from SE work_order AND from target warehouses
             # Both are needed — a Manufacture SE with work_order set may also
@@ -180,19 +183,23 @@ class MESExecutionCoordinator:
                             wo_names.add(jc.work_order)
             
             if not wo_names:
-                frappe.log_error(
-                    title="MES SE Hook: Skipped (no WOs found)",
-                    message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose}"
+                frappe.logger("tekson").info(
+                    "MES SE Hook: skipped (no affected WOs): SE=%s purpose=%s",
+                    stock_entry.name, stock_entry.purpose
                 )
                 return
             
-            for wo_name in wo_names:
-                wo = frappe.get_doc("Work Order", wo_name)
-                engine.refresh_work_order(wo)
+            # Queue deduplicated per-WO readiness refreshes (Phase 6) instead
+            # of evaluating every JC of every affected WO inside this request.
+            from tekson_manufacturing.readiness.job_card_readiness import (
+                enqueue_work_order_refresh,
+            )
+            for wo_name in sorted(wo_names):
+                enqueue_work_order_refresh(wo_name, reason=f"se-submit:{stock_entry.name}")
             
-            frappe.log_error(
-                title="MES SE Hook: Readiness refresh completed",
-                message=f"SE: {stock_entry.name} | Purpose: {stock_entry.purpose} | WOs: {wo_names}"
+            frappe.logger("tekson").info(
+                "MES SE Hook: readiness refresh queued: SE=%s purpose=%s WOs=%s",
+                stock_entry.name, stock_entry.purpose, sorted(wo_names)
             )
             
             # Log success
@@ -277,7 +284,11 @@ class MESExecutionCoordinator:
                     "tekson_manufacturing.execution.execution_engine.complete_work_order_api",
                     work_order=job_card.work_order,
                     queue="short",
-                    timeout=30
+                    timeout=30,
+                    job_id=f"mes-complete-wo::{job_card.work_order}",
+                    deduplicate=True,
+                    enqueue_after_commit=True,
+                    now=frappe.flags.in_test
                 )
             
             # Log success

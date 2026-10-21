@@ -54,17 +54,29 @@ def complete_work_order(work_order):
 @frappe.whitelist()
 def refresh_work_order_status(work_order):
     """
-    Refresh Work Order status
-    
+    Recompute Work Order status from actual production state.
+
+    This is a canonical recompute (ERPNext WorkOrder.update_status()), NOT a
+    force-set: cancelling a Job Card or Stock Entry correctly reverts the
+    Work Order from "Completed" to "In Process" / "Not Started", and a
+    finished Work Order is marked Completed.
+
     Args:
         work_order: Work Order name
-    
-    Returns: success message
+
+    Returns: dict with success, work_order, resulting status and message
     """
     engine = ExecutionEngine()
-    engine.refresh_work_order_status(work_order)
-    
-    return {"success": True, "message": "Work Order status refreshed"}
+    status = engine.refresh_work_order_status(work_order)
+    if status is None:
+        frappe.throw(f"Work Order {work_order} not found")
+
+    return {
+        "success": True,
+        "work_order": work_order,
+        "status": status,
+        "message": "Work Order status refreshed",
+    }
 
 
 @frappe.whitelist()

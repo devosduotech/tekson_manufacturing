@@ -28,6 +28,9 @@ class MaterialReadinessEngine:
             'transferred_items': [],
             'transfer_summary': {}
         }
+        # Request-scoped caches: an engine instance lives for a single
+        # evaluation cycle (one save / one refresh), never across requests.
+        self._sub_bom_cache = {}
     
     def evaluate_material_readiness(self, work_order=None, job_card=None) -> MaterialResult:
         """
@@ -78,6 +81,19 @@ class MaterialReadinessEngine:
         warnings = []
         errors = []
         
+        # Batch lookups for this evaluation (Phase 4 — no per-item N+1):
+        # one Bin query for all items, one child-WO query for sub-assemblies.
+        item_codes = [m.get('item_code') for m in required_materials]
+        stock_map = self._get_stock_map(item_codes, department_warehouse)
+        subassembly_codes = [m.get('item_code') for m in required_materials if m.get('is_subassembly')]
+        child_wo_map = (
+            self._get_child_wo_status_map(subassembly_codes, wo.name, wo.production_plan)
+            if subassembly_codes else {}
+        )
+        
+        # Inter-department transfers PLANNED (not executed) by evaluation.
+        pending_transfers = []
+        
         for material in required_materials:
             item_code = material.get('item_code')
             required_qty = material.get('qty')
@@ -86,9 +102,10 @@ class MaterialReadinessEngine:
             # Sub-assemblies are NOT checked against stock — they are gated
             # by child WO completion (dependency), not by raw-material availability.
             if is_subassembly:
-                child_wo = self.get_child_work_order(item_code, wo.name)
-                if child_wo:
-                    child_status = frappe.db.get_value("Work Order", child_wo, "status")
+                child_wo_row = child_wo_map.get(item_code)
+                if child_wo_row:
+                    child_wo = child_wo_row.get('name')
+                    child_status = child_wo_row.get('status')
                     if child_status != "Completed":
                         shortage_details.append({
                             'item_code': item_code,
@@ -105,48 +122,41 @@ class MaterialReadinessEngine:
             
             # MR-014: Get available stock in Department WIP (Source of Truth)
             # Checks the WO's WIP warehouse - where materials land after transfer
-            available_qty = self.get_available_stock_in_wip(
-                item_code,
-                department_warehouse
-            )
+            available_qty = stock_map.get(item_code) or 0.0
             
-            # Check for shortage
+            # Check for shortage — read-only evaluation plans a transfer
+            # instead of creating Stock Entries itself (Phase 3).
             if available_qty < required_qty:
                 shortage_qty = required_qty - available_qty
                 
-                # Look up the item's own BOM target_fg_warehouse as transfer source.
-                # If the item's BOM outputs to a different WIP warehouse,
-                # auto-transfer the shortage from there.
-                item_bom_target = self.get_item_bom_target_warehouse(item_code)
-                if item_bom_target and item_bom_target != department_warehouse and item_bom_target.startswith("WIP-"):
-                    frappe.log_error(
-                        title="MES Inter-Dept Transfer Attempt",
-                        message=f"Item: {item_code} | Need: {shortage_qty} | From BOM Target: {item_bom_target} → {department_warehouse} | WO: {wo.name}"
-                    )
-                    transferred = self.check_and_create_inter_department_transfer(
-                        item_code=item_code,
-                        required_qty=shortage_qty,
-                        target_warehouse=department_warehouse,
-                        source_warehouse=item_bom_target,
-                        work_order=wo.name
-                    )
-                    if transferred:
-                        available_qty = self.get_available_stock_in_wip(item_code, department_warehouse)
-                        if available_qty >= required_qty:
-                            total_available += available_qty
-                            continue  # No shortage after transfer
+                # Look up the item's own BOM target_fg_warehouse(s) as transfer
+                # sources. If the item is produced into a different WIP
+                # warehouse, request a transfer of the shortage from there.
+                transfer = self.plan_inter_department_transfer(
+                    item_code=item_code,
+                    shortage_qty=shortage_qty,
+                    target_warehouse=department_warehouse,
+                    work_order=wo.name,
+                    required_qty=required_qty,
+                )
                 
-                total_available += available_qty
-                shortage_details.append({
+                detail = {
                     'item_code': item_code,
                     'item_name': material.get('item_name', ''),
                     'required_qty': required_qty,
                     'available_qty': available_qty,
                     'shortage_qty': shortage_qty,
                     'warehouse': department_warehouse
-                })
-            else:
-                total_available += available_qty
+                }
+                if transfer:
+                    pending_transfers.append(transfer)
+                    detail['reason'] = (
+                        f"Required {required_qty}, Available {available_qty}; "
+                        f"transfer of {transfer['qty']} from {transfer['source_warehouse']} requested"
+                    )
+                shortage_details.append(detail)
+            
+            total_available += available_qty
         
         # Full-BOM child-WO gate: FG cannot start if ANY sub-assembly
         # (at any BOM level, any operation) has an incomplete child WO.
@@ -190,7 +200,8 @@ class MaterialReadinessEngine:
             warehouse=department_warehouse,
             message=message,
             warnings=warnings,
-            errors=errors
+            errors=errors,
+            pending_transfers=pending_transfers
         )
     
     def get_required_materials(self, work_order, operation=None):
@@ -222,14 +233,15 @@ class MaterialReadinessEngine:
             fields=["item_code", "item_name", "qty", "uom", "source_warehouse", "operation"]
         )
         
+        # Batch sub-BOM lookup — one query for all direct items (Phase 4)
+        sub_bom_map = self._get_sub_bom_map([item.item_code for item in direct_items])
+        
         for item in direct_items:
             # Filter by operation if specified
             if operation and item.operation and item.operation != operation:
                 continue
             
-            sub_bom = frappe.db.get_value("BOM",
-                {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
-                "name")
+            sub_bom = sub_bom_map.get(item.item_code)
             
             required_qty = (item.qty * work_order.qty) / bom_qty if bom_qty > 0 else item.qty
             
@@ -260,6 +272,119 @@ class MaterialReadinessEngine:
         """
         return frappe.db.get_value("BOM", bom_no, "quantity") or 1.0
 
+    # -------------------------------------------------------------------------
+    # Batched lookups (Phase 4 — eliminate per-item N+1 queries)
+    # -------------------------------------------------------------------------
+
+    def _get_stock_map(self, item_codes, warehouse):
+        """
+        One Bin query for all items in a single warehouse.
+
+        Args:
+            item_codes: list of item codes (duplicates tolerated)
+            warehouse: target warehouse name
+
+        Returns:
+            dict of item_code -> actual_qty (items without a Bin are absent)
+        """
+        unique_codes = list({code for code in item_codes if code})
+        if not unique_codes or not warehouse:
+            return {}
+
+        rows = frappe.db.get_all(
+            "Bin",
+            filters={"item_code": ("in", unique_codes), "warehouse": warehouse},
+            fields=["item_code", "actual_qty"]
+        )
+        return {row.item_code: row.actual_qty for row in rows}
+
+    def _get_sub_bom_map(self, item_codes):
+        """
+        One query: which of these items have an active default BOM
+        (i.e. are manufactured sub-assemblies). Request-scoped cache.
+
+        Args:
+            item_codes: list of item codes
+
+        Returns:
+            dict of item_code -> BOM name (absent if none)
+        """
+        unique_codes = [code for code in dict.fromkeys(item_codes or []) if code]
+        missing = [code for code in unique_codes if code not in self._sub_bom_cache]
+        if missing:
+            rows = frappe.db.get_all(
+                "BOM",
+                filters={
+                    "item": ("in", missing),
+                    "is_active": 1,
+                    "docstatus": 1,
+                    "is_default": 1
+                },
+                fields=["item", "name"],
+                order_by="modified desc"
+            )
+            for row in rows:
+                self._sub_bom_cache.setdefault(row.item, row.name)
+            for code in missing:
+                self._sub_bom_cache.setdefault(code, None)
+
+        return {
+            code: self._sub_bom_cache[code]
+            for code in unique_codes
+            if self._sub_bom_cache.get(code)
+        }
+
+    def _get_child_wo_status_map(self, item_codes, parent_wo, parent_plan=None):
+        """
+        One query for the active child Work Orders of many items.
+
+        Replicates get_child_work_order() semantics for a whole set:
+        production_item IN (...), submitted, not the parent, not
+        Stopped/Completed, scoped to the parent's production_plan when it
+        has one, newest first — keeping the first row per item.
+
+        Args:
+            item_codes: list of item codes (sub-assemblies)
+            parent_wo: parent Work Order name
+            parent_plan: parent Work Order's production_plan (fetched if None)
+
+        Returns:
+            dict of item_code -> {'name': ..., 'status': ...}
+        """
+        unique_codes = list({code for code in item_codes if code})
+        if not unique_codes:
+            return {}
+
+        if parent_plan is None:
+            parent_plan = frappe.db.get_value("Work Order", parent_wo, "production_plan")
+
+        conditions = """
+            production_item IN %(item_codes)s
+            AND docstatus = 1
+            AND name != %(parent_wo)s
+            AND status NOT IN ('Stopped', 'Completed')
+        """
+        params = {"item_codes": tuple(unique_codes), "parent_wo": parent_wo}
+        if parent_plan:
+            conditions += " AND production_plan = %(parent_plan)s"
+            params["parent_plan"] = parent_plan
+
+        rows = frappe.db.sql(f"""
+            SELECT name, production_item, status
+            FROM `tabWork Order`
+            WHERE {conditions}
+            ORDER BY creation DESC
+        """, params, as_dict=True)
+
+        child_wo_map = {}
+        for row in rows:
+            # ORDER BY creation DESC — keep the newest active child WO per item
+            child_wo_map.setdefault(row.production_item, {
+                "name": row.name,
+                "status": row.status
+            })
+        return child_wo_map
+
     def is_department_wip_warehouse(self, warehouse):
         """
         Check if a warehouse is a department WIP warehouse.
@@ -276,9 +401,47 @@ class MaterialReadinessEngine:
         
         return warehouse.startswith("WIP-")
 
+    def get_item_bom_target_warehouses(self, item_code):
+        """
+        Get ALL target FG warehouses from the item's own active default BOM.
+        
+        Covers split routing: target_fg_warehouse plus the optional
+        target_fg_warehouse_2 (when the custom field exists). These are the
+        warehouses the item is produced into — i.e. valid transfer sources
+        for feeding another department's WIP.
+        
+        Args:
+            item_code: Item code
+        
+        Returns:
+            list of warehouse names (primary first, de-duplicated)
+        """
+        meta = frappe.get_meta("BOM")
+        fields = ["item"]
+        if meta.has_field("target_fg_warehouse"):
+            fields.append("target_fg_warehouse")
+        if meta.has_field("target_fg_warehouse_2"):
+            fields.append("target_fg_warehouse_2")
+        if len(fields) == 1:
+            return []
+        
+        row = frappe.db.get_value("BOM",
+            {"item": item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
+            fields, as_dict=True)
+        if not row:
+            return []
+        
+        warehouses = []
+        for fieldname in fields[1:]:
+            warehouse = row.get(fieldname)
+            if warehouse and warehouse not in warehouses:
+                warehouses.append(warehouse)
+        return warehouses
+
     def get_item_bom_target_warehouse(self, item_code):
         """
-        Get the target_fg_warehouse from the item's own active default BOM.
+        Get the target_fg_warehouse from the item's own active default BOM
+        (primary output warehouse only).
         
         This is where the item is produced to (e.g. Core End Plate BOM
         outputs to WIP-Ralu In - TPL).
@@ -288,97 +451,78 @@ class MaterialReadinessEngine:
         
         Returns: str - warehouse name or None
         """
-        meta = frappe.get_meta("BOM")
-        if not meta.has_field("target_fg_warehouse"):
-            return None
-        
-        return frappe.db.get_value("BOM",
-            {"item": item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
-            "target_fg_warehouse")
+        warehouses = self.get_item_bom_target_warehouses(item_code)
+        return warehouses[0] if warehouses else None
 
-    def check_and_create_inter_department_transfer(self, item_code, required_qty, target_warehouse, source_warehouse, work_order):
+    def plan_inter_department_transfer(self, item_code, shortage_qty, target_warehouse,
+                                       work_order, required_qty=None):
         """
-        Transfer material from the BOM-specified source WIP warehouse to the target WIP.
+        Read-only: find a configured source WIP warehouse that can cover a shortage.
         
-        Only transfers from the warehouse explicitly configured as the BOM Item's
-        source_warehouse. Does NOT search other warehouses.
+        Sources are the warehouses the item's own BOM produces into
+        (target_fg_warehouse and, for split routing, target_fg_warehouse_2),
+        primary first — skipping the target itself and any non-WIP warehouse.
+        Stock is checked live against Bin for each candidate.
+        
+        This method NEVER creates Stock Entries; the returned spec is
+        executed by execute_inter_department_transfer() in a background job.
         
         Args:
-            item_code: Item code to transfer
-            required_qty: Quantity needed
-            target_warehouse: Target department WIP warehouse
-            source_warehouse: Source WIP warehouse (from BOM Item.source_warehouse)
+            item_code: Item code with a shortage
+            shortage_qty: Quantity short in the target warehouse
+            target_warehouse: Department WIP warehouse that needs stock
             work_order: Work Order name
+            required_qty: Full requirement this shortage belongs to
+                (defaults to shortage_qty) — used by the executor to
+                recompute live outstanding qty when the job runs
         
-        Returns: bool - True if transfer was created, False otherwise
+        Returns:
+            dict transfer spec or None when no configured source has stock
         """
-        # Check if a transfer for this item + target already exists (prevents duplicates)
-        existing = frappe.db.sql("""
-            SELECT sed.parent
+        for source_warehouse in self.get_item_bom_target_warehouses(item_code):
+            if source_warehouse == target_warehouse:
+                continue
+            if not self.is_department_wip_warehouse(source_warehouse):
+                continue
+            source_stock = self.get_available_stock_in_wip(item_code, source_warehouse)
+            if source_stock >= shortage_qty:
+                return {
+                    'item_code': item_code,
+                    'qty': float(shortage_qty),
+                    'required_qty': float(required_qty if required_qty is not None else shortage_qty),
+                    'source_warehouse': source_warehouse,
+                    'target_warehouse': target_warehouse,
+                    'work_order': work_order
+                }
+        return None
+
+    def get_planned_transfer_qty(self, item_code, work_order, target_warehouse):
+        """
+        Quantity of this item already planned (draft) for the target warehouse.
+        
+        Submitted transfers are excluded on purpose — they already show up in
+        Bin stock; drafts are the idempotency guard so queued execution jobs
+        never double-request the same shortage.
+        
+        Args:
+            item_code: Item code
+            work_order: Work Order name
+            target_warehouse: Target department WIP warehouse
+        
+        Returns:
+            float — sum of draft Stock Entry qty for this triple
+        """
+        rows = frappe.db.sql("""
+            SELECT COALESCE(SUM(sed.qty), 0) AS qty
             FROM `tabStock Entry Detail` sed
             INNER JOIN `tabStock Entry` se ON sed.parent = se.name
             WHERE sed.item_code = %s
             AND se.work_order = %s
             AND se.purpose = 'Material Transfer for Manufacture'
-            AND se.docstatus = 1
+            AND se.docstatus = 0
             AND sed.t_warehouse = %s
-            LIMIT 1
         """, (item_code, work_order, target_warehouse), as_dict=True)
-        
-        if existing:
-            frappe.log_error(
-                title="MES Inter-Dept Transfer: Already Exists",
-                message=f"Item: {item_code} | SE: {existing[0].parent} → {target_warehouse} | WO: {work_order}"
-            )
-            return True
-        
-        # Check stock in the BOM-specified source warehouse
-        source_stock = self.get_available_stock_in_wip(item_code, source_warehouse)
-        
-        if source_stock < required_qty:
-            frappe.log_error(
-                title="MES Inter-Dept Transfer: Insufficient Source Stock",
-                message=f"Item: {item_code} | Need: {required_qty} | Available in {source_warehouse}: {source_stock} | WO: {work_order}"
-            )
-            return False
-        
-        try:
-            company = frappe.db.get_value("Work Order", work_order, "company")
-            
-            stock_entry = frappe.new_doc("Stock Entry")
-            stock_entry.stock_entry_type = "Material Transfer for Manufacture"
-            stock_entry.purpose = "Material Transfer for Manufacture"
-            stock_entry.work_order = work_order
-            stock_entry.from_warehouse = source_warehouse
-            stock_entry.to_warehouse = target_warehouse
-            stock_entry.company = company
-            stock_entry.remarks = f"Auto inter-dept transfer: {source_warehouse} → {target_warehouse} for {item_code} (WO: {work_order})"
-            
-            stock_entry.append("items", {
-                "item_code": item_code,
-                "qty": required_qty,
-                "s_warehouse": source_warehouse,
-                "t_warehouse": target_warehouse,
-                "uom": frappe.db.get_value("Item", item_code, "stock_uom"),
-                "basic_rate": frappe.db.get_value("Item", item_code, "valuation_rate") or 0
-            })
-            
-            stock_entry.insert(ignore_permissions=True)
-            stock_entry.submit()
-            
-            frappe.log_error(
-                title="MES Inter-Dept Transfer Created",
-                message=f"SE: {stock_entry.name} | Item: {item_code} | Qty: {required_qty} | {source_warehouse} → {target_warehouse} | WO: {work_order}"
-            )
-            
-            return True
-            
-        except Exception as e:
-            frappe.log_error(
-                title="MES Inter-Dept Transfer Failed",
-                message=f"Item: {item_code} | Error: {str(e)} | {source_warehouse} → {target_warehouse} | WO: {work_order}"
-            )
-            return False
+        return float(rows[0].qty or 0) if rows else 0.0
     
     def determine_transfer_status(self, item_code, required_qty, cumulative_transferred, current_stock):
         """
@@ -882,27 +1026,14 @@ class MaterialReadinessEngine:
         Filters by parent WO's production_plan to avoid blocking on
         unrelated WOs (e.g. old test data from a different plan).
         If parent has no production_plan, finds any active WO for the item.
+        
+        Delegates to the batched _get_child_wo_status_map (single code path
+        for these semantics).
         """
         parent_plan = frappe.db.get_value("Work Order", parent_wo, "production_plan")
-        
-        if parent_plan:
-            child_wo = frappe.db.sql("""
-                SELECT name FROM `tabWork Order`
-                WHERE production_item = %s AND docstatus = 1
-                AND name != %s AND production_plan = %s
-                AND status NOT IN ('Stopped', 'Completed')
-                ORDER BY creation DESC LIMIT 1
-            """, (item_code, parent_wo, parent_plan), as_dict=True)
-        else:
-            child_wo = frappe.db.sql("""
-                SELECT name FROM `tabWork Order`
-                WHERE production_item = %s AND docstatus = 1
-                AND name != %s
-                AND status NOT IN ('Stopped', 'Completed')
-                ORDER BY creation DESC LIMIT 1
-            """, (item_code, parent_wo), as_dict=True)
-        
-        return child_wo[0].name if child_wo else None
+        child_wo_map = self._get_child_wo_status_map([item_code], parent_wo, parent_plan)
+        row = child_wo_map.get(item_code)
+        return row.get('name') if row else None
 
     def get_all_sub_assembly_items(self, bom_no, _seen=None):
         """
@@ -927,10 +1058,11 @@ class MaterialReadinessEngine:
         items = frappe.get_all("BOM Item", {"parent": bom_no},
             ["item_code"])
         
+        # Batch sub-BOM lookup for this level — one query per BOM level
+        sub_bom_map = self._get_sub_bom_map([item.item_code for item in items])
+        
         for item in items:
-            sub_bom = frappe.db.get_value("BOM",
-                {"item": item.item_code, "is_active": 1, "docstatus": 1, "is_default": 1},
-                "name")
+            sub_bom = sub_bom_map.get(item.item_code)
             if sub_bom:
                 result.add(item.item_code)
                 result |= self.get_all_sub_assembly_items(sub_bom, _seen)
@@ -952,24 +1084,247 @@ class MaterialReadinessEngine:
         """
         shortages = []
         sub_items = self.get_all_sub_assembly_items(bom_no)
+        if not sub_items:
+            return shortages
         
-        for item_code in sub_items:
-            child_wo = self.get_child_work_order(item_code, parent_wo)
-            if child_wo:
-                child_status = frappe.db.get_value("Work Order", child_wo, "status")
-                if child_status != "Completed":
-                    item_name = frappe.db.get_value("Item", item_code, "item_name") or item_code
-                    shortages.append({
-                        'item_code': item_code,
-                        'item_name': item_name,
-                        'required_qty': 0,
-                        'available_qty': 0,
-                        'shortage_qty': 0,
-                        'warehouse': parent_wo,
-                        'reason': f"Child WO {child_wo} status: {child_status}"
-                    })
+        # One child-WO query for all sub-assemblies (Phase 4)
+        parent_plan = frappe.db.get_value("Work Order", parent_wo, "production_plan")
+        child_wo_map = self._get_child_wo_status_map(list(sub_items), parent_wo, parent_plan)
+        
+        incomplete = {
+            item_code: row
+            for item_code, row in child_wo_map.items()
+            if row.get('status') != "Completed"
+        }
+        if not incomplete:
+            return shortages
+        
+        # One Item query for the item names of incomplete sub-assemblies
+        item_rows = frappe.db.get_all(
+            "Item",
+            filters={"name": ("in", list(incomplete))},
+            fields=["name", "item_name"]
+        )
+        item_names = {row.name: row.item_name for row in item_rows}
+        
+        for item_code, row in incomplete.items():
+            child_wo = row.get('name')
+            child_status = row.get('status')
+            item_name = item_names.get(item_code) or item_code
+            shortages.append({
+                'item_code': item_code,
+                'item_name': item_name,
+                'required_qty': 0,
+                'available_qty': 0,
+                'shortage_qty': 0,
+                'warehouse': parent_wo,
+                'reason': f"Child WO {child_wo} status: {child_status}"
+            })
         
         return shortages
+
+
+# =============================================================================
+# Inter-department transfer execution (background jobs)
+# =============================================================================
+
+def execute_inter_department_transfer(item_code, required_qty, target_warehouse,
+                                      source_warehouse=None, work_order=None):
+    """
+    Background job: create + submit the inter-dept transfer if still outstanding.
+    
+    Re-reads LIVE state when the job runs (the evaluation that queued it may be
+    stale by then):
+    1. outstanding = required - Bin(target) - draft SEs planned for this triple
+    2. outstanding <= 0 → nothing to do (idempotent: no duplicate transfers)
+    3. re-plan the source against live stock (source_warehouse is advisory —
+       the job works even if a BOM target or stock position changed)
+    4. create + submit the Stock Entry
+    
+    Business outcomes (already available / already planned / no source stock)
+    log at INFO/WARNING. Real failures are written to the Error Log AND
+    re-raised so the job lands in rq's failed registry for retry/inspection.
+    
+    Args:
+        item_code: Item to transfer
+        required_qty: Full requirement the shortage belongs to
+        target_warehouse: Department WIP warehouse needing stock
+        source_warehouse: Source suggested at planning time (advisory)
+        work_order: Work Order name
+    
+    Returns:
+        dict with execution status
+    """
+    logger = frappe.logger("tekson")
+    engine = MaterialReadinessEngine(work_order=work_order)
+    
+    try:
+        available = engine.get_available_stock_in_wip(item_code, target_warehouse)
+        outstanding = float(required_qty or 0) - float(available or 0)
+        
+        if outstanding <= 0:
+            logger.info(
+                "Inter-dept transfer skipped (already available): %s | need %s in %s | WO %s",
+                item_code, required_qty, target_warehouse, work_order
+            )
+            return {"status": "already_available", "item_code": item_code,
+                    "target_warehouse": target_warehouse, "available": available}
+        
+        planned = engine.get_planned_transfer_qty(item_code, work_order, target_warehouse)
+        outstanding -= planned
+        if outstanding <= 0:
+            logger.info(
+                "Inter-dept transfer skipped (already planned): %s | planned %s | WO %s",
+                item_code, planned, work_order
+            )
+            return {"status": "already_planned", "item_code": item_code,
+                    "planned_qty": planned, "work_order": work_order}
+        
+        transfer = engine.plan_inter_department_transfer(
+            item_code=item_code,
+            shortage_qty=outstanding,
+            target_warehouse=target_warehouse,
+            work_order=work_order,
+            required_qty=required_qty,
+        )
+        if not transfer:
+            logger.warning(
+                "Inter-dept transfer not possible (no source stock): %s | need %s in %s "
+                "| no configured BOM target warehouse has enough stock | WO %s",
+                item_code, outstanding, target_warehouse, work_order
+            )
+            return {"status": "no_source_stock", "item_code": item_code,
+                    "needed": outstanding, "target_warehouse": target_warehouse}
+        
+        source_warehouse = transfer["source_warehouse"]
+        qty = transfer["qty"]
+        item_row = frappe.db.get_value(
+            "Item", item_code, ["stock_uom", "valuation_rate"], as_dict=True
+        ) or frappe._dict()
+        company = frappe.db.get_value("Work Order", work_order, "company")
+        
+        stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.stock_entry_type = "Material Transfer for Manufacture"
+        stock_entry.purpose = "Material Transfer for Manufacture"
+        stock_entry.work_order = work_order
+        stock_entry.from_warehouse = source_warehouse
+        stock_entry.to_warehouse = target_warehouse
+        stock_entry.company = company
+        stock_entry.remarks = (
+            f"Auto inter-dept transfer: {source_warehouse} → {target_warehouse} "
+            f"for {item_code} (WO: {work_order})"
+        )
+        stock_entry.append("items", {
+            "item_code": item_code,
+            "qty": qty,
+            "s_warehouse": source_warehouse,
+            "t_warehouse": target_warehouse,
+            "uom": item_row.get("stock_uom"),
+            "basic_rate": item_row.get("valuation_rate") or 0
+        })
+        
+        stock_entry.insert(ignore_permissions=True)
+        stock_entry.submit()
+        
+        logger.info(
+            "Inter-dept transfer created: SE %s | %s | qty %s | %s → %s | WO %s",
+            stock_entry.name, item_code, qty, source_warehouse,
+            target_warehouse, work_order
+        )
+        return {"status": "transferred", "stock_entry": stock_entry.name,
+                "item_code": item_code, "qty": qty,
+                "source_warehouse": source_warehouse,
+                "target_warehouse": target_warehouse, "work_order": work_order}
+    
+    except Exception as exc:
+        frappe.log_error(
+            title="MES Inter-Dept Transfer Failed",
+            message=(
+                f"Item: {item_code} | Target: {target_warehouse} | "
+                f"Source: {source_warehouse} | WO: {work_order} | "
+                f"Error: {exc}\n{frappe.get_traceback()}"
+            )
+        )
+        raise
+
+
+def enqueue_inter_department_transfers(transfers, *, after_commit=True):
+    """
+    Queue deduplicated background executions for planned transfers.
+    
+    Accepts a list of transfer specs, a single spec dict, or an object
+    exposing .pending_transfers (MaterialResult / ReadinessResult).
+    
+    Safeguards:
+    - deduplicated by job_id (WO + item + target): repeated triggers
+      (multiple Job Cards / Stock Entries) coalesce into one queued job
+    - after_commit=True (default): job enters the queue only if the current
+      transaction commits; a rollback discards it (Frappe resets
+      after_commit callbacks on rollback)
+    - after_commit=False: queued immediately — used when the caller is about
+      to raise and roll back (blocked Job Card start)
+    - now=True under `bench run-tests` executes the job synchronously
+    - enqueue failures are logged, never raised (evaluation is already done)
+    
+    Args:
+        transfers: list of specs / single spec / result object with
+            .pending_transfers
+        after_commit: register on after-commit instead of queueing now
+    
+    Returns:
+        list of queued (work_order, item_code, target_warehouse) keys
+    """
+    if hasattr(transfers, "pending_transfers"):
+        transfers = transfers.pending_transfers
+    if isinstance(transfers, dict):
+        transfers = [transfers]
+    if not transfers:
+        return []
+    
+    logger = frappe.logger("tekson")
+    queued = []
+    seen = set()
+    
+    for spec in transfers:
+        if not isinstance(spec, dict):
+            continue
+        item_code = spec.get("item_code")
+        target_warehouse = spec.get("target_warehouse")
+        work_order = spec.get("work_order")
+        if not (item_code and target_warehouse and work_order):
+            continue
+        
+        key = (work_order, item_code, target_warehouse)
+        if key in seen:
+            continue
+        seen.add(key)
+        
+        job_id = f"mes-inter-dept-transfer::{work_order}::{item_code}::{target_warehouse}"
+        try:
+            frappe.enqueue(
+                "tekson_manufacturing.readiness.material_readiness.execute_inter_department_transfer",
+                queue="short",
+                timeout=120,
+                job_id=job_id,
+                deduplicate=True,
+                enqueue_after_commit=after_commit,
+                now=frappe.flags.in_test,
+                item_code=item_code,
+                required_qty=spec.get("required_qty", spec.get("qty")),
+                target_warehouse=target_warehouse,
+                source_warehouse=spec.get("source_warehouse"),
+                work_order=work_order,
+            )
+            queued.append(key)
+        except Exception:
+            logger.exception(
+                "Failed to queue inter-dept transfer for %s / %s / WO %s",
+                item_code, target_warehouse, work_order
+            )
+    
+    if queued:
+        logger.debug("Queued inter-dept transfers: %s", queued)
+    return queued
 
 
 @frappe.whitelist()

@@ -178,6 +178,15 @@ def update_work_order_status_if_ready(work_order):
         return
     
     try:
+        # Cheap status guard FIRST: skip the full material readiness
+        # evaluation entirely unless there is something to update
+        # (this hook fires on every Job Card insert).
+        wo_state = frappe.db.get_value(
+            "Work Order", work_order, ["docstatus", "status"], as_dict=True
+        )
+        if not wo_state or wo_state.docstatus != 1 or wo_state.status != "Not Started":
+            return
+        
         from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
         
         engine = MaterialReadinessEngine(work_order=work_order)
@@ -185,7 +194,7 @@ def update_work_order_status_if_ready(work_order):
         
         if readiness.is_ready:
             wo = frappe.get_doc("Work Order", work_order)
-            # Only update if WO is submitted and status is "Not Started"
+            # Re-check under load: only update submitted, still Not Started
             if wo.docstatus == 1 and wo.status == "Not Started":
                 wo.status = "In Process"
                 wo.save(ignore_permissions=True)
@@ -215,9 +224,11 @@ def update_job_card_status(doc, method=None):
     if doc.is_new() or doc.flags.ignore_validate:
         return
     
-    frappe.log_error(
-        title="MES validate hook: update_job_card_status",
-        message=f"JC: {doc.name} | status: {doc.status} | is_new: {doc.is_new()} | ignore_validate: {doc.flags.ignore_validate}"
+    # Debug breadcrumb — was frappe.log_error(), which INSERTs an Error Log
+    # document on every Job Card save (write amplifier on a hot path).
+    frappe.logger("tekson").debug(
+        "MES validate hook: update_job_card_status JC=%s status=%s ignore_validate=%s",
+        doc.name, doc.status, doc.flags.ignore_validate
     )
     
     from tekson_manufacturing.services.job_card_service import JobCardService
@@ -288,6 +299,18 @@ def validate_job_card_start(doc, method=None):
         doc.custom_material_available_for_operation = 1 if readiness.is_ready else 0
         
         if not readiness.is_ready:
+            # Request the planned inter-department transfers BEFORE throwing.
+            # after_commit=False on purpose: this call raises next, the
+            # transaction rolls back, and a rollback discards after-commit
+            # callbacks — queueing now keeps the request alive so stock lands
+            # for the retry. (Under bench run-tests now=True runs it sync.)
+            from tekson_manufacturing.readiness.material_readiness import (
+                enqueue_inter_department_transfers,
+            )
+            enqueue_inter_department_transfers(
+                readiness.pending_transfers, after_commit=False
+            )
+
             # Block the start
             shortage_details = readiness.shortage_details
             

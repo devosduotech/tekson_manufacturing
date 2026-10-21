@@ -397,6 +397,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.27 | 2026-10-07 | Development | Work Order warehouse auto-set (WIP/FG/Source) |
 | 15.1.28 | 2026-10-07 | Development | Work Order Scrap Warehouse auto-copied from WIP Warehouse |
 | 15.1.29 | 2026-10-08 | Development | Raw Material Loss % (RM Loss %) on BOM Item for Material Request generation |
+| 15.1.32 | 2026-10-21 | Development | Job Card slowness overhaul (readiness, batching, queued refresh) + Work Order cancel revert |
 
 ---
 
@@ -684,6 +685,87 @@ matched neither target, and nothing reported it.
 ```
 bench --site <site> execute tekson_manufacturing.scripts.diagnose_split_routing.diagnose --args '["<Production Plan>"]'
 bench --site <site> execute tekson_manufacturing.scripts.diagnose_split_routing.diagnose_bom --args '["<BOM>"]'
+```
+
+---
+
+## Version 15.1.32 — Job Card Slowness Overhaul & Work Order Cancel Revert
+
+**Date:** 2026-10-21
+**Status:** On `develop` (v15.1.32)
+**Type:** Performance + Correctness
+
+### Problem
+UAT: Job Card **Start** and Job Card **execution** intermittently hung or threw
+"server busy" errors. Root causes were all write amplification on the request
+thread:
+
+1. The five readiness status fields were recomputed and saved multiple times
+   per Job Card save (validate hook + readiness cascade), and the readiness
+   engine called `jc.save()` — re-entering the very validate hook that triggered it.
+2. Inter-department Stock Entries were created **inline** during evaluation,
+   so a shortage turned one Job Card start into a full Stock Entry submit.
+3. `refresh_work_order` / `refresh_next_job_card` did a `frappe.get_doc` per
+   Job Card, and material readiness ran per-item Bin / BOM / child-WO queries.
+4. `frappe.log_error()` INSERTs an Error Log row on **every** call and it was
+   used for ordinary success/skip breadcrumbs — an Error Log write per Job Card.
+5. WO-wide readiness refreshes ran synchronously on the submit path.
+6. **Cancel bug:** `ExecutionEngine.update_work_order_status` blind-wrote
+   `status = "Completed"`, so cancelling a Job Card or Stock Entry marked the
+   Work Order Completed — even though ERPNext core had just correctly reverted it.
+
+### Changes
+- **Single status mapping** — `JobCardService.compute_status_fields()` is now
+  the one source of truth for the five readiness fields, shared by the validate
+  hook and every refresh; evaluation is cached once per Job Card per save.
+- **Read-only readiness** — `JobCardReadinessEngine.apply_result_to_job_card()`
+  diffs only the changed readiness fields and writes them with `db.set_value`;
+  it **never** calls `jc.save()`, so a refresh can no longer re-trigger validation.
+- **Plan-only transfers** — evaluation plans inter-department transfers
+  (BOM `target_fg_warehouse` / `_2`, live Bin check) and hands them to
+  `execute_inter_department_transfer`, a deduplicated background job that
+  re-reads live stock, is idempotent (outstanding = required − Bin(target) −
+  draft SEs) and re-plans its source at run time.
+- **Batched queries** — one Bin query, one BOM query and one child-WO SQL per
+  evaluation replace the per-item loops; refresh paths use lightweight
+  `get_all` instead of `get_doc` per Job Card.
+- **Logging cleanup** — `log_mes_event()` routes ERROR/CRITICAL to
+  `frappe.log_error` and everything else to the logger; success/skip
+  breadcrumbs demoted to `logger.debug/info`. Real failures and security
+  audit events still hit the Error Log.
+- **Queued refreshes** — WO-submit, SE-submit and Job Card completion now
+  enqueue `refresh_work_order_job` on the short queue
+  (`mes-wo-refresh::{wo}`, deduplicated, after-commit, synchronous under
+  `bench run-tests`); a re-entrancy guard prevents nested loops.
+- **Work Order cancel reverts** — `update_work_order_status` /
+  `refresh_work_order_status` now delegate to ERPNext's canonical
+  `WorkOrder.update_status()` (docstatus / produced qty / transferred qty)
+  instead of force-writing "Completed". `on_job_card_cancel` and
+  `on_stock_entry_cancel` recompute the status **and** queue a readiness
+  refresh so downstream Job Cards revert too. Closed/Stopped Work Orders are
+  left untouched. `api.work_order.refresh_work_order_status` returns the
+  resulting status. Fixed `WorkOrderService.refresh_status`, which called a
+  non-existent `wo.set_status()` (Work Order is a plain `Document`, not a
+  `StatusUpdater`) and raised `AttributeError`.
+- **New diagnostics** — `scripts/diagnose_mes_performance.py`, a read-only
+  `bench execute` report: retired Server Scripts, Error Log volume, index
+  candidates, queue health, readiness snapshot and a consistency spot-check
+  comparing stored `custom_*` fields against a live evaluation.
+
+### Files Changed
+- `tekson_manufacturing/services/job_card_service.py` — `compute_status_fields`, cached evaluation, `refresh_status` fix
+- `tekson_manufacturing/readiness/job_card_readiness.py` — field-diff apply, transfer enqueue, queued WO refresh
+- `tekson_manufacturing/readiness/material_readiness.py` — batched queries, transfer planning/execution, queue helper
+- `tekson_manufacturing/execution/execution_engine.py` — status recompute (cancel revert), cancel readiness refresh
+- `tekson_manufacturing/api/work_order.py` — `refresh_work_order_status` recompute + returned status
+- `tekson_manufacturing/mes/mes_coordinator.py`, `mes/dataclasses.py`, `utils/`, `services/permission_service.py`, `services/stock_service.py`, `api/job_card_start.py` — queued refreshes, `pending_transfers`, logging cleanup
+- `tekson_manufacturing/scripts/diagnose_mes_performance.py` — new
+- `tekson_manufacturing/tests/test_status_mapping.py` — new (pure unit tests, no DB)
+
+### Usage
+```
+bench --site <site> execute tekson_manufacturing.scripts.diagnose_mes_performance.run
+bench --site <site> run-tests --module tekson_manufacturing.tests.test_status_mapping
 ```
 
 ---
