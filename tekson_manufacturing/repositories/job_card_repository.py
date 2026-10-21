@@ -121,7 +121,7 @@ class JobCardRepository:
             FROM `tabJob Card`
             WHERE work_order = %s
             AND sequence_id = %s
-            AND docstatus = 1
+            AND docstatus != 2
         """, (jc.work_order, jc.sequence_id - 1), as_dict=True)
         
         return prev_jc[0] if prev_jc else None
@@ -145,7 +145,7 @@ class JobCardRepository:
             FROM `tabJob Card`
             WHERE work_order = %s
             AND sequence_id = %s
-            AND docstatus = 1
+            AND docstatus != 2
         """, (jc.work_order, jc.sequence_id + 1), as_dict=True)
         
         return next_jc[0] if next_jc else None

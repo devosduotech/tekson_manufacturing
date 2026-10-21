@@ -398,6 +398,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.28 | 2026-10-07 | Development | Work Order Scrap Warehouse auto-copied from WIP Warehouse |
 | 15.1.29 | 2026-10-08 | Development | Raw Material Loss % (RM Loss %) on BOM Item for Material Request generation |
 | 15.1.32 | 2026-10-21 | Development | Job Card slowness overhaul (readiness, batching, queued refresh) + Work Order cancel revert |
+| 15.1.33 | 2026-10-21 | Development | Job Card dependency lookup includes draft JCs (docstatus != 2); start-blocked message fix |
 
 ---
 
@@ -767,6 +768,58 @@ thread:
 bench --site <site> execute tekson_manufacturing.scripts.diagnose_mes_performance.run
 bench --site <site> run-tests --module tekson_manufacturing.tests.test_status_mapping
 ```
+
+---
+
+## Version 15.1.33 — Job Card Dependency Lookup on Draft Job Cards
+
+**Date:** 2026-10-21
+**Status:** On `develop` (v15.1.33)
+**Type:** Bug Fix
+
+### Problem
+Starting a Job Card failed with:
+
+```
+Cannot start Punching: Previous operation Job Card not found.
+Complete None first.
+```
+
+Site diagnosis (WO of `JC-WO/261021/0113-002`): sequences were correct
+(`1, 2`), but **both Job Cards were draft (`docstatus = 0`)** — this project
+starts Job Cards before submitting them (status `Open` → `Work In Progress`).
+The previous-operation queries filtered `AND docstatus = 1`, so the
+predecessor was invisible and returned "not found".
+
+The same `None` also poisoned the status mapping
+(`dependency_ok = not previous_operation or ... == "Completed"`), which read a
+failed lookup as "first operation" — which is why
+**"Awaiting Previous Operation" never appeared** and only material-driven
+statuses were shown.
+
+### Changes
+- `JobCardRepository.get_previous_operation`, `JobCardRepository.get_next_operation`
+  and `JobCardService.get_previous_operation_status` now filter
+  `docstatus != 2` (include draft + submitted, exclude cancelled) — matching
+  the readiness refresh chain (`refresh_work_order` / `refresh_next_job_card`),
+  which already used `docstatus != 2`.
+- Start-blocked message no longer prints "Complete None first." — when no
+  previous Job Card name exists it falls back to the dependency diagnostic
+  ("Cannot find previous operation Job Card. Check Work Order routing
+  configuration.").
+
+### Files Changed
+- `tekson_manufacturing/repositories/job_card_repository.py` — prev/next lookup filter
+- `tekson_manufacturing/services/job_card_service.py` — display-path lookup filter
+- `tekson_manufacturing/utils/job_card_utils.py` — start-blocked message
+
+### Expected Behavior (reference WO .../0113)
+- `JC-WO/261021/0113-002` (Punching, draft, seq 2) now finds
+  `JC-WO/261021/0113-001` (Shearing, draft, status `Open`) →
+  `custom_start_status` = "Awaiting Previous Operation"; start blocked with
+  "Previous operation not complete: Open. Complete JC-WO/261021/0113-001 first."
+- Once Shearing completes, the completion refresh finds sequence 2 (draft
+  included) and JC-002 re-evaluates to Ready to Start / Awaiting Material.
 
 ---
 

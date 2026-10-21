@@ -283,9 +283,13 @@ def validate_job_card_start(doc, method=None):
         dep_result = dep_engine.validate_previous_operation(doc)
         
         if not dep_result.can_start:
+            detail = (
+                f"Complete {dep_result.previous_jc_name} first."
+                if dep_result.previous_jc_name
+                else dep_result.diagnostic
+            )
             frappe.throw(
-                f"Cannot start {doc.operation}: {dep_result.reason}.<br>"
-                f"Complete {dep_result.previous_jc_name} first.",
+                f"Cannot start {doc.operation}: {dep_result.reason}.<br>{detail}",
                 title=_("Previous Operation Not Complete")
             )
         
