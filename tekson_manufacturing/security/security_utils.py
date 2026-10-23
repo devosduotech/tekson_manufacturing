@@ -8,11 +8,21 @@ import frappe
 from frappe import _
 from typing import List, Optional
 
-FLOOR_EXECUTION_ROLES = [
+JC_EXECUTE_ROLES = [
     'Manufacturing User',
     'Manufacturing Manager',
     'Line Supervisor',
     'Machine Operator',
+    'Administrator',
+]
+
+WO_RELEASE_ROLES = [
+    'Manufacturing User',
+    'Manufacturing Manager',
+    'Planning HOD',
+    'Planning Engineer',
+    'Production Controller',
+    'General Manager',
     'Administrator',
 ]
 
@@ -59,9 +69,13 @@ def validate_user_permission_for_job_card(job_card: str) -> bool:
     return True
 
 
-def validate_manufacturing_role() -> bool:
+def validate_manufacturing_role(required_roles: Optional[List[str]] = None) -> bool:
     """
     Validate user has Manufacturing role
+    
+    Args:
+        required_roles: Roles allowed for the action
+            (defaults to JC_EXECUTE_ROLES)
     
     Returns:
         True if user has role
@@ -69,7 +83,8 @@ def validate_manufacturing_role() -> bool:
     Raises:
         frappe.PermissionError: If user lacks role
     """
-    required_roles = FLOOR_EXECUTION_ROLES
+    if required_roles is None:
+        required_roles = JC_EXECUTE_ROLES
     
     user_roles = frappe.get_roles(frappe.session.user)
     

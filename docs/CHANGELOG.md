@@ -400,6 +400,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.32 | 2026-10-21 | Development | Job Card slowness overhaul (readiness, batching, queued refresh) + Work Order cancel revert |
 | 15.1.33 | 2026-10-21 | Development | Job Card dependency lookup includes draft JCs (docstatus != 2); start-blocked message fix |
 | 15.1.34 | 2026-10-21 | Development | Allow Line Supervisor + Machine Operator roles for MES execution (JC complete / WO submit) |
+| 15.1.35 | 2026-10-23 | Development | Role-model alignment: JC vs WO-release gates; workspace / pick list / BOM Bulk Creator audiences |
 
 ---
 
@@ -857,6 +858,53 @@ read/write/submit; Work Order: read).
 
 ### Files Changed
 - `tekson_manufacturing/security/security_utils.py`
+
+---
+
+## Version 15.1.35 — Role Model Alignment (Execution vs Release)
+
+**Date:** 2026-10-23
+**Status:** On `develop` (v15.1.35)
+**Type:** Permission / Configuration
+
+### Problem
+The MES role gates and UI audiences still assumed ERPNext's stock
+manufacturing roles, while the site now runs a 19-role hierarchy (Line
+Supervisor, Machine Operator, Planning, Stores, Quality, Maintenance,
+Design, ...):
+
+- WO submit (production release) shared the JC-execution list, so Line
+  Supervisor / Machine Operator could release Work Orders — outside their
+  scope (operators execute JCs; JC submit auto-updates WO status server-side)
+- The "Tekson Manufacturing" workspace was visible only to Stock/Manufacturing
+  roles — none of the new roles saw the MES hub
+- The Material Transfer Pick List report was similarly unreachable
+- BOM Bulk Creator granted full CRUD including delete to Manufacturing User,
+  while BOM ownership per the role model belongs to Design HOD / Engineer
+
+### Changes
+- `JC_EXECUTE_ROLES` — Line Supervisor, Machine Operator (+ legacy
+  Manufacturing roles, Admin): Job Card complete path
+- `WO_RELEASE_ROLES` — Planning HOD, Planning Engineer, Production
+  Controller, General Manager (+ legacy, Admin): Work Order submit/release
+  path; `validate_manufacturing_role()` now accepts an optional role list
+- Workspace roles extended to the full management / planning / production /
+  stores / quality / maintenance / design audience
+- Material Transfer Pick List report: added Stores Manager/User, Receiving
+  Stores User, Planning Engineer, Production Controller, Line Supervisor
+- BOM Bulk Creator: added Design HOD (incl. delete) and Design Engineer
+  (create/read/write)
+
+### Deployment
+`bench migrate` required (JSON role permissions sync on migrate), then
+`bench restart`.
+
+### Files Changed
+- `tekson_manufacturing/security/security_utils.py` — role lists + optional arg
+- `tekson_manufacturing/mes/mes_coordinator.py` — WO submit uses WO_RELEASE_ROLES
+- `tekson_manufacturing/workspace/tekson_manufacturing/tekson_manufacturing.json`
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.json`
+- `tekson_manufacturing/tekson_manufacturing/doctype/bom_bulk_creator/bom_bulk_creator.json`
 
 ---
 

@@ -32,6 +32,7 @@ from tekson_manufacturing.security.security_utils import (
     validate_user_permission_for_job_card,
     validate_stock_entry_permission,
     validate_manufacturing_role,
+    WO_RELEASE_ROLES,
     log_security_event
 )
 
@@ -77,7 +78,7 @@ class MESExecutionCoordinator:
         try:
             # Security: Validate permissions
             validate_user_permission_for_work_order(work_order.name)
-            validate_manufacturing_role()
+            validate_manufacturing_role(WO_RELEASE_ROLES)
             
             # Readiness refresh runs on the short queue (Phase 6): a 40-Job-Card
             # evaluation no longer executes inside the WO submit request.

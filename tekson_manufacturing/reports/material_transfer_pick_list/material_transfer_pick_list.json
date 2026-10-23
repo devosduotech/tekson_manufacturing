@@ -110,6 +110,24 @@
    "role": "Manufacturing Manager"
   },
   {
+   "role": "Stores Manager"
+  },
+  {
+   "role": "Stores User"
+  },
+  {
+   "role": "Receiving Stores User"
+  },
+  {
+   "role": "Planning Engineer"
+  },
+  {
+   "role": "Production Controller"
+  },
+  {
+   "role": "Line Supervisor"
+  },
+  {
    "role": "Administrator"
   }
  ]
