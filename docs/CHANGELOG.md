@@ -399,6 +399,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.29 | 2026-10-08 | Development | Raw Material Loss % (RM Loss %) on BOM Item for Material Request generation |
 | 15.1.32 | 2026-10-21 | Development | Job Card slowness overhaul (readiness, batching, queued refresh) + Work Order cancel revert |
 | 15.1.33 | 2026-10-21 | Development | Job Card dependency lookup includes draft JCs (docstatus != 2); start-blocked message fix |
+| 15.1.34 | 2026-10-21 | Development | Allow Line Supervisor + Machine Operator roles for MES execution (JC complete / WO submit) |
 
 ---
 
@@ -820,6 +821,42 @@ statuses were shown.
   "Previous operation not complete: Open. Complete JC-WO/261021/0113-001 first."
 - Once Shearing completes, the completion refresh finds sequence 2 (draft
   included) and JC-002 re-evaluates to Ready to Start / Awaiting Material.
+
+---
+
+## Version 15.1.34 — Floor Roles Allowed for MES Execution
+
+**Date:** 2026-10-21
+**Status:** On `develop` (v15.1.34)
+**Type:** Bug Fix / Permission
+
+### Problem
+Completing a Job Card as a user with the custom role **Line Supervisor** failed:
+
+```
+Security Event: JOB_CARD_COMPLETE_ERROR
+This action requires one of these roles: Manufacturing User,
+Manufacturing Manager, Administrator
+```
+
+The MES execution gate (`validate_manufacturing_role`, called from the Job
+Card-complete and Work-Order-submit coordinators) hardcoded ERPNext's
+manufacturing roles only, while the production-floor executor roles on this
+site are **Line Supervisor** and **Machine Operator**.
+
+### Changes
+- New `FLOOR_EXECUTION_ROLES` constant in `security/security_utils.py` —
+  Manufacturing User, Manufacturing Manager, Line Supervisor, Machine
+  Operator, Administrator — used by `validate_manufacturing_role` for both
+  the JC-complete and WO-submit paths.
+
+### Site setup reminder
+The app gate only checks the role list. The two custom roles still need
+standard DocType permissions in Role Permission Manager (Job Card:
+read/write/submit; Work Order: read).
+
+### Files Changed
+- `tekson_manufacturing/security/security_utils.py`
 
 ---
 

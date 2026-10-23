@@ -8,6 +8,14 @@ import frappe
 from frappe import _
 from typing import List, Optional
 
+FLOOR_EXECUTION_ROLES = [
+    'Manufacturing User',
+    'Manufacturing Manager',
+    'Line Supervisor',
+    'Machine Operator',
+    'Administrator',
+]
+
 
 def validate_user_permission_for_work_order(work_order: str) -> bool:
     """
@@ -61,7 +69,7 @@ def validate_manufacturing_role() -> bool:
     Raises:
         frappe.PermissionError: If user lacks role
     """
-    required_roles = ['Manufacturing User', 'Manufacturing Manager', 'Administrator']
+    required_roles = FLOOR_EXECUTION_ROLES
     
     user_roles = frappe.get_roles(frappe.session.user)
     
