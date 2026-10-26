@@ -1,15 +1,24 @@
 """
 Unit Tests for Daily Material Planning quantity calculation (MP-002)
+and operation-driven target warehouse resolution (15.1.37)
 
 Business expectation (fixed in 15.1.36):
     MR Qty = (required incl. RM Loss, aggregated across ALL Work Orders of the
     day) - (stock already available in the target WIP warehouse)
 
-Covers the regression where:
+Business expectation (fixed in 15.1.37):
+    The MR target warehouse comes from the BOM Item's operation
+    (BOM Operation -> workstation -> plant floor -> WIP-{floor} - TPL),
+    falling back to the Job Card's WIP — never the Work Order header
+    warehouse (derived from the first operation).
+
+Covers the regressions where:
   1. full BOM qty was requested even when stock existed in WIP
   2. a requirement vanished when stock covered one WO but not the day's total
   3. the same stock was deducted once per source warehouse / Bin lookup
      depended on a '%WIP%' pattern instead of the exact warehouse
+  4. an operation-bearing item's MR line targeted the first-operation WIP
+     when the Job Card lookup missed (key mismatch) or no JC existed yet
 
 Runs standalone (no bench/site required):
     python3 tekson_manufacturing/tests/test_material_planning_qty.py
@@ -45,6 +54,7 @@ def _install_minimal_frappe():
 _install_minimal_frappe()
 
 from tekson_manufacturing.planning import material_planning_service as mps
+from tekson_manufacturing.utils import operation_warehouse as owh
 
 
 class Row(dict):
@@ -85,22 +95,32 @@ class FakeMR:
 
 
 class FakeFrappe:
-    """Minimal frappe facade covering what material_planning_service calls."""
+    """Minimal frappe facade covering what material_planning_service and
+    utils.operation_warehouse call."""
 
-    def __init__(self, wos=(), bom_items=None, bins=(), bom_qty=None):
+    def __init__(self, wos=(), bom_items=None, bins=(), bom_qty=None,
+                 jcs=(), bom_operations=None, workstations=(), warehouses=()):
         self.wos = list(wos)
         self.bom_items = bom_items or {}
         self.bins = list(bins)
         self.bom_qty = bom_qty or {}
+        self.jcs = list(jcs)
+        self.bom_operations = bom_operations or {}
+        self.workstations = list(workstations)
+        self.warehouses = set(warehouses)
         self.mrs = []
         self.defaults = types.SimpleNamespace(get_defaults=lambda: types.SimpleNamespace(company="Test Co"))
-        self.db = types.SimpleNamespace(get_value=self._db_get_value, sql=self._db_sql)
+        self.db = types.SimpleNamespace(
+            get_value=self._db_get_value, sql=self._db_sql, exists=self._db_exists
+        )
 
     def get_all(self, doctype, filters=None, fields=None, **kwargs):
         if doctype == "Work Order":
             return list(self.wos)
         if doctype == "Job Card":
-            return []
+            return list(self.jcs)
+        if doctype == "BOM Operation":
+            return list(self.bom_operations.get((filters or {}).get("parent"), []))
         if doctype == "BOM Item":
             return list(self.bom_items.get((filters or {}).get("parent"), []))
         if doctype == "Bin":
@@ -134,10 +154,29 @@ class FakeFrappe:
                 # name -> warehouse_name: echo back so name-contains checks pass
                 return filters
             return None
+        if doctype == "Workstation":
+            if isinstance(filters, dict):
+                wanted = filters.get("workstation_type")
+                matches = sorted(
+                    (w for w in self.workstations if w.get("workstation_type") == wanted),
+                    key=lambda w: w["name"],
+                )
+                return matches[0]["name"] if matches else None
+            for w in self.workstations:
+                if w["name"] == filters:
+                    return w.get(field)
+            return None
         return None
 
     def _db_sql(self, *args, **kwargs):
         return []  # no existing draft Material Requests
+
+    def _db_exists(self, doctype, name):
+        if doctype == "Warehouse":
+            return name if name in self.warehouses else None
+        if doctype == "Workstation":
+            return name if any(w["name"] == name for w in self.workstations) else None
+        return None
 
 
 def make_wo(name, qty, wip_warehouse, bom_no="BOM-1",
@@ -162,12 +201,24 @@ def make_bin(item_code, warehouse, actual_qty):
     return Row(item_code=item_code, warehouse=warehouse, actual_qty=actual_qty)
 
 
+def make_bom_operation(operation, workstation_type=None, workstation=None, idx=1):
+    return Row(operation=operation, workstation_type=workstation_type,
+               workstation=workstation, idx=idx)
+
+
+def make_workstation(name, workstation_type, plant_floor):
+    return Row(name=name, workstation_type=workstation_type, plant_floor=plant_floor)
+
+
 class TestMaterialPlanningRequiredQty(unittest.TestCase):
     PLANNED_DATE = "2026-10-26"
 
-    def run_generate(self, wos, bom_items, bins=(), bom_qty=None):
-        fake = FakeFrappe(wos=wos, bom_items=bom_items, bins=bins, bom_qty=bom_qty)
-        with patch.object(mps, "frappe", fake), patch.object(mps, "_", lambda msg, *a, **k: msg):
+    def run_generate(self, wos, bom_items, bins=(), bom_qty=None, **fake_kwargs):
+        fake = FakeFrappe(wos=wos, bom_items=bom_items, bins=bins,
+                          bom_qty=bom_qty, **fake_kwargs)
+        with patch.object(mps, "frappe", fake), \
+                patch.object(owh, "frappe", fake), \
+                patch.object(mps, "_", lambda msg, *a, **k: msg):
             result = mps.generate_daily_material_requests("PP-TEST", self.PLANNED_DATE)
         return result, fake
 
@@ -266,6 +317,230 @@ class TestMaterialPlanningRequiredQty(unittest.TestCase):
             result = mps.generate_daily_material_requests("PP-TEST", self.PLANNED_DATE)
         self.assertEqual(result["created_mrs"], [])
         self.assertIn("No Work Orders", result["message"])
+
+
+class TestOperationTargetWarehouse(unittest.TestCase):
+    """15.1.37: transfers target the BOM Item's operation warehouse.
+
+    The Work Order header warehouse is derived from the BOM's FIRST
+    operation and must never be used for operation-bearing items — BOMs
+    span multiple plant floors.
+    """
+
+    PLANNED_DATE = "2026-10-26"
+    WIP_FIRST_OP = "WIP-W - TPL"   # WO header = first-operation floor
+    WIP_OP = "WIP-RP - TPL"        # Milling operation floor
+
+    def run_generate(self, wos, bom_items, bins=(), **fake_kwargs):
+        fake = FakeFrappe(wos=wos, bom_items=bom_items, bins=bins, **fake_kwargs)
+        with patch.object(mps, "frappe", fake), \
+                patch.object(owh, "frappe", fake), \
+                patch.object(mps, "_", lambda msg, *a, **k: msg):
+            result = mps.generate_daily_material_requests("PP-TEST", self.PLANNED_DATE)
+        return result, fake
+
+    @staticmethod
+    def all_lines(fake):
+        return [line for mr in fake.mrs for line in mr.items]
+
+    @staticmethod
+    def milling_config():
+        return (
+            {"BOM-1": [make_bom_operation("Milling", workstation_type="Milling-WS")]},
+            [make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+        )
+
+    def test_both_wos_target_operation_warehouse_despite_jc_key_whitespace(self):
+        """Reported bug: WO-2's Job Card operation key had trailing
+        whitespace → jc_map missed → MR line fell back to the WO header
+        (first-operation) warehouse."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP), make_wo("WO-2", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        bom_ops, workstations = self.milling_config()
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            jcs=[
+                Row(name="JC-1", work_order="WO-1", operation="Milling",
+                    wip_warehouse=self.WIP_OP),
+                Row(name="JC-2", work_order="WO-2", operation="Milling ",
+                    wip_warehouse=self.WIP_OP),
+            ],
+            bom_operations=bom_ops,
+            workstations=workstations,
+            warehouses={self.WIP_FIRST_OP, self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+        self.assertEqual(lines[0]["qty"], 20)
+
+    def test_resolves_operation_warehouse_without_job_card(self):
+        """Configuration alone (BOM Operation → workstation → plant floor)
+        must resolve the target when no Job Card exists yet."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        bom_ops, workstations = self.milling_config()
+        result, fake = self.run_generate(
+            wos, bom_items,
+            bom_operations=bom_ops,
+            workstations=workstations,
+            warehouses={self.WIP_FIRST_OP, self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+        self.assertEqual(result["warnings"], [])
+
+    def test_unresolvable_operation_is_skipped_never_wo_header(self):
+        """No configuration, no Job Card → skip with a visible warning.
+        Falling back to the WO header warehouse is never allowed."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        result, fake = self.run_generate(wos, bom_items)
+        self.assertEqual(fake.mrs, [])
+        self.assertTrue(any("could not be resolved" in w for w in result["warnings"]))
+        self.assertIn("No material requirements", result["message"])
+
+    def test_configuration_wins_over_stale_job_card_and_warns(self):
+        """A Job Card still holding a stale WIP must not steer the transfer;
+        configuration wins and the mismatch is surfaced."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        bom_ops, workstations = self.milling_config()
+        result, fake = self.run_generate(
+            wos, bom_items,
+            jcs=[Row(name="JC-1", work_order="WO-1", operation="Milling",
+                     wip_warehouse="WIP-STALE - TPL")],
+            bom_operations=bom_ops,
+            workstations=workstations,
+            warehouses={self.WIP_FIRST_OP, self.WIP_OP, "WIP-STALE - TPL"},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+        self.assertTrue(any("re-save the Job Card" in w for w in result["warnings"]))
+
+    def test_job_card_warehouse_used_when_configuration_missing(self):
+        """Configuration lookup fails but the Job Card has the warehouse —
+        use the Job Card (execution ground truth)."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            jcs=[Row(name="JC-1", work_order="WO-1", operation="Milling",
+                     wip_warehouse=self.WIP_OP)],
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+
+    def test_item_without_operation_uses_wo_header_with_warning(self):
+        """No operation configured → the WO header is the only answer, but
+        the gap is surfaced as a warning."""
+        wos = [make_wo("WO-1", 1, "WIP-CNC")]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10)]}
+        result, fake = self.run_generate(wos, bom_items)
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], "WIP-CNC")
+        self.assertTrue(any("has no operation" in w for w in result["warnings"]))
+
+    def test_operation_match_ignores_whitespace_on_bom_item(self):
+        """BOM Item operation with trailing whitespace still matches the
+        BOM Operation routing row."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling ")]}
+        bom_ops, workstations = self.milling_config()
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            bom_operations=bom_ops,
+            workstations=workstations,
+            warehouses={self.WIP_FIRST_OP, self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+
+    def test_operation_item_resolves_even_when_wo_header_wip_missing(self):
+        """Operation-bearing items no longer depend on the WO header WIP."""
+        wos = [make_wo("WO-1", 1, "")]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        bom_ops, workstations = self.milling_config()
+        result, fake = self.run_generate(
+            wos, bom_items,
+            bom_operations=bom_ops,
+            workstations=workstations,
+            warehouses={self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+        self.assertFalse(any("no WIP warehouse" in w for w in result["warnings"]))
+
+
+class TestResolveTargetWarehouse(unittest.TestCase):
+    """Direct contract tests for utils.operation_warehouse.resolve_target_warehouse."""
+
+    WIP_OP = "WIP-RP - TPL"
+
+    @staticmethod
+    def resolve(*args, fake=None, **kwargs):
+        with patch.object(owh, "frappe", fake if fake is not None else FakeFrappe()):
+            return owh.resolve_target_warehouse(*args, **kwargs)
+
+    def test_no_operation_returns_fallback(self):
+        self.assertEqual(
+            self.resolve("BOM-1", "", fallback_warehouse="WIP-CNC"), "WIP-CNC"
+        )
+
+    def test_unresolvable_operation_never_returns_wo_header_fallback(self):
+        result = self.resolve(
+            "BOM-1", "Milling", fallback_warehouse="WIP-W - TPL"
+        )
+        self.assertEqual(result, "")
+
+    def test_unresolvable_operation_falls_back_to_job_card(self):
+        result = self.resolve(
+            "BOM-1", "Milling", jc_warehouse=self.WIP_OP,
+            fallback_warehouse="WIP-W - TPL",
+        )
+        self.assertEqual(result, self.WIP_OP)
+
+    def test_source_bom_preferred_over_wo_bom(self):
+        """Operation lives in the child BOM's routing (leaf came from it)."""
+        fake = FakeFrappe(
+            bom_operations={
+                "BOM-CHILD": [make_bom_operation("Milling", workstation_type="Milling-WS")]
+            },
+            workstations=[make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+            warehouses={self.WIP_OP},
+        )
+        result = self.resolve(
+            "BOM-PARENT", "Milling", source_bom="BOM-CHILD", fake=fake
+        )
+        self.assertEqual(result, self.WIP_OP)
+
+    def test_direct_workstation_link_resolves(self):
+        """BOM Operation carries a direct workstation link, not a type."""
+        fake = FakeFrappe(
+            bom_operations={"BOM-1": [make_bom_operation("Drill", workstation="WS-D1")]},
+            workstations=[make_workstation("WS-D1", "", "BOF")],
+            warehouses={"WIP-BOF - TPL"},
+        )
+        self.assertEqual(self.resolve("BOM-1", "Drill", fake=fake), "WIP-BOF - TPL")
+
+    def test_missing_warehouse_returns_empty(self):
+        """Plant floor resolves but the WIP warehouse does not exist."""
+        fake = FakeFrappe(
+            bom_operations={
+                "BOM-1": [make_bom_operation("Milling", workstation_type="Milling-WS")]
+            },
+            workstations=[make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+        )
+        result = self.resolve(
+            "BOM-1", "Milling", fallback_warehouse="WIP-W - TPL", fake=fake
+        )
+        self.assertEqual(result, "")
 
 
 if __name__ == "__main__":

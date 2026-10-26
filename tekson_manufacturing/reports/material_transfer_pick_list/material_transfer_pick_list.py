@@ -14,6 +14,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from tekson_manufacturing.utils import operation_warehouse as operation_warehouse_utils
+
 
 def execute(filters=None):
     """Main report execution"""
@@ -47,6 +49,12 @@ def get_columns():
             "fieldname": "item_name",
             "fieldtype": "Data",
             "width": 180
+        },
+        {
+            "label": _("Operation"),
+            "fieldname": "operation",
+            "fieldtype": "Data",
+            "width": 140
         },
         {
             "label": _("Qty/Piece"),
@@ -125,6 +133,20 @@ def get_data(filters):
     if not work_orders:
         return []
 
+    # Job Card WIP per (WO, operation) — fallback when BOM Operation
+    # configuration cannot be resolved. Whitespace-tolerant key; keep the
+    # first non-empty warehouse.
+    jc_map = {}
+    for jc in frappe.get_all(
+            'Job Card',
+            filters={'work_order': ['in', [wo.name for wo in work_orders]]},
+            fields=['work_order', 'operation', 'wip_warehouse'],
+            order_by='name asc'):
+        key = (jc.work_order, (jc.operation or '').strip())
+        if key not in jc_map or not jc_map[key]:
+            jc_map[key] = jc.wip_warehouse or ''
+
+    operation_wh_cache = {}
     result = []
 
     for wo in work_orders:
@@ -135,7 +157,7 @@ def get_data(filters):
 
         bom_items = frappe.get_all('BOM Item',
             filters={'parent': wo.bom_no},
-            fields=['item_code', 'item_name', 'qty', 'source_warehouse']
+            fields=['item_code', 'item_name', 'qty', 'source_warehouse', 'operation']
         )
 
         frappe.logger().info(f"WO {wo.name}: Found {len(bom_items)} BOM items for BOM {wo.bom_no}")
@@ -146,8 +168,19 @@ def get_data(filters):
             # Source warehouse: BOM item source → WO source → Raw Material Stores
             source_wh = item.source_warehouse or wo.source_warehouse or ''
 
-            # Target: WO's WIP warehouse
-            target_wh = wo.wip_warehouse or ''
+            # Target: driven by the BOM Item's operation (BOM Operation →
+            # workstation → plant floor WIP), Job Card WIP as fallback —
+            # never the WO header (first-operation) warehouse.
+            operation = (item.get('operation') or '').strip()
+            if operation:
+                target_wh = (
+                    operation_warehouse_utils.resolve_operation_warehouse(
+                        wo.bom_no, operation, cache=operation_wh_cache)
+                    or jc_map.get((wo.name, operation))
+                    or ''
+                )
+            else:
+                target_wh = wo.wip_warehouse or ''
 
             # Check stock already in target WIP (already transferred)
             already_in_wip = 0.0
@@ -176,6 +209,7 @@ def get_data(filters):
                 'work_order': wo.name,
                 'item_code': item.item_code,
                 'item_name': item.item_name,
+                'operation': operation,
                 'required_per_piece': flt(item.qty),
                 'required_total': required_total,
                 'source_warehouse': source_wh,

@@ -1,6 +1,6 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.36 (main) | v15.1.36 (develop)
+## Current Version: v15.1.37 (main) | v15.1.37 (develop)
 
 ---
 
@@ -22,7 +22,7 @@
 - `validation/dependency_engine.py` — Operation dependencies
 
 ### 2. Daily Material Planning (Phase 1.1 — v15.1.x)
-**Status: ✅ Complete (v15.1.26)**
+**Status: ✅ Complete (v15.1.37)**
 
 - Generates Material Requests grouped by department WIP warehouse
 - Source warehouse fallback chain: `item.source_warehouse → wo.source_warehouse → default warehouse`
@@ -42,8 +42,23 @@
 - `_get_default_source_warehouse` also uses contains match with fallback
 - MR now correctly checks WIP stock and only requests actual shortages
 
+**v15.1.36 — Required Qty Bug Fix:**
+- Requirements aggregated per (target WIP, item) across ALL of the day's WOs
+- MR `qty` = ceil(required incl. RM Loss − stock already in target WIP)
+- Bin lookup uses the exact target warehouse (was `LIKE '%WIP%'`)
+- Skips surfaced as `warnings` on the Material Planning page
+
+**v15.1.37 — Operation-Driven Target WIP:**
+- Target warehouse resolved from the BOM Item's operation: `BOM Operation → workstation → plant floor → WIP-{floor} - TPL` (never the WO header / first-operation warehouse)
+- Job Card `wip_warehouse` as fallback; configuration wins over a stale JC (mismatch warned)
+- Unresolvable operation warehouse → item skipped with a visible warning
+- jc_map keys whitespace-trimmed; `source_bom` propagated by `_explode_bom` for child-BOM routing
+- Pick List report uses the same rule + new Operation column
+- Resolver: `utils/operation_warehouse.py` (shared by planning + pick list)
+
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
+- `utils/operation_warehouse.py` — operation → target WIP resolver
 - `public/js/production_plan_mr.js` — Production Plan MR button
 - `page/material_planning/material_planning.js` — Material Planning page
 

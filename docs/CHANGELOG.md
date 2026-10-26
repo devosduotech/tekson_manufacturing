@@ -401,6 +401,8 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.33 | 2026-10-21 | Development | Job Card dependency lookup includes draft JCs (docstatus != 2); start-blocked message fix |
 | 15.1.34 | 2026-10-21 | Development | Allow Line Supervisor + Machine Operator roles for MES execution (JC complete / WO submit) |
 | 15.1.35 | 2026-10-23 | Development | Role-model alignment: JC vs WO-release gates; workspace / pick list / BOM Bulk Creator audiences |
+| 15.1.36 | 2026-10-26 | Development | Daily Material Planning MR qty: aggregate requirements across the day, deduct WIP stock once |
+| 15.1.37 | 2026-10-26 | Development | Operation-driven transfer target warehouse (never the WO header / first-operation WIP) |
 
 ---
 
@@ -968,6 +970,70 @@ the previous implementation (6 fail) and pass with the fix.
 - `tekson_manufacturing/tekson_manufacturing/page/material_planning/material_planning.js`
   — show skipped-item warnings in results
 - `tekson_manufacturing/tests/test_material_planning_qty.py` — new tests
+
+---
+
+## Version 15.1.37 — Operation-Driven Transfer Target Warehouse
+
+**Date:** 2026-10-26
+**Status:** On `develop` (v15.1.37)
+**Type:** Bug Fix
+
+### Problem
+Material Requests generated from the Daily Material Planning page (and rows
+in the Material Transfer Pick List report) sometimes targeted the wrong
+department WIP warehouse: material consumed by an operation on a different
+plant floor was sent to the Work Order header warehouse, which ERPNext
+derives from the BOM's **first** operation's workstation. Multi-operation
+BOMs span several plant floors, so the stock landed where no Job Card would
+ever consume it.
+
+The header warehouse was reached through two silent fallbacks:
+
+1. `target_wh = jc_map.get((wo, operation)) or wo.wip_warehouse` — the Job
+   Card map compared operation strings exactly, so a trailing whitespace (or
+   a duplicate/split Job Card row with an empty WIP) caused a miss and the
+   first-operation fallback won with no trace.
+2. The Pick List report never read `BOM Item.operation` at all — it always
+   used `wo.wip_warehouse`.
+
+### Fix
+New resolver `tekson_manufacturing/utils/operation_warehouse.py`:
+
+- **Chain (mirrors Job Card creation in `job_card_utils`):**
+  `BOM Item.operation` → matching `BOM Operation` row (whitespace tolerant)
+  → `workstation_type` (or a direct workstation link) → first `Workstation`
+  of that type → `plant_floor` → `WIP-{plant_floor} - TPL` (must exist).
+- **Never the WO header for operation-bearing items:** when configuration
+  cannot be resolved, the Job Card's `wip_warehouse` is used; if neither
+  resolves, the item is **skipped with a visible warning** on the Material
+  Planning page — never silently sent to the first-operation warehouse.
+- **Configuration wins over a stale Job Card**, and the mismatch is surfaced
+  as a warning ("re-save the Job Card to refresh its WIP warehouse").
+- **Robust Job Card map:** operation keys whitespace-trimmed; on
+  duplicate/split JCs the first non-empty `wip_warehouse` wins.
+- Items exploded from a child BOM resolve their operation against the child
+  BOM's routing first (`source_bom` propagated by `_explode_bom`), then the
+  parent BOM.
+- Items **without** an operation keep the previous behaviour (WO header WIP)
+  but now emit a warning, since BOMs are expected to carry operations.
+- Operation-bearing items no longer require a WO header WIP warehouse at all.
+- Pick List report: same resolution rule, plus a new **Operation** column.
+
+### Verification
+`tekson_manufacturing/tests/test_material_planning_qty.py` extended to 22
+tests (8 quantity + 8 target-resolution + 6 resolver contract), running
+standalone without a bench site. 7 of the 8 new target tests fail against
+the previous implementation; all 22 pass with the fix.
+
+### Files Changed
+- `tekson_manufacturing/utils/operation_warehouse.py` — new target resolver
+- `tekson_manufacturing/planning/material_planning_service.py` —
+  operation-driven target, whitespace-tolerant jc_map, new warnings,
+  `source_bom` on exploded leaves
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py`
+  — operation-driven target + Operation column
+- `tekson_manufacturing/tests/test_material_planning_qty.py` — 14 new tests
 
 ---
 

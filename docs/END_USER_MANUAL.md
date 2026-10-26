@@ -224,11 +224,12 @@ Click **Generate Material Requests**. The system:
 
 1. Finds all incomplete Work Orders starting on that date
 2. Calculates raw material requirements (skipping sub-assemblies with their own Work Orders)
-3. **Applies RM Loss %**: For each raw material, if a RM Loss % is defined on the BOM Item, the required quantity is increased by that percentage (Required = Base × (1 + RM Loss %))
-4. Totals the requirements across **all** of the day's Work Orders for each department
-5. Checks what's already in each department's WIP warehouse
-6. **Requests only the balance**: Qty = Required (incl. RM Loss %) − Available in WIP. Items are skipped only when the balance is zero or less
-7. Groups items by target WIP warehouse (department)
+3. **Resolves each item's target WIP warehouse from its operation**: the BOM Item's operation → that operation's workstation → its plant floor (e.g. `WIP-RP - TPL`). The Work Order's own (first-operation) warehouse is never used for items that carry an operation
+4. **Applies RM Loss %**: For each raw material, if a RM Loss % is defined on the BOM Item, the required quantity is increased by that percentage (Required = Base × (1 + RM Loss %))
+5. Totals the requirements across **all** of the day's Work Orders for each department
+6. Checks what's already in each department's WIP warehouse
+7. **Requests only the balance**: Qty = Required (incl. RM Loss %) − Available in WIP. Items are skipped only when the balance is zero or less
+8. Groups items by target WIP warehouse (department)
 
 **Step 4: Review Results**
 
@@ -236,7 +237,7 @@ You'll see a summary of created MRs:
 - Each MR is grouped by department WIP warehouse
 - Quantities are rounded up to whole numbers
 - Each MR is linked to the Production Plan
-- **Warnings** list anything skipped (e.g. a Work Order without a WIP warehouse, or an item without a valid source warehouse) so nothing disappears silently
+- **Warnings** list anything skipped or downgraded (a Work Order without a WIP warehouse, an item without a valid source warehouse, an item whose operation warehouse could not be resolved, a BOM Item without an operation, or a Job Card whose WIP warehouse disagrees with the operation's configuration) so nothing disappears silently
 
 ### 5.1.1 RM Loss % on Material Requests
 
@@ -282,10 +283,18 @@ The Pick List report shows what materials need to be transferred and where.
 |--------|---------|
 | Work Order | Which WO needs the material |
 | Item Code | Material item |
+| Item Name | Material description |
+| Operation | The BOM operation that consumes this material |
 | Required | Total quantity needed (includes RM Loss %) |
 | Available | Quantity available at source warehouse |
 | To Transfer | Quantity to transfer (Required − Already in WIP) |
-| To (WIP) | Target WIP warehouse (department) |
+| To (WIP) | Target WIP warehouse — the plant floor WIP of the item's **operation** (falls back to the Work Order WIP only when the item has no operation) |
+
+The target warehouse follows the same rule as Material Planning: BOM
+operation → workstation's plant floor → `WIP-{plant floor}`. If the
+operation's warehouse cannot be resolved from configuration, the Job Card's
+WIP warehouse is used; if that is also missing, the target cell is left
+blank instead of guessing.
 
 ### 5.3 Creating a Material Transfer
 

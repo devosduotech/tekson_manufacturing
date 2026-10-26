@@ -11,6 +11,8 @@ import math
 from datetime import date
 from typing import List, Dict, Any, Optional
 
+from tekson_manufacturing.utils import operation_warehouse as operation_warehouse_utils
+
 
 @frappe.whitelist()
 def search_production_plans(txt=None):
@@ -65,19 +67,21 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
 
     jc_map = {}
     if wo_names:
-        for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]}, ["work_order", "operation", "wip_warehouse"]):
-            jc_map[(jc.work_order, jc.operation)] = jc.wip_warehouse
+        for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]},
+                                 ["work_order", "operation", "wip_warehouse"],
+                                 order_by="name asc"):
+            # Whitespace-tolerant key; keep the first non-empty WIP so a
+            # split/duplicate Job Card with an empty warehouse cannot win.
+            key = (jc.work_order, (jc.operation or "").strip())
+            if key not in jc_map or not jc_map[key]:
+                jc_map[key] = jc.wip_warehouse or ""
 
     requirements = {}
     default_source_wh = None
+    operation_wh_cache = {}
 
     for wo in wos:
         if not wo.bom_no:
-            continue
-        if not wo.wip_warehouse:
-            warnings.append(
-                _("Work Order {0} has no WIP warehouse — its materials were skipped").format(wo.name)
-            )
             continue
 
         for item in _get_raw_bom_items(wo.bom_no, wo_bom_nos):
@@ -94,8 +98,44 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                 )
                 continue
 
-            target_wh = jc_map.get((wo.name, item.get("operation"))) if item.get("operation") else None
-            target_wh = target_wh or wo.wip_warehouse
+            # Target warehouse is driven by the BOM Item's operation — the
+            # Work Order header (first-operation) warehouse is never used for
+            # operation-bearing items. Chain: BOM Operation -> workstation ->
+            # plant floor -> WIP-{floor} - TPL; Job Card WIP as fallback.
+            operation = (item.get("operation") or "").strip()
+            if operation:
+                config_wh = operation_warehouse_utils.resolve_operation_warehouse(
+                    item.get("source_bom") or wo.bom_no,
+                    operation,
+                    fallback_bom_no=(wo.bom_no if item.get("source_bom")
+                                     and item.get("source_bom") != wo.bom_no else None),
+                    cache=operation_wh_cache,
+                )
+                jc_wh = jc_map.get((wo.name, operation)) or ""
+                target_wh = config_wh or jc_wh
+                if not target_wh:
+                    warnings.append(
+                        _("Item {0} on Work Order {1}: warehouse for operation {2} could not be "
+                          "resolved — material skipped").format(item["item_code"], wo.name, operation)
+                    )
+                    continue
+                if config_wh and jc_wh and config_wh != jc_wh:
+                    warnings.append(
+                        _("Work Order {0}: Job Card for operation {1} targets {2} but the operation "
+                          "warehouse is {3} — re-save the Job Card to refresh its WIP warehouse").format(
+                            wo.name, operation, jc_wh, config_wh)
+                    )
+            else:
+                if not wo.wip_warehouse:
+                    warnings.append(
+                        _("Work Order {0} has no WIP warehouse — its materials were skipped").format(wo.name)
+                    )
+                    continue
+                target_wh = wo.wip_warehouse
+                warnings.append(
+                    _("Item {0} on Work Order {1}: BOM Item has no operation — using the Work Order "
+                      "WIP warehouse {2}").format(item["item_code"], wo.name, wo.wip_warehouse)
+                )
 
             base_qty = item["qty"] * wo.qty
             if base_qty <= 0:
@@ -302,6 +342,10 @@ def _explode_bom(bom_no: str, _memo: Optional[dict] = None, _seen: Optional[set]
                 "uom": item.uom,
                 "source_warehouse": item.source_warehouse,
                 "operation": item.operation,
+                # BOM this leaf actually came from — its BOM Operation rows
+                # define the operation's workstation (and warehouse) even for
+                # items exploded from a child BOM.
+                "source_bom": bom_no,
             })
 
     _memo[bom_no] = result
