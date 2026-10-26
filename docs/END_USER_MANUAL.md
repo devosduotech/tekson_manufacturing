@@ -225,9 +225,10 @@ Click **Generate Material Requests**. The system:
 1. Finds all incomplete Work Orders starting on that date
 2. Calculates raw material requirements (skipping sub-assemblies with their own Work Orders)
 3. **Applies RM Loss %**: For each raw material, if a RM Loss % is defined on the BOM Item, the required quantity is increased by that percentage (Required = Base × (1 + RM Loss %))
-4. Checks what's already in each department's WIP warehouse
-5. Creates Material Requests only for items with actual shortages
-6. Groups items by target WIP warehouse (department)
+4. Totals the requirements across **all** of the day's Work Orders for each department
+5. Checks what's already in each department's WIP warehouse
+6. **Requests only the balance**: Qty = Required (incl. RM Loss %) − Available in WIP. Items are skipped only when the balance is zero or less
+7. Groups items by target WIP warehouse (department)
 
 **Step 4: Review Results**
 
@@ -235,6 +236,7 @@ You'll see a summary of created MRs:
 - Each MR is grouped by department WIP warehouse
 - Quantities are rounded up to whole numbers
 - Each MR is linked to the Production Plan
+- **Warnings** list anything skipped (e.g. a Work Order without a WIP warehouse, or an item without a valid source warehouse) so nothing disappears silently
 
 ### 5.1.1 RM Loss % on Material Requests
 
@@ -252,6 +254,12 @@ When Material Requests are generated, the following fields are populated for tra
 - RM Loss % = 3%
 - RM Loss Qty = 0.798 kg
 - **Qty (requested) = 28** (rounded up from 27.398)
+
+**When stock already exists in the WIP warehouse:** the quantities above show
+the *balance* only. Example: if 10 kg is already in the WIP warehouse, the
+balance is 27.398 − 10 = 17.398 kg → Qty = 18, and Qty as per BOM + RM Loss
+Qty add up to the same 17.398 kg balance. RM Loss % stays as defined on the
+BOM Item.
 
 The Manufacture Stock Entry also uses the same quantities (BOM qty + RM Loss qty) so there's enough material for production including expected wastage.
 
@@ -412,9 +420,10 @@ Backend APIs are ready but no frontend page exists yet. Planned features:
 
 **Material Request has wrong quantities**
 
-- The system only requests materials with actual shortages (required − WIP stock > 0)
-- If WIP warehouse already has stock, it won't be re-requested
+- The system only requests the balance: required (incl. RM Loss %) − stock already in the target WIP warehouse
+- If the WIP warehouse already covers an item's full requirement, that item is not requested at all
 - Quantities are rounded up to whole numbers
+- If an item seems missing, check the **warnings** on the Material Planning page — Work Orders without a WIP warehouse or items without a valid source warehouse are reported there
 
 **BOM Bulk Creator fails**
 

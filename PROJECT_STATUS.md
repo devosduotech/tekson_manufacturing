@@ -1,6 +1,6 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.27 (main) | v15.1.27 (develop)
+## Current Version: v15.1.36 (main) | v15.1.36 (develop)
 
 ---
 

@@ -908,6 +908,69 @@ Design, ...):
 
 ---
 
+## Version 15.1.36 — Daily Material Planning: Required Qty Bug Fix
+
+**Date:** 2026-10-26
+**Status:** On `develop` (v15.1.36)
+**Type:** Bug Fix
+
+### Problem
+Material Requests generated from the Daily Material Planning page computed the
+required quantity incorrectly whenever stock was already available in the
+department WIP warehouse. Depending on how stock was distributed across the
+day's Work Orders, the request either missed the balance needed to start the
+Job Card entirely, requested less than the balance, or requested the full BOM
+quantity while ignoring stock.
+
+Root causes in `generate_daily_material_requests()`:
+
+1. **Stock never deducted from Qty** — MR `qty` was the full theoretical
+   BOM qty + RM Loss (commit `e998206` repurposed `base_qty` for reporting
+   but the MR line still summed it into `qty`), so the accumulated shortage
+   was computed and then discarded.
+2. **Per-WO skip rule dropped requirements** — `if shortage <= 0: continue`
+   was evaluated per Work Order against the *full* WIP balance. Stock that
+   covered one WO individually (but not the day's total) caused that WO's
+   requirement to vanish, so combined balances were never requested.
+3. **Same stock counted repeatedly** — `in_wip` was re-read per WO
+   occurrence without decrementing, and keys included `source_warehouse`, so
+   stock was double-deducted when one item arrived from two source stores.
+4. **Bin lookup used `warehouse LIKE '%WIP%'`** — stock in a target
+   warehouse whose name does not contain "WIP" was invisible (counted as 0).
+
+### Fix
+- **Aggregate first, deduct once**: requirements are summed per
+  `(target WIP, item)` across all Work Orders of the day, then
+  `balance = required (incl. RM Loss) − stock in target WIP` is computed a
+  single time. Only a balance `<= 0` skips the item.
+- **MR `qty` = ceil(balance)** — the actual shortage, net of stock.
+- Traceability fields keep their invariant when stock exists:
+  `custom_bom_qty + custom_rm_loss_qty = balance` (pre-ceil), split by the
+  loss ratio, so the client script formula `loss = qty x pct / (1 + pct)`
+  still holds. `custom_rm_loss_pct` stays the true BOM loss %.
+- Multi-source items split the balance proportionally across source
+  warehouses (stock deducted once, not per source).
+- Bin stock is fetched for the exact `(item, target warehouse)` pairs in
+  play instead of a `%WIP%` pattern.
+- **Skips are now visible**: WOs without a WIP warehouse and items without a
+  valid source warehouse (Raw Material Stores / BOF Stores) are returned in
+  a `warnings` list and shown on the Material Planning page instead of being
+  silently dropped.
+
+### Verification
+New unit suite `tekson_manufacturing/tests/test_material_planning_qty.py`
+(8 tests, runs standalone without a bench site): all 8 fail-or-error against
+the previous implementation (6 fail) and pass with the fix.
+
+### Files Changed
+- `tekson_manufacturing/planning/material_planning_service.py` — MP-002
+  aggregate-then-deduct calculation + warnings
+- `tekson_manufacturing/tekson_manufacturing/page/material_planning/material_planning.js`
+  — show skipped-item warnings in results
+- `tekson_manufacturing/tests/test_material_planning_qty.py` — new tests
+
+---
+
 ## Related Documents
 
 - PHASE1_STATUS_REPORT.md - Overall project status

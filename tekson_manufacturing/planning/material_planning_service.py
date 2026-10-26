@@ -31,7 +31,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         planned_date: Planned start date (YYYY-MM-DD) — defaults to today
 
     Returns:
-        dict with created_mrs (list of MR names), total_items, errors
+        dict with created_mrs (list of MR names), total_items, warnings
     """
     if not planned_date:
         planned_date = date.today().strftime("%Y-%m-%d")
@@ -54,10 +54,13 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     # Build set of BOMs that have their own WOs — skip recursion into these
     wo_bom_nos = {wo.bom_no for wo in wos if wo.bom_no}
 
-    # MP-002: Calculate requirements per department WIP
-    dept_items = {}
+    # MP-002: Aggregate requirements per department WIP across ALL Work Orders
+    # first. Available stock must be deducted once per (WIP, item) — never once
+    # per Work Order — otherwise the same stock either covers several WOs at
+    # once (requirements get dropped) or the request ignores stock entirely.
+    warnings = []
 
-    # Pre-fetch: JC wip_warehouse, Bin stock — batched
+    # Pre-fetch: JC wip_warehouse — batched
     wo_names = [wo.name for wo in wos if wo.bom_no]
 
     jc_map = {}
@@ -65,62 +68,118 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]}, ["work_order", "operation", "wip_warehouse"]):
             jc_map[(jc.work_order, jc.operation)] = jc.wip_warehouse
 
-    item_codes = set()
-    for wo in wos:
-        if not wo.bom_no: continue
-        for item in _get_raw_bom_items(wo.bom_no, wo_bom_nos):
-            item_codes.add(item["item_code"])
-
-    bin_map = {}
-    if item_codes:
-        for b in frappe.get_all("Bin", {"item_code": ["in", list(item_codes)], "warehouse": ["like", "%WIP%"]}, ["item_code", "warehouse", "actual_qty"]):
-            key = (b.item_code, b.warehouse)
-            bin_map[key] = (bin_map.get(key, 0) + b.actual_qty) if key in bin_map else b.actual_qty
+    requirements = {}
+    default_source_wh = None
 
     for wo in wos:
         if not wo.bom_no:
             continue
         if not wo.wip_warehouse:
+            warnings.append(
+                _("Work Order {0} has no WIP warehouse — its materials were skipped").format(wo.name)
+            )
             continue
 
         for item in _get_raw_bom_items(wo.bom_no, wo_bom_nos):
-            source_wh = item.get("source_warehouse") or getattr(wo, 'source_warehouse', '') or _get_default_source_warehouse()
+            source_wh = item.get("source_warehouse") or getattr(wo, "source_warehouse", "") or ""
+            if not source_wh:
+                if default_source_wh is None:
+                    default_source_wh = _get_default_source_warehouse()
+                source_wh = default_source_wh
             if not _is_source_warehouse(source_wh):
+                warnings.append(
+                    _("Item {0}: no valid source warehouse (Raw Material Stores / BOF Stores) — skipped").format(
+                        item["item_code"]
+                    )
+                )
                 continue
 
             target_wh = jc_map.get((wo.name, item.get("operation"))) if item.get("operation") else None
             target_wh = target_wh or wo.wip_warehouse
 
             base_qty = item["qty"] * wo.qty
-            loss_pct = (item.get("rm_loss_pct", 0) or 0) / 100.0
-            required_qty = base_qty * (1 + loss_pct)
-            loss_qty = base_qty * loss_pct
-            in_wip = bin_map.get((item["item_code"], target_wh), 0)
-            shortage = max(0, required_qty - in_wip)
-            if shortage <= 0:
+            if base_qty <= 0:
                 continue
+            loss_pct = (item.get("rm_loss_pct", 0) or 0) / 100.0
 
-            key = (target_wh, item["item_code"], source_wh)
+            key = (target_wh, item["item_code"])
+            req = requirements.get(key)
+            if req is None:
+                req = requirements[key] = {
+                    "item_name": item.get("item_name", ""),
+                    "uom": item.get("uom", "Nos"),
+                    "base_qty": 0.0,
+                    "loss_qty": 0.0,
+                    "sources": {},
+                }
+            req["base_qty"] += base_qty
+            req["loss_qty"] += base_qty * loss_pct
+            req["sources"][source_wh] = req["sources"].get(source_wh, 0.0) + base_qty
+
+    warnings = list(dict.fromkeys(warnings))
+
+    if not requirements:
+        return {
+            "created_mrs": [],
+            "total_items": 0,
+            "message": _("No material requirements found for {0}").format(planned_date),
+            "warnings": warnings,
+        }
+
+    # Batch-fetch Bin stock for exactly the (item, target WIP) pairs in play
+    bin_map = {}
+    item_codes = sorted({key[1] for key in requirements})
+    warehouses = sorted({key[0] for key in requirements})
+    for b in frappe.get_all(
+        "Bin",
+        {"item_code": ["in", item_codes], "warehouse": ["in", warehouses]},
+        ["item_code", "warehouse", "actual_qty"],
+    ):
+        bin_key = (b.item_code, b.warehouse)
+        bin_map[bin_key] = bin_map.get(bin_key, 0) + b.actual_qty
+
+    # Balance = required (incl. RM Loss) - already available in the target WIP.
+    # Because aggregation happens first, a requirement is only dropped when
+    # stock truly covers the day's total — not just a single Work Order.
+    dept_items = {}
+    for (target_wh, item_code), req in requirements.items():
+        required_qty = req["base_qty"] + req["loss_qty"]
+        in_wip = bin_map.get((item_code, target_wh), 0) or 0
+        balance = required_qty - in_wip
+        if balance <= 1e-9:  # covers float noise when required == in_wip exactly
+            continue
+
+        # Split the balance into BOM portion + RM Loss portion so the
+        # Qty = custom_bom_qty + custom_rm_loss_qty invariant still holds.
+        # loss_ratio = loss / (base + loss) = loss_pct / (1 + loss_pct)
+        loss_ratio = (req["loss_qty"] / required_qty) if required_qty else 0
+        rm_loss_pct = (req["loss_qty"] / req["base_qty"]) * 100 if req["base_qty"] else 0
+        total_base = req["base_qty"] or 1.0
+
+        for source_wh, source_base in req["sources"].items():
+            line_qty = balance * (source_base / total_base)
+            line_loss_qty = line_qty * loss_ratio
+            key = (target_wh, item_code, source_wh)
             if target_wh not in dept_items:
                 dept_items[target_wh] = {}
-            if key not in dept_items[target_wh]:
-                dept_items[target_wh][key] = {
-                    "item_code": item["item_code"],
-                    "item_name": item.get("item_name", ""),
-                    "qty": 0,
-                    "base_qty": 0,
-                    "rm_loss_pct": item.get("rm_loss_pct", 0),
-                    "rm_loss_qty": 0,
-                    "from_warehouse": source_wh,
-                    "uom": item.get("uom", "Nos"),
-                }
-            dept_items[target_wh][key]["qty"] += shortage
-            # Store full theoretical BOM qty for reporting (not just shortage)
-            dept_items[target_wh][key]["base_qty"] += base_qty
-            dept_items[target_wh][key]["rm_loss_qty"] += loss_qty
+            dept_items[target_wh][key] = {
+                "item_code": item_code,
+                "item_name": req["item_name"],
+                "qty": line_qty,
+                "base_qty": line_qty - line_loss_qty,
+                "rm_loss_pct": rm_loss_pct,
+                "rm_loss_qty": line_loss_qty,
+                "from_warehouse": source_wh,
+                "uom": req["uom"],
+            }
 
     if not dept_items:
-        return {"created_mrs": [], "total_items": 0, "message": _("All materials already in WIP for {0}").format(planned_date)}
+        return {
+            "created_mrs": [],
+            "total_items": 0,
+            "message": _("All materials already in WIP for {0}").format(planned_date),
+            "warnings": warnings,
+        }
 
     # MP-003, MP-004, MP-005: Create/update MRs per department WIP
     created = []
@@ -148,17 +207,13 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             })
 
         for item_key, item_data in items.items():
-            base_qty = item_data.get("base_qty", 0)
-            rm_loss_qty = item_data.get("rm_loss_qty", 0)
-            final_qty = base_qty + rm_loss_qty
-
             mr.append("items", {
                 "item_code": item_data["item_code"],
                 "item_name": item_data.get("item_name", ""),
-                "qty": math.ceil(round(final_qty, 10)),
-                "custom_bom_qty": base_qty,
+                "qty": math.ceil(round(item_data["qty"], 10)),
+                "custom_bom_qty": item_data["base_qty"],
                 "custom_rm_loss_pct": item_data.get("rm_loss_pct", 0),
-                "custom_rm_loss_qty": rm_loss_qty,
+                "custom_rm_loss_qty": item_data["rm_loss_qty"],
                 "from_warehouse": item_data["from_warehouse"],
                 "warehouse": target_wh,
                 "uom": item_data.get("uom", "Nos"),
@@ -177,6 +232,7 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         "total_items": sum(c["items"] for c in created),
         "planned_date": planned_date,
         "details": created,
+        "warnings": warnings,
     }
 
 
