@@ -1,18 +1,18 @@
 # Tekson MES — Project Status & Session Handoff
 
 **Date:** 2026-10-27
-**Session:** Daily Material Planning — MR Qty + Operation-Driven Target WIP → v15.1.36–v15.1.38
-**Status:** ⏳ **v15.1.38 IN WORKING TREE — COMMIT/PUSH PENDING; TEST VM PULL + USER TRIAL**
+**Session:** Daily Material Planning — MR Qty + Operation-Driven Target WIP → v15.1.36–v15.1.39
+**Status:** ✅ **v15.1.39 RELEASED — AWAITING UAT PULL + RETRY**
 
 ---
 
-## Current Version: v15.1.38 (working tree)
+## Current Version: v15.1.39
 
 | Branch | Version | Status |
 |--------|---------|--------|
-| main | v15.1.37 | ✅ Released (commit `971c005`) |
-| develop | v15.1.37 + v15.1.38 changes | ⏳ Uncommitted working tree |
-| bom-bulk-creator | v15.1.37 | ✅ Released (commit `971c005`) |
+| main | v15.1.39 | ✅ Released |
+| develop | v15.1.39 | ✅ Released |
+| bom-bulk-creator | v15.1.39 | ✅ Released |
 
 ---
 
@@ -33,8 +33,13 @@
 - **Fix:** `normalize_operation()` (collapse whitespace + casefold) used for `BOM Operation` matching and for the Job Card `wip_warehouse` map in both Material Planning and the Pick List. Resolution chain and warnings unchanged
 - **Files:** `utils/operation_warehouse.py`, `planning/material_planning_service.py`, `reports/material_transfer_pick_list/material_transfer_pick_list.py`
 
+### Actionable Skip Warnings + Extra Fallbacks (v15.1.39)
+- **Problem:** UAT still skipped items after v15.1.38 (`warehouse for operation Tank Assembly could not be resolved`), and the message gave no clue which of the five links was missing — routing row without a workstation, unknown workstation type, workstation without `plant_floor`, missing `WIP-{floor} - TPL`, or no Job Card yet
+- **Fix:** the resolver collects a reason per failed link and the warning now names them; the Job Card's `workstation` → `plant_floor` is used when its `wip_warehouse` is blank; a *unique* `WIP-{floor}` naming variant is accepted (ambiguous matches are never guessed); the Pick List calls the shared `resolve_target_warehouse()` and logs the same reasons
+- **Files:** `utils/operation_warehouse.py`, `planning/material_planning_service.py`, `reports/material_transfer_pick_list/material_transfer_pick_list.py`
+
 ### Tests
-- `tekson_manufacturing/tests/test_material_planning_qty.py` — 25 tests, runs standalone (no bench site): 8 quantity + 10 target-resolution + 7 resolver contract. 7 of the 8 v15.1.37 target tests and all 3 v15.1.38 tests fail against the pre-fix code
+- `tekson_manufacturing/tests/test_material_planning_qty.py` — 30 tests, runs standalone (no bench site): 8 quantity + 12 target-resolution + 10 resolver contract. 7 of the 8 v15.1.37 target tests and all 3 v15.1.38 tests fail against the pre-fix code
 - Lint: new/touched files clean; `material_planning_service.py` rule profile unchanged vs baseline
 
 ### Operational Notes
@@ -55,8 +60,8 @@ Status: ✅ Synced
 
 ### Test / UAT VM
 ```
-Last observed: v15.1.37 (skip warnings + _comments error, 2026-10-26/27)
-Status: ⏳ Pull pending — git pull + bench build --force + bench restart for v15.1.38
+Last observed: v15.1.37/38 (skip warnings + _comments error, 2026-10-26/27)
+Status: ⏳ Pull pending — git pull + bench build --force + bench restart for v15.1.39
 Note: no bench migrate needed (no doctype changes)
 ```
 
@@ -65,7 +70,7 @@ Note: no bench migrate needed (no doctype changes)
 Remote: upstream (not origin)
 Branch: bom-bulk-creator
 Site: teksons.dev
-Status: Check current version; pull + restart if behind v15.1.38
+Status: Check current version; pull + restart if behind v15.1.39
 ```
 
 ### UAT Machine (cwd_admin@cwd)
@@ -73,7 +78,7 @@ Status: Check current version; pull + restart if behind v15.1.38
 Remote: origin
 Branch: main
 Site: tekson.site
-Status: Check current version; pull + restart if behind v15.1.38
+Status: Check current version; pull + restart if behind v15.1.39
 ```
 
 ---
@@ -103,17 +108,16 @@ cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && ben
 | `tekson_manufacturing/utils/operation_warehouse.py` | New operation → target WIP resolver |
 | `tekson_manufacturing/planning/material_planning_service.py` | Daily aggregation qty fix; operation-driven target; warnings; `source_bom` on leaves |
 | `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py` | Operation-driven target + Operation column |
-| `tekson_manufacturing/tests/test_material_planning_qty.py` | 25-test suite (17 new across v15.1.37/38) |
-| `tekson_manufacturing/__init__.py`, `pyproject.toml` | Version 15.1.38 |
+| `tekson_manufacturing/tests/test_material_planning_qty.py` | 30-test suite (22 new across v15.1.37–39) |
+| `tekson_manufacturing/__init__.py`, `pyproject.toml` | Version 15.1.39 |
 | `docs/CHANGELOG.md`, `docs/END_USER_MANUAL.md`, `docs/MATERIAL_TRANSFER_PICK_LIST_REPORT.md`, `PROJECT_STATUS.md`, `README.md`, `PENDING_FIXES.md` | Documentation refresh |
 
 ---
 
 ## Next Session Goals
 
-1. Commit + push v15.1.38 to `develop`, `main`, `bom-bulk-creator`
-2. On UAT: `git pull` + `bench build --force` + `bench clear-cache` + `bench restart`; hard-refresh the browser to clear the `_comments` list-view error
-3. Re-run the Material Planning trial for `WO/261027/0321`; if operation skips persist, run the diagnostic SQL in `PENDING_FIXES.md` (BOM Operation → Workstation → plant_floor → WIP warehouse)
-4. Re-run the standalone unit suite: `python3 tekson_manufacturing/tests/test_material_planning_qty.py` (25 tests)
-5. Work down `PENDING_FIXES.md` (P1 N+1 Bin lookups in the Pick List, dashboards)
-6. Customer UAT → production go-live preparation
+1. On UAT: `git pull` + `bench build --force` + `bench clear-cache` + `bench restart`; hard-refresh the browser to clear the `_comments` list-view error
+2. Re-run the Material Planning trial for `WO/261027/0321`; the skip warning now names the broken link — fix that configuration (routing workstation, `plant_floor`, or the `WIP-{floor} - TPL` warehouse) and re-run
+3. Re-run the standalone unit suite: `python3 tekson_manufacturing/tests/test_material_planning_qty.py` (30 tests)
+4. Work down `PENDING_FIXES.md` (P1 N+1 Bin lookups in the Pick List, dashboards)
+5. Customer UAT → production go-live preparation

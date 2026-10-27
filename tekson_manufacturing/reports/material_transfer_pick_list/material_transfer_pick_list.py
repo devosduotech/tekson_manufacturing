@@ -133,18 +133,21 @@ def get_data(filters):
     if not work_orders:
         return []
 
-    # Job Card WIP per (WO, operation) — fallback when BOM Operation
-    # configuration cannot be resolved. Case/whitespace-tolerant key; keep
-    # the first non-empty warehouse.
+    # Job Card WIP + workstation per (WO, operation) — fallbacks when BOM
+    # Operation configuration cannot be resolved. Case/whitespace-tolerant
+    # key; keep the first non-empty value of each.
     jc_map = {}
     for jc in frappe.get_all(
             'Job Card',
             filters={'work_order': ['in', [wo.name for wo in work_orders]]},
-            fields=['work_order', 'operation', 'wip_warehouse'],
+            fields=['work_order', 'operation', 'wip_warehouse', 'workstation'],
             order_by='name asc'):
         key = (jc.work_order, operation_warehouse_utils.normalize_operation(jc.operation))
-        if key not in jc_map or not jc_map[key]:
-            jc_map[key] = jc.wip_warehouse or ''
+        wip_wh, workstation = jc_map.get(key, ('', ''))
+        jc_map[key] = (
+            wip_wh or (jc.wip_warehouse or ''),
+            workstation or (jc.get('workstation') or ''),
+        )
 
     operation_wh_cache = {}
     result = []
@@ -169,19 +172,26 @@ def get_data(filters):
             source_wh = item.source_warehouse or wo.source_warehouse or ''
 
             # Target: driven by the BOM Item's operation (BOM Operation →
-            # workstation → plant floor WIP), Job Card WIP as fallback —
-            # never the WO header (first-operation) warehouse.
+            # workstation → plant floor WIP), Job Card WIP / workstation as
+            # fallback — never the WO header (first-operation) warehouse.
             operation = (item.get('operation') or '').strip()
+            reasons = []
             if operation:
-                target_wh = (
-                    operation_warehouse_utils.resolve_operation_warehouse(
-                        wo.bom_no, operation, cache=operation_wh_cache)
-                    or jc_map.get(
-                        (wo.name, operation_warehouse_utils.normalize_operation(operation)))
-                    or ''
+                jc_wh, jc_workstation = jc_map.get(
+                    (wo.name, operation_warehouse_utils.normalize_operation(operation)),
+                    ('', ''),
                 )
+                target_wh = operation_warehouse_utils.resolve_target_warehouse(
+                    wo.bom_no, operation, jc_warehouse=jc_wh, jc_workstation=jc_workstation,
+                    cache=operation_wh_cache, reasons=reasons)
             else:
                 target_wh = wo.wip_warehouse or ''
+
+            if operation and not target_wh and reasons:
+                frappe.logger().warning(
+                    f"Pick List Report: WO {wo.name} item {item.item_code} — no target warehouse "
+                    f"for operation '{operation}': " + '; '.join(reasons)
+                )
 
             # Check stock already in target WIP (already transferred)
             already_in_wip = 0.0

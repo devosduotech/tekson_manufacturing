@@ -80,10 +80,15 @@ warning.
    `Workstation` → `plant_floor` → `WIP-{plant_floor} - TPL` (must exist).
    If configuration
    cannot be resolved, the Job Card's `wip_warehouse` for that
-   (WO, operation) is used. **`Work Order.wip_warehouse` (the first-operation
+   (WO, operation) is used, and failing that the Job Card's
+   `workstation` → `plant_floor` (v15.1.39). A *unique* `WIP-{floor}` naming
+   variant is accepted when `WIP-{floor} - TPL` does not exist; ambiguous
+   matches are never guessed. **`Work Order.wip_warehouse` (the first-operation
    warehouse) is never used for items that carry an operation** — only for
    items with no operation, and if no target can be resolved the target cell
-   is left blank. Shared resolver: `utils/operation_warehouse.py`.
+   is left blank and the reason is logged
+   (`frappe.logger().warning`). Shared resolver:
+   `utils/operation_warehouse.py`.
 3. `already_in_wip` — `Bin.actual_qty` for the item in the **target** WIP warehouse
 4. `balance_to_transfer = max(0, required_total − already_in_wip)`
 

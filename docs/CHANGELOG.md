@@ -404,6 +404,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.36 | 2026-10-26 | Development | Daily Material Planning MR qty: aggregate requirements across the day, deduct WIP stock once |
 | 15.1.37 | 2026-10-26 | Development | Operation-driven transfer target warehouse (never the WO header / first-operation WIP) |
 | 15.1.38 | 2026-10-27 | Development | Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips) |
+| 15.1.39 | 2026-10-27 | Development | Skip warnings name the broken configuration link; Job Card workstation fallback; tolerant WIP warehouse naming |
 
 ---
 
@@ -1080,6 +1081,72 @@ standalone. The three new tests fail against the v15.1.37 code.
 - `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py`
   — normalised JC key
 - `tekson_manufacturing/tests/test_material_planning_qty.py` — 3 new tests
+
+---
+
+## Version 15.1.39 — Tell the User *Which* Link Broke
+
+**Date:** 2026-10-27
+**Status:** On `develop` (v15.1.39)
+**Type:** Bug Fix / Hardening
+
+### Problem
+v15.1.38 made operation matching case-insensitive, but UAT still skipped
+items with:
+
+> Item ALU- STD- 0049 on Work Order WO/261027/0321: warehouse for operation
+> Tank Assembly could not be resolved — material skipped
+
+The message said *that* the target could not be resolved, not *why*, so the
+cause had to be chased with SQL. The resolution chain has five links
+(BOM Operation row → workstation type → Workstation → `plant_floor` →
+`WIP-{floor} - TPL`), any of which can be missing on a live site:
+
+- the routing row exists but carries no `workstation_type` / `workstation`
+- no `Workstation` is registered for that type
+- the workstation has no `plant_floor`
+- `WIP-{plant_floor} - TPL` does not exist (or is spelled
+  `WIP - RP - TPL`, `WIP-RP-TPL`, …)
+- no Job Card exists yet, or its Job Card exists but `wip_warehouse` was
+  never saved
+
+### Fix
+- **Diagnostic reasons:** `resolve_operation_warehouse()` /
+  `resolve_target_warehouse()` accept a `reasons` list and record every
+  failed link. The Material Planning warning now reads
+  `… could not be resolved (routing row 'Tank Assembly' of BOM 'BOM-…' has
+  no workstation / workstation type; no Job Card WIP warehouse …) — material
+  skipped`. The Pick List report logs the same reasons via
+  `frappe.logger().warning()`.
+- **Job Card workstation fallback:** when the Job Card's `wip_warehouse` is
+  blank, its `workstation` → `plant_floor` → WIP warehouse is used — the same
+  rule `set_wip_warehouse` applies on Job Card save. Both consumers now fetch
+  `workstation` in the Job Card query.
+- **Tolerant WIP warehouse naming:** when `WIP-{plant_floor} - TPL` does not
+  exist, a *unique* variant of the same floor's WIP (e.g. `WIP - RP - TPL`)
+  is accepted and logged; two or more candidates are never guessed.
+- The Pick List report now calls the shared `resolve_target_warehouse()`
+  instead of duplicating the fallback order.
+- Resolution order and the "never the Work Order header warehouse for
+  operation-bearing items" rule are unchanged; configuration still wins over
+  a stale Job Card.
+
+### Verification
+`tekson_manufacturing/tests/test_material_planning_qty.py` extended to 30
+tests (8 quantity + 12 target-resolution + 10 resolver contract), all passing
+standalone. New coverage: Job Card workstation fallback (service + resolver),
+unique/ambiguous WIP naming variants, and the skip warning naming the broken
+link.
+
+### Files Changed
+- `tekson_manufacturing/utils/operation_warehouse.py` — reasons, workstation
+  fallback, WIP name variants, `find_wip_warehouse` /
+  `warehouse_for_workstation` helpers
+- `tekson_manufacturing/planning/material_planning_service.py` — diagnostic
+  skip warning, Job Card workstation fallback
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py`
+  — shared resolver call + warning log
+- `tekson_manufacturing/tests/test_material_planning_qty.py` — 5 new tests
 
 ---
 

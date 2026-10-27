@@ -238,6 +238,7 @@ You'll see a summary of created MRs:
 - Quantities are rounded up to whole numbers
 - Each MR is linked to the Production Plan
 - **Warnings** list anything skipped or downgraded (a Work Order without a WIP warehouse, an item without a valid source warehouse, an item whose operation warehouse could not be resolved, a BOM Item without an operation, or a Job Card whose WIP warehouse disagrees with the operation's configuration) so nothing disappears silently
+- When an operation warehouse could not be resolved, the warning also says **which part of the configuration is missing** — for example *"routing row 'Tank Assembly' of BOM 'BOM-…' has no workstation / workstation type"*, *"no Workstation of type 'Milling-WS'"*, *"Workstation WS-1 has no plant floor"*, *"warehouse WIP-RP - TPL does not exist for plant floor RP"* or *"no Job Card WIP warehouse for operation … on this Work Order"*. Fix that one item (add the workstation to the routing row, set the workstation's plant floor, or create the WIP warehouse) and re-run the planning
 
 ### 5.1.1 RM Loss % on Material Requests
 

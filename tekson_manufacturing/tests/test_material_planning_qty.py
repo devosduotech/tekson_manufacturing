@@ -134,6 +134,13 @@ class FakeFrappe:
                 wanted = set(wh_filter[1])
                 rows = [r for r in rows if r.warehouse in wanted]
             return list(rows)
+        if doctype == "Warehouse":
+            rows = [{"name": n} for n in sorted(self.warehouses)]
+            name_filter = (filters or {}).get("name")
+            if isinstance(name_filter, list) and name_filter and name_filter[0] == "like":
+                token = name_filter[1].strip("%")
+                rows = [r for r in rows if token.lower() in r["name"].lower()]
+            return rows
         return []
 
     def get_doc(self, *args, **kwargs):
@@ -143,6 +150,11 @@ class FakeFrappe:
 
     def log_error(self, *args, **kwargs):
         pass
+
+    def logger(self, *args, **kwargs):
+        return types.SimpleNamespace(warning=lambda *a, **k: None,
+                                     info=lambda *a, **k: None,
+                                     error=lambda *a, **k: None)
 
     def _db_get_value(self, doctype, filters, field=None, *args, **kwargs):
         if doctype == "BOM":
@@ -491,6 +503,41 @@ class TestOperationTargetWarehouse(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
 
+    def test_job_card_workstation_resolves_when_wip_blank(self):
+        """Job Card exists but its WIP was never saved — its workstation's
+        plant floor must still resolve the target (same rule JC creation
+        would apply)."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Tank Assembly")]}
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            jcs=[Row(name="JC-1", work_order="WO-1", operation="Tank Assembly",
+                     wip_warehouse="", workstation="WS-Tank-1")],
+            workstations=[make_workstation("WS-Tank-1", "", "RP")],
+            warehouses={self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+
+    def test_skip_warning_names_the_broken_link(self):
+        """The skip warning must tell the user which configuration link is
+        missing, not only that the material was skipped."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Milling")]}
+        result, fake = self.run_generate(
+            wos, bom_items,
+            bom_operations={
+                "BOM-1": [make_bom_operation("Milling", workstation_type="Milling-WS")]
+            },
+            workstations=[make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+            warehouses={self.WIP_FIRST_OP},  # WIP-RP - TPL missing
+        )
+        self.assertEqual(fake.mrs, [])
+        warning = next(w for w in result["warnings"] if "could not be resolved" in w)
+        self.assertIn("WIP-RP - TPL", warning)
+        self.assertIn("no Job Card", warning)
+
     def test_operation_item_resolves_even_when_wo_header_wip_missing(self):
         """Operation-bearing items no longer depend on the WO header WIP."""
         wos = [make_wo("WO-1", 1, "")]
@@ -582,6 +629,40 @@ class TestResolveTargetWarehouse(unittest.TestCase):
             "BOM-1", "Milling", fallback_warehouse="WIP-W - TPL", fake=fake
         )
         self.assertEqual(result, "")
+
+    def test_unique_wip_naming_variant_is_accepted(self):
+        """`WIP-{floor} - TPL` missing but a single variant of the same floor
+        exists (e.g. extra spaces) → use it instead of dropping material."""
+        fake = FakeFrappe(
+            bom_operations={
+                "BOM-1": [make_bom_operation("Milling", workstation_type="Milling-WS")]
+            },
+            workstations=[make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+            warehouses={"WIP - RP - TPL"},
+        )
+        self.assertEqual(self.resolve("BOM-1", "Milling", fake=fake), "WIP - RP - TPL")
+
+    def test_ambiguous_wip_variants_are_not_guessed(self):
+        """Two candidate warehouses for one plant floor → refuse to guess."""
+        fake = FakeFrappe(
+            bom_operations={
+                "BOM-1": [make_bom_operation("Milling", workstation_type="Milling-WS")]
+            },
+            workstations=[make_workstation("WS-Mill-1", "Milling-WS", "RP")],
+            warehouses={"WIP - RP - TPL", "WIP-RP-TPL"},
+        )
+        self.assertEqual(self.resolve("BOM-1", "Milling", fake=fake), "")
+
+    def test_job_card_workstation_fallback_in_resolver(self):
+        """No routing config, Job Card has a workstation but blank WIP."""
+        fake = FakeFrappe(
+            workstations=[make_workstation("WS-Tank-1", "", "RP")],
+            warehouses={self.WIP_OP},
+        )
+        result = self.resolve(
+            "BOM-1", "Tank Assembly", jc_workstation="WS-Tank-1", fake=fake
+        )
+        self.assertEqual(result, self.WIP_OP)
 
 
 if __name__ == "__main__":

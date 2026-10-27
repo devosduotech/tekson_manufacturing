@@ -68,13 +68,17 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
     jc_map = {}
     if wo_names:
         for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]},
-                                 ["work_order", "operation", "wip_warehouse"],
+                                 ["work_order", "operation", "wip_warehouse", "workstation"],
                                  order_by="name asc"):
-            # Case/whitespace-tolerant key; keep the first non-empty WIP so a
-            # split/duplicate Job Card with an empty warehouse cannot win.
+            # Case/whitespace-tolerant key; keep the first non-empty WIP /
+            # workstation so a split or duplicate Job Card with empty fields
+            # cannot win.
             key = (jc.work_order, operation_warehouse_utils.normalize_operation(jc.operation))
-            if key not in jc_map or not jc_map[key]:
-                jc_map[key] = jc.wip_warehouse or ""
+            wip_wh, workstation = jc_map.get(key, ("", ""))
+            jc_map[key] = (
+                wip_wh or (jc.wip_warehouse or ""),
+                workstation or (jc.get("workstation") or ""),
+            )
 
     requirements = {}
     default_source_wh = None
@@ -101,24 +105,40 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
             # Target warehouse is driven by the BOM Item's operation — the
             # Work Order header (first-operation) warehouse is never used for
             # operation-bearing items. Chain: BOM Operation -> workstation ->
-            # plant floor -> WIP-{floor} - TPL; Job Card WIP as fallback.
+            # plant floor -> WIP-{floor} - TPL; Job Card WIP (then its
+            # workstation) as fallback. Every failed link is reported so the
+            # user knows exactly what to fix.
             operation = (item.get("operation") or "").strip()
             if operation:
+                reasons = []
                 config_wh = operation_warehouse_utils.resolve_operation_warehouse(
                     item.get("source_bom") or wo.bom_no,
                     operation,
                     fallback_bom_no=(wo.bom_no if item.get("source_bom")
                                      and item.get("source_bom") != wo.bom_no else None),
                     cache=operation_wh_cache,
+                    reasons=reasons,
                 )
-                jc_wh = jc_map.get(
-                    (wo.name, operation_warehouse_utils.normalize_operation(operation))
-                ) or ""
+                jc_wh, jc_workstation = jc_map.get(
+                    (wo.name, operation_warehouse_utils.normalize_operation(operation)),
+                    ("", ""),
+                )
                 target_wh = config_wh or jc_wh
+                if not target_wh and jc_workstation:
+                    target_wh = operation_warehouse_utils.warehouse_for_workstation(
+                        jc_workstation, reasons
+                    )
                 if not target_wh:
+                    no_jc = _("no Job Card WIP warehouse for operation {0} on this "
+                              "Work Order").format(operation)
+                    if no_jc not in reasons:
+                        reasons.append(no_jc)
                     warnings.append(
                         _("Item {0} on Work Order {1}: warehouse for operation {2} could not be "
-                          "resolved — material skipped").format(item["item_code"], wo.name, operation)
+                          "resolved ({3}) — material skipped").format(
+                            item["item_code"], wo.name, operation,
+                            "; ".join(dict.fromkeys(reasons))
+                        )
                     )
                     continue
                 if config_wh and jc_wh and config_wh != jc_wh:

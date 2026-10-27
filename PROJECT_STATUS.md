@@ -1,18 +1,19 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.38 (main) | v15.1.38 (develop)
+## Current Version: v15.1.39 (main) | v15.1.39 (develop)
 
 ---
 
 ## Current Status (October 27, 2026)
 
-- **v15.1.38 — case/whitespace-insensitive operation matching** fixes UAT skips ("warehouse for operation … could not be resolved") caused by casing differences between the BOM Item, BOM Operation row and Job Card (working tree, commit pending). No `bench migrate` needed (no doctype changes): `git pull` + `bench restart`
+- **v15.1.39 released** — UAT skip warnings now name the broken configuration link (`routing row … has no workstation / workstation type`, `no Workstation of type …`, `Workstation … has no plant floor`, `warehouse WIP-RP - TPL does not exist for plant floor RP`, `no Job Card WIP warehouse …`). Also adds a Job Card `workstation` → `plant_floor` fallback and accepts a unique `WIP-{floor}` naming variant instead of dropping the material. No `bench migrate` needed (no doctype changes): `git pull` + `bench restart`
+- **v15.1.38** — case/whitespace-insensitive operation matching across BOM Item, BOM Operation row and Job Card (`normalize_operation`)
 - **v15.1.36 (MR qty fix) + v15.1.37 (operation-driven target WIP) released** — pushed to `develop`, `main`, and `bom-bulk-creator` as commit `971c005`
-- **Deployment pending on UAT** — last observed running **v15.1.37** (Oct 27: operation skip warnings + `_comments` list error); pull + `bench build --force` + restart to receive v15.1.38
+- **Deployment pending on UAT** — last observed running **v15.1.37/38** (Oct 27: operation skip warnings + `_comments` list error); pull + `bench build --force` + restart to receive v15.1.39
 - **User trial confirmed** the target-warehouse bug: a Job Card lookup miss (whitespace in the operation key) sent WO-2's materials to the first-operation WIP — fixed in v15.1.37
 - **UAT `Field not permitted in query: tabJob Card._comments`** — upstream Frappe security change (Sep 10, 2026 removed `_comments` from standard list fields) colliding with **stale frontend assets**; not a tekson_manufacturing issue. Fix: rebuild assets (`bench build --force`) + `bench clear-cache` + `bench restart`, then hard-refresh the browser
 - **Stock workspace `ImportError` (`_get_item_details` from `erpnext`)** — stale Python worker processes after an ERPNext-side update, *not* a tekson_manufacturing issue; resolved by server reboot
-- **Unit suite (no bench site needed):** `python3 tekson_manufacturing/tests/test_material_planning_qty.py` — 25 tests: 8 quantity + 10 target-resolution + 7 resolver contract
+- **Unit suite (no bench site needed):** `python3 tekson_manufacturing/tests/test_material_planning_qty.py` — 30 tests: 8 quantity + 12 target-resolution + 10 resolver contract
 
 ---
 
@@ -34,7 +35,7 @@
 - `validation/dependency_engine.py` — Operation dependencies
 
 ### 2. Daily Material Planning (Phase 1.1 — v15.1.x)
-**Status: ✅ Complete (v15.1.38)**
+**Status: ✅ Complete (v15.1.39)**
 
 - Generates Material Requests grouped by department WIP warehouse
 - Source warehouse fallback chain: `item.source_warehouse → wo.source_warehouse → default warehouse`
@@ -72,6 +73,12 @@
 - Operation names compared case- and whitespace-insensitively across BOM Item, BOM Operation and Job Card (`normalize_operation`)
 - Fixes UAT skips where `Tank Assembly` vs `TANK ASSEMBLY` produced "warehouse for operation … could not be resolved"
 - Job Card WIP fallback map uses the same normalised key in Material Planning and the Pick List
+
+**v15.1.39 — Actionable Skip Warnings + Extra Fallbacks:**
+- Skip warnings now state *which* link of the chain failed (routing row without a workstation, unknown workstation type, workstation without `plant_floor`, missing `WIP-{floor} - TPL` warehouse, no Job Card WIP)
+- Job Card `workstation` → `plant_floor` → WIP used as a fallback when the Job Card's `wip_warehouse` is blank (same rule as `set_wip_warehouse` on Job Card save)
+- A *unique* `WIP-{floor}` naming variant (e.g. `WIP - RP - TPL`) is accepted when the convention name is missing; ambiguous matches are never guessed
+- Pick List report logs the same reasons and now calls the shared `resolve_target_warehouse()`
 
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
@@ -148,6 +155,7 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 | v15.1.36 | Oct 26, 2026 | Daily Material Planning required-qty fix (aggregate, deduct WIP stock once) |
 | v15.1.37 | Oct 26, 2026 | Operation-driven transfer target warehouse (never first-operation WIP) |
 | v15.1.38 | Oct 27, 2026 | Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips) |
+| v15.1.39 | Oct 27, 2026 | Skip warnings name the broken link; Job Card workstation fallback; tolerant WIP naming |
 
 ---
 
@@ -237,6 +245,8 @@ git pull origin main
 - [x] Unresolvable operation warehouse → item skipped with a visible warning (v15.1.37)
 - [x] Config vs stale Job Card WIP mismatch → warning shown (v15.1.37)
 - [x] Operation matching ignores case/whitespace (v15.1.38)
+- [x] Unresolvable target → warning names the broken configuration link (v15.1.39)
+- [x] Job Card `workstation` → plant floor used when its WIP is blank (v15.1.39)
 
 ### Material Transfer Pick List
 - [x] Open-WO filter (Completed / Closed / Stopped / Cancelled excluded)

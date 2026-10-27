@@ -1,9 +1,9 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
 **Date:** Oct 12, 2026
-**Last Updated:** Oct 27, 2026 (v15.1.38)
+**Last Updated:** Oct 27, 2026 (v15.1.39)
 **Version:** v15.1.31 (on `develop`, pending tag)
-**Status:** HIGH items resolved; production bugs fixed in v15.1.36 / v15.1.37 / v15.1.38
+**Status:** HIGH items resolved; production bugs fixed in v15.1.36 / v15.1.37 / v15.1.38 / v15.1.39
 
 ---
 
@@ -93,9 +93,24 @@ consistent Frappe/ERPNext pair.
 
 ### Operation warehouse "could not be resolved" skips
 
-`resolve_operation_warehouse()` returns `''` when any link in
-`BOM Operation → Workstation → plant_floor → WIP-{floor} - TPL` is missing.
-Run this on the affected site (replace the WO/operation):
+**Since v15.1.39 the warning itself names the broken link** — read the
+parenthesised reason first, e.g.:
+
+| Reason in the warning | Fix |
+|-----------------------|-----|
+| `BOM '<bom>' routing has no operation '<op>' (routing: …)` | The BOM Item's operation is not a row in the routing (or lives in a different BOM) — add/correct it in the BOM |
+| `routing row '<op>' of BOM '<bom>' has no workstation / workstation type` | Set **Workstation Type** (or Workstation) on that routing row and submit the BOM |
+| `no Workstation of type '<type>'` | Create a Workstation with that **Workstation Type** |
+| `Workstation <ws> has no plant floor` | Set **Plant Floor** on the Workstation |
+| `warehouse WIP-<floor> - TPL does not exist for plant floor <floor>` | Create the department WIP warehouse with that exact name (a unique variant such as `WIP - RP - TPL` is auto-accepted; ambiguous ones are not) |
+| `no Job Card WIP warehouse for operation <op> on this Work Order` | Job Cards are not created yet for that operation, or their `wip_warehouse` is blank — re-save the Job Card(s) |
+
+Fallbacks applied automatically (v15.1.39): Job Card `wip_warehouse`, then
+Job Card `workstation` → `plant_floor` → WIP warehouse. The Work Order header
+(first-operation) warehouse is never used for items that carry an operation.
+
+If the reason is still unclear, run this on the affected site (replace the
+WO/operation):
 
 ```sql
 SET @bom := (SELECT bom_no FROM `tabWork Order` WHERE name = 'WO/261027/0321');
@@ -112,9 +127,8 @@ FROM `tabWorkstation` w;
 SELECT name FROM `tabWarehouse` WHERE name LIKE 'WIP-%';
 ```
 
-Since v15.1.38 operation matching ignores case and extra whitespace; if the
-warning persists, one of the links above is empty or the
-`WIP-{plant_floor} - TPL` warehouse does not exist.
+Since v15.1.38 operation matching ignores case and extra whitespace, so a
+mismatch in those three tables is no longer a cause on its own.
 
 ---
 
@@ -152,6 +166,7 @@ warning persists, one of the links above is empty or the
 | ~~NEW~~ | Daily Material Planning MR qty ignored WIP stock / dropped requirements covered only per-WO (no daily aggregation) | v15.1.36 |
 | ~~NEW~~ | MR + Pick List target fell back to the WO first-operation WIP when the Job Card lookup missed (key mismatch, no JC) — never fallback for operation-bearing items; operation-driven resolution added | v15.1.37 |
 | ~~NEW~~ | UAT skips: operation names compared case-sensitively across BOM Item / BOM Operation / Job Card (`Tank Assembly` vs `TANK ASSEMBLY`) | v15.1.38 |
+| ~~NEW~~ | UAT skips gave no clue *why* the operation warehouse failed to resolve; Job Card with a blank `wip_warehouse` had no fallback | v15.1.39 |
 
 ---
 
@@ -171,3 +186,4 @@ warning persists, one of the links above is empty or the
 - ✅ v15.1.36: Daily Material Planning required qty (aggregate across day, deduct WIP stock once)
 - ✅ v15.1.37: Operation-driven target warehouse for MRs + Pick List (never first-operation WO header)
 - ✅ v15.1.38: Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips)
+- ✅ v15.1.39: Skip warnings name the broken link; Job Card workstation fallback; unique `WIP-{floor}` naming variants accepted
