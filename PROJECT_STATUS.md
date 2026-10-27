@@ -1,6 +1,18 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.37 (main) | v15.1.37 (develop)
+## Current Version: v15.1.38 (main) | v15.1.38 (develop)
+
+---
+
+## Current Status (October 27, 2026)
+
+- **v15.1.38 — case/whitespace-insensitive operation matching** fixes UAT skips ("warehouse for operation … could not be resolved") caused by casing differences between the BOM Item, BOM Operation row and Job Card (working tree, commit pending). No `bench migrate` needed (no doctype changes): `git pull` + `bench restart`
+- **v15.1.36 (MR qty fix) + v15.1.37 (operation-driven target WIP) released** — pushed to `develop`, `main`, and `bom-bulk-creator` as commit `971c005`
+- **Deployment pending on UAT** — last observed running **v15.1.37** (Oct 27: operation skip warnings + `_comments` list error); pull + `bench build --force` + restart to receive v15.1.38
+- **User trial confirmed** the target-warehouse bug: a Job Card lookup miss (whitespace in the operation key) sent WO-2's materials to the first-operation WIP — fixed in v15.1.37
+- **UAT `Field not permitted in query: tabJob Card._comments`** — upstream Frappe security change (Sep 10, 2026 removed `_comments` from standard list fields) colliding with **stale frontend assets**; not a tekson_manufacturing issue. Fix: rebuild assets (`bench build --force`) + `bench clear-cache` + `bench restart`, then hard-refresh the browser
+- **Stock workspace `ImportError` (`_get_item_details` from `erpnext`)** — stale Python worker processes after an ERPNext-side update, *not* a tekson_manufacturing issue; resolved by server reboot
+- **Unit suite (no bench site needed):** `python3 tekson_manufacturing/tests/test_material_planning_qty.py` — 25 tests: 8 quantity + 10 target-resolution + 7 resolver contract
 
 ---
 
@@ -22,7 +34,7 @@
 - `validation/dependency_engine.py` — Operation dependencies
 
 ### 2. Daily Material Planning (Phase 1.1 — v15.1.x)
-**Status: ✅ Complete (v15.1.37)**
+**Status: ✅ Complete (v15.1.38)**
 
 - Generates Material Requests grouped by department WIP warehouse
 - Source warehouse fallback chain: `item.source_warehouse → wo.source_warehouse → default warehouse`
@@ -55,6 +67,11 @@
 - jc_map keys whitespace-trimmed; `source_bom` propagated by `_explode_bom` for child-BOM routing
 - Pick List report uses the same rule + new Operation column
 - Resolver: `utils/operation_warehouse.py` (shared by planning + pick list)
+
+**v15.1.38 — Case-Insensitive Operation Matching:**
+- Operation names compared case- and whitespace-insensitively across BOM Item, BOM Operation and Job Card (`normalize_operation`)
+- Fixes UAT skips where `Tank Assembly` vs `TANK ASSEMBLY` produced "warehouse for operation … could not be resolved"
+- Job Card WIP fallback map uses the same normalised key in Material Planning and the Pick List
 
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
@@ -124,6 +141,13 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 | v15.1.25 | Sep 12, 2026 | MR qty double-counting fix (wo_bom_nos filter) |
 | v15.1.26 | Sep 12, 2026 | Source warehouse contains match fix |
 | v15.1.27 | Sep 16, 2026 | BOM Bulk Creator bom_no fix (child BOM links blank) |
+| v15.1.32 | Oct 21, 2026 | Job Card readiness performance overhaul; WO cancel revert |
+| v15.1.33 | Oct 21, 2026 | Dependency lookup includes draft JCs; start-blocked message fix |
+| v15.1.34 | Oct 21, 2026 | Floor roles allowed for MES execution (JC complete / WO submit) |
+| v15.1.35 | Oct 23, 2026 | Role-model alignment (execution vs release gates) |
+| v15.1.36 | Oct 26, 2026 | Daily Material Planning required-qty fix (aggregate, deduct WIP stock once) |
+| v15.1.37 | Oct 26, 2026 | Operation-driven transfer target warehouse (never first-operation WIP) |
+| v15.1.38 | Oct 27, 2026 | Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips) |
 
 ---
 
@@ -144,16 +168,13 @@ Planned features:
 **Backend APIs exist** (`www/mes/dashboard.py`) but no frontend dashboard page has been built.
 
 ### 2. Material Transfer Pick List Report
-**Status: ❌ Not Started**
+**Status: ✅ Released (report work completed v15.1.31; operation-driven target + Operation column since v15.1.37)**
 
-Planned URL: `/app/query-report/Material%20Transfer%20Pick%20List`
-
-Planned features:
-- Shows materials to transfer for submitted WOs within a date range
-- Per-item: required qty, available qty at source, already-in-WIP qty, balance-to-transfer
-- Filters: from_date, to_date
-
-**Report definition exists** (`reports/material_transfer_pick_list/`) but needs testing and possible UI work.
+- Open-WO transfer rows: required, available at source, balance-to-transfer
+- Filters: From Date / To Date on `planned_start_date`
+- Target WIP resolved from the BOM Item's operation (same rule as Material Planning)
+- Documented in `docs/MATERIAL_TRANSFER_PICK_LIST_REPORT.md` and END_USER_MANUAL §5.2
+- Remaining polish tracked in `PENDING_FIXES.md` (P1 N+1 Bin lookups, P3 zero-balance rows, P5 hard-coded date defaults)
 
 ### 3. Planner Intelligence / Analytics
 **Status: ❌ Not Started**
@@ -184,14 +205,14 @@ Planned features:
 ```bash
 cd ~/frappe-bench/apps/tekson_manufacturing
 git fetch upstream && git reset --hard upstream/bom-bulk-creator
-cd ~/frappe-bench && bench --site teksons.dev migrate && bench build --clear && bench restart
+cd ~/frappe-bench && bench --site teksons.dev migrate && bench build --force && bench restart
 ```
 
 ### UAT Machine (cwd_admin@cwd)
 ```bash
 cd ~/cwd-bench/apps/tekson_manufacturing
 git pull origin main
-cd ~/cwd-bench && bench --site tekson.site migrate && bench build --clear && bench restart
+cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && bench restart
 ```
 
 ### Local Development
@@ -211,6 +232,15 @@ git pull origin main
 - [x] MR only requests actual shortages (WIP stock deducted)
 - [x] No double-counting of sub-assembly materials
 - [x] Leaf WOs request only direct raw materials
+- [x] MR qty = required (incl. RM Loss) − stock in target WIP, aggregated across the day's WOs (v15.1.36)
+- [x] Target WIP resolved from BOM Item operation — never the first-operation WO header (v15.1.37)
+- [x] Unresolvable operation warehouse → item skipped with a visible warning (v15.1.37)
+- [x] Config vs stale Job Card WIP mismatch → warning shown (v15.1.37)
+- [x] Operation matching ignores case/whitespace (v15.1.38)
+
+### Material Transfer Pick List
+- [x] Open-WO filter (Completed / Closed / Stopped / Cancelled excluded)
+- [x] Operation column + operation-driven target WIP (v15.1.37)
 
 ### BOM Bulk Creator
 - [x] Create multi-level BOM hierarchy as Draft

@@ -403,6 +403,7 @@ See `docs/V15.1.5_RELEASE_NOTES.md` for full details.
 | 15.1.35 | 2026-10-23 | Development | Role-model alignment: JC vs WO-release gates; workspace / pick list / BOM Bulk Creator audiences |
 | 15.1.36 | 2026-10-26 | Development | Daily Material Planning MR qty: aggregate requirements across the day, deduct WIP stock once |
 | 15.1.37 | 2026-10-26 | Development | Operation-driven transfer target warehouse (never the WO header / first-operation WIP) |
+| 15.1.38 | 2026-10-27 | Development | Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips) |
 
 ---
 
@@ -1034,6 +1035,51 @@ the previous implementation; all 22 pass with the fix.
 - `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py`
   — operation-driven target + Operation column
 - `tekson_manufacturing/tests/test_material_planning_qty.py` — 14 new tests
+
+---
+
+## Version 15.1.38 — Case-Insensitive Operation Matching
+
+**Date:** 2026-10-27
+**Status:** On `develop` (v15.1.38)
+**Type:** Bug Fix / Hardening
+
+### Problem
+On UAT, Daily Material Planning skipped items with:
+
+> Item … on Work Order …: warehouse for operation Tank Assembly could not
+> be resolved — material skipped
+
+while the same configuration resolved on the Test VM. The resolver compared
+operation strings with only whitespace trimming, so any casing difference
+between the BOM Item's `operation`, the `BOM Operation` routing row, or the
+Job Card's `operation` (duplicate Operation masters such as
+`Tank Assembly` vs `TANK ASSEMBLY`) produced a miss. A Job Card fallback
+with different casing was missed for the same reason, leaving the item with
+no target warehouse.
+
+### Fix
+- New `normalize_operation()` helper in `utils/operation_warehouse.py`:
+  collapses internal whitespace and case-folds the operation name.
+- `resolve_operation_warehouse()` matches `BOM Operation.operation` with
+  that key (was: whitespace-trimmed only).
+- The Job Card `wip_warehouse` map in both consumers is keyed with the same
+  normalisation, so a JC whose operation casing differs from the BOM Item
+  still provides the fallback.
+- No change to the resolution chain, warnings, or the "never the WO header"
+  rule.
+
+### Verification
+`tekson_manufacturing/tests/test_material_planning_qty.py` extended to 25
+tests (8 quantity + 10 target-resolution + 7 resolver contract), all passing
+standalone. The three new tests fail against the v15.1.37 code.
+
+### Files Changed
+- `tekson_manufacturing/utils/operation_warehouse.py` — `normalize_operation`
+- `tekson_manufacturing/planning/material_planning_service.py` — normalised JC key
+- `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py`
+  — normalised JC key
+- `tekson_manufacturing/tests/test_material_planning_qty.py` — 3 new tests
 
 ---
 

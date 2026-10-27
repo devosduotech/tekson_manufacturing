@@ -134,15 +134,15 @@ def get_data(filters):
         return []
 
     # Job Card WIP per (WO, operation) — fallback when BOM Operation
-    # configuration cannot be resolved. Whitespace-tolerant key; keep the
-    # first non-empty warehouse.
+    # configuration cannot be resolved. Case/whitespace-tolerant key; keep
+    # the first non-empty warehouse.
     jc_map = {}
     for jc in frappe.get_all(
             'Job Card',
             filters={'work_order': ['in', [wo.name for wo in work_orders]]},
             fields=['work_order', 'operation', 'wip_warehouse'],
             order_by='name asc'):
-        key = (jc.work_order, (jc.operation or '').strip())
+        key = (jc.work_order, operation_warehouse_utils.normalize_operation(jc.operation))
         if key not in jc_map or not jc_map[key]:
             jc_map[key] = jc.wip_warehouse or ''
 
@@ -176,7 +176,8 @@ def get_data(filters):
                 target_wh = (
                     operation_warehouse_utils.resolve_operation_warehouse(
                         wo.bom_no, operation, cache=operation_wh_cache)
-                    or jc_map.get((wo.name, operation))
+                    or jc_map.get(
+                        (wo.name, operation_warehouse_utils.normalize_operation(operation)))
                     or ''
                 )
             else:

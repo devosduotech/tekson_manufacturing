@@ -23,6 +23,16 @@ warning so the Job Card can be re-saved.
 import frappe
 
 
+def normalize_operation(operation) -> str:
+    """Case- and whitespace-insensitive key for operation names.
+
+    BOM Item / BOM Operation / Job Card all store the operation as a Link,
+    but the link values can differ in case or spacing (duplicate Operation
+    masters, trailing spaces) while still meaning the same routing step.
+    """
+    return " ".join((operation or "").split()).casefold()
+
+
 def _warehouse_for_workstation_type(ws_type: str) -> str:
     """workstation_type -> first workstation -> plant_floor -> WIP warehouse."""
     if not ws_type:
@@ -48,12 +58,12 @@ def _warehouse_for_workstation_type(ws_type: str) -> str:
 def resolve_operation_warehouse(bom_no, operation, fallback_bom_no=None, cache=None) -> str:
     """
     Configuration-derived WIP warehouse for `operation` — '' when it cannot
-    be resolved. Operation matching ignores leading/trailing whitespace.
+    be resolved. Operation matching ignores case and surrounding whitespace.
 
     `cache` is an optional dict reused across a batch of lookups (BOM
     Operation rows are fetched once per BOM, results memoised per operation).
     """
-    operation = (operation or "").strip()
+    operation = normalize_operation(operation)
     if not operation:
         return ""
 
@@ -81,7 +91,7 @@ def resolve_operation_warehouse(bom_no, operation, fallback_bom_no=None, cache=N
                 order_by="idx asc",
             )
         for row in cache[rows_key]:
-            if (row.get("operation") or "").strip() != operation:
+            if normalize_operation(row.get("operation")) != operation:
                 continue
             warehouse = _warehouse_for_workstation_type(
                 row.get("workstation_type") or row.get("workstation")
@@ -108,7 +118,7 @@ def resolve_target_warehouse(bom_no, operation, source_bom=None,
     a Job Card resolves it — callers must skip such lines instead of
     silently falling back to the first-operation warehouse.
     """
-    if not (operation or "").strip():
+    if not normalize_operation(operation):
         return fallback_warehouse or ""
 
     primary = source_bom or bom_no

@@ -1,5 +1,8 @@
 # Session Handoff
 
+> **Historical record (Sep 16, 2026).** Current project status lives in
+> `SESSION_HANDOFF_STATUS.md` (v15.1.37, Oct 26, 2026).
+
 **Date:** Sep 16, 2026
 **Version:** v15.1.27
 **Status:** BOM Bulk Creator bom_no Fix — Released & Verified

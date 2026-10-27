@@ -70,9 +70,9 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
         for jc in frappe.get_all("Job Card", {"work_order": ["in", wo_names]},
                                  ["work_order", "operation", "wip_warehouse"],
                                  order_by="name asc"):
-            # Whitespace-tolerant key; keep the first non-empty WIP so a
+            # Case/whitespace-tolerant key; keep the first non-empty WIP so a
             # split/duplicate Job Card with an empty warehouse cannot win.
-            key = (jc.work_order, (jc.operation or "").strip())
+            key = (jc.work_order, operation_warehouse_utils.normalize_operation(jc.operation))
             if key not in jc_map or not jc_map[key]:
                 jc_map[key] = jc.wip_warehouse or ""
 
@@ -111,7 +111,9 @@ def generate_daily_material_requests(production_plan: str = None, planned_date: 
                                      and item.get("source_bom") != wo.bom_no else None),
                     cache=operation_wh_cache,
                 )
-                jc_wh = jc_map.get((wo.name, operation)) or ""
+                jc_wh = jc_map.get(
+                    (wo.name, operation_warehouse_utils.normalize_operation(operation))
+                ) or ""
                 target_wh = config_wh or jc_wh
                 if not target_wh:
                     warnings.append(

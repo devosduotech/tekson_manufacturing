@@ -461,6 +461,36 @@ class TestOperationTargetWarehouse(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
 
+    def test_operation_config_match_is_case_insensitive(self):
+        """UAT: BOM Item 'Tank Assembly' vs BOM Operation 'TANK ASSEMBLY'."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Tank Assembly")]}
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            bom_operations={
+                "BOM-1": [make_bom_operation("TANK ASSEMBLY", workstation_type="Tank-WS")]
+            },
+            workstations=[make_workstation("WS-Tank-1", "Tank-WS", "RP")],
+            warehouses={self.WIP_OP},
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+
+    def test_job_card_fallback_matches_operation_case_insensitively(self):
+        """No BOM Operation config → Job Card WIP fallback must still match
+        when the JC stores the operation with different casing."""
+        wos = [make_wo("WO-1", 1, self.WIP_FIRST_OP)]
+        bom_items = {"BOM-1": [make_bom_item("ITEM-X", 10, operation="Tank Assembly")]}
+        _result, fake = self.run_generate(
+            wos, bom_items,
+            jcs=[Row(name="JC-1", work_order="WO-1", operation="tank assembly",
+                     wip_warehouse=self.WIP_OP)],
+        )
+        lines = self.all_lines(fake)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["warehouse"], self.WIP_OP)
+
     def test_operation_item_resolves_even_when_wo_header_wip_missing(self):
         """Operation-bearing items no longer depend on the WO header WIP."""
         wos = [make_wo("WO-1", 1, "")]
@@ -528,6 +558,17 @@ class TestResolveTargetWarehouse(unittest.TestCase):
             warehouses={"WIP-BOF - TPL"},
         )
         self.assertEqual(self.resolve("BOM-1", "Drill", fake=fake), "WIP-BOF - TPL")
+
+    def test_operation_match_is_case_insensitive(self):
+        """Operation masters differ in casing between BOM Item and routing."""
+        fake = FakeFrappe(
+            bom_operations={
+                "BOM-1": [make_bom_operation("TANK ASSEMBLY", workstation_type="Tank-WS")]
+            },
+            workstations=[make_workstation("WS-Tank-1", "Tank-WS", "RP")],
+            warehouses={self.WIP_OP},
+        )
+        self.assertEqual(self.resolve("BOM-1", "Tank Assembly", fake=fake), self.WIP_OP)
 
     def test_missing_warehouse_returns_empty(self):
         """Plant floor resolves but the WIP warehouse does not exist."""
