@@ -1148,6 +1148,11 @@ link.
   — shared resolver call + warning log
 - `tekson_manufacturing/tests/test_material_planning_qty.py` — 5 new tests
 
+### Release Notes
+See `docs/V15.1.39_RELEASE_NOTES.md` — consolidates v15.1.34–v15.1.39
+(role gates, MR qty, operation-driven target warehouse, case-insensitive
+matching, diagnostic skip warnings) into the `v15.1.39` tagged release.
+
 ---
 
 ## Related Documents

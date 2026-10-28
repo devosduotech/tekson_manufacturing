@@ -132,7 +132,30 @@ mismatch in those three tables is no longer a cause on its own.
 
 ---
 
-## Release Preparation Checklist (v15.1.31)
+## Release Preparation Checklist (v15.1.39)
+
+- [x] Decide the version number and bump `pyproject.toml` + `tekson_manufacturing/__init__.py` (15.1.39)
+- [x] Land the v15.1.34–v15.1.39 fixes (role gates, MR qty, operation-driven target, case-insensitive matching, diagnostic warnings)
+- [x] Write `docs/V15.1.39_RELEASE_NOTES.md`
+- [x] Run the standalone unit suite — 30 tests pass
+- [x] Commit to `develop`; fast-forward `main` and `bom-bulk-creator`; push all three
+- [x] Tag `v15.1.39` and create the GitHub release
+- [ ] Apply the site repair snippet on **every** deployed site
+      (`prepared_report = 0`, `disable_prepared_report_automation = 1`)
+- [ ] Confirm `git pull` on each site is on `develop` or `main`, not a side branch
+- [ ] On each site: `bench --site <site> migrate` (syncs v15.1.35 permission
+      JSON for the Pick List report, BOM Bulk Creator and workspace)
+      + `bench build --force` (clears the `_comments` stale-asset error)
+      + `bench clear-cache` + `bench restart`
+- [ ] Smoke-test on UAT: report filters render, 10 columns incl. Operation,
+      rows for open WOs only; Material Planning warnings name the broken link
+- [ ] Deferred to a later release: P1–P5 (Pick List N+1 Bin lookups, legacy
+      `wip_warehouse` JSON column, zero-balance rows, debug logs, hard-coded
+      date defaults) and M10/M11
+
+---
+
+## Release Preparation Checklist (v15.1.31) — superseded
 
 - [x] Decide the version number and bump `pyproject.toml` + `tekson_manufacturing/__init__.py` (15.1.31)
 - [ ] Land P1–P5 above (or explicitly defer them in the release notes)

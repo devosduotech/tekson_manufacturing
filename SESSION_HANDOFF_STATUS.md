@@ -61,8 +61,8 @@ Status: ✅ Synced
 ### Test / UAT VM
 ```
 Last observed: v15.1.37/38 (skip warnings + _comments error, 2026-10-26/27)
-Status: ⏳ Pull pending — git pull + bench build --force + bench restart for v15.1.39
-Note: no bench migrate needed (no doctype changes)
+Status: ⏳ Pull pending — git pull + bench --site tekson.site migrate + bench build --force + bench restart for v15.1.39
+Note: bench migrate required — v15.1.35 permission JSON (Pick List report, BOM Bulk Creator, workspace) syncs on migrate
 ```
 
 ### Dev Machine (karthic@teksons-development)
@@ -116,7 +116,7 @@ cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && ben
 
 ## Next Session Goals
 
-1. On UAT: `git pull` + `bench build --force` + `bench clear-cache` + `bench restart`; hard-refresh the browser to clear the `_comments` list-view error
+1. On UAT: `git pull` + `bench --site tekson.site migrate` + `bench build --force` + `bench clear-cache` + `bench restart`; hard-refresh the browser to clear the `_comments` list-view error (migrate syncs the v15.1.35 permission JSON)
 2. Re-run the Material Planning trial for `WO/261027/0321`; the skip warning now names the broken link — fix that configuration (routing workstation, `plant_floor`, or the `WIP-{floor} - TPL` warehouse) and re-run
 3. Re-run the standalone unit suite: `python3 tekson_manufacturing/tests/test_material_planning_qty.py` (30 tests)
 4. Work down `PENDING_FIXES.md` (P1 N+1 Bin lookups in the Pick List, dashboards)
