@@ -177,6 +177,20 @@ mismatch in those three tables is no longer a cause on its own.
 
 ---
 
+## Operational findings — v15.1.40 Test Server run
+
+### MEDIUM (1)
+| ID | File | Issue |
+|----|------|-------|
+| O1 | `security/security_utils.py:223` | Every **successful** Work Order submit, Stock Entry submit and Job Card completion writes an `Error Log` document (`Security Event: …`). `teksons.dev` logged ~750 of these in 24 h (428 `JOB_CARD_COMPLETE`, 324 `STOCK_ENTRY_SUBMIT`), all successful actions — none were `*_ERROR`. This is audit data, not an error: it inflates `Error Log` and hides genuine failures. Route success events to a dedicated audit sink (or `frappe.logger`) and keep `frappe.log_error` for the `*_ERROR` variants. No purge is needed now — Frappe auto-clears `Error Log` after 14 days. |
+
+The 41,623 MES rows reported on 2026-10-29 are the pre-v15.1.32 debug
+breadcrumbs (`MES refresh_work_order`, `MES validate hook…`, `MES DEPENDENCY…`);
+their latest entry is 2026-10-22, so that logging is confirmed stopped and the
+backlog will age out on its own.
+
+---
+
 ## Release Preparation Checklist (v15.1.31) — superseded
 
 - [x] Decide the version number and bump `pyproject.toml` + `tekson_manufacturing/__init__.py` (15.1.31)
