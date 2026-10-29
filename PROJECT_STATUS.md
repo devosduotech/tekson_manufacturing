@@ -6,7 +6,7 @@
 
 ## Current Status (October 29, 2026)
 
-- **v15.1.40 on `develop` (Test Server build)** — Job Card allocation now routes by **BOM Operation Workstation Type** and rotates across the eligible machines of that type instead of always picking the first. New shared `pick_workstation()` service with a `candidates` seam for future capacity planning; workload split into `active_load` (compared with `production_capacity`), `open_load` (queue, tie-break only) and `last_used` (real production activity, not Job Card creation). No doctype/field/permission changes: `git pull` + `bench restart` (no migrate/build). **Capacity planning must stay disabled** (`Manufacturing Settings → Disable Capacity Planning`) — ERPNext's scheduling pick runs before the Job Card hook and is respected. Verify with diagnostic section 7. Not yet on UAT / Live.
+- **v15.1.40 on `develop` (Test Server build)** — Job Card allocation now routes by **BOM Operation Workstation Type** and rotates across the eligible machines of that type instead of always picking the first. New shared `pick_workstation()` service with a `candidates` seam for future capacity planning; workload split into `active_load` (compared with `production_capacity`), `open_load` (queue, balanced before LRU) and `last_used` (real production activity, not Job Card creation). No doctype/field/permission changes: `git pull` + `bench restart` (no migrate/build). **Capacity planning must stay disabled** (`Manufacturing Settings → Disable Capacity Planning`) — ERPNext's scheduling pick runs before the Job Card hook and is respected. Verify with diagnostic section 7. Not yet on UAT / Live.
 - **v15.1.39 released** — UAT skip warnings now name the broken configuration link (`routing row … has no workstation / workstation type`, `no Workstation of type …`, `Workstation … has no plant floor`, `warehouse WIP-RP - TPL does not exist for plant floor RP`, `no Job Card WIP warehouse …`). Also adds a Job Card `workstation` → `plant_floor` fallback and accepts a unique `WIP-{floor}` naming variant instead of dropping the material. The planning fixes (v15.1.36–39) need no `bench migrate`, but this release also carries v15.1.35 role/permission JSON (Pick List report, BOM Bulk Creator, workspace) — sites upgrading from `v15.1.33` **must** run `bench migrate`: `git pull` + `bench --site <site> migrate` + `bench build --force` + `bench restart`
 - **v15.1.38** — case/whitespace-insensitive operation matching across BOM Item, BOM Operation row and Job Card (`normalize_operation`)
 - **v15.1.36 (MR qty fix) + v15.1.37 (operation-driven target WIP) released** — pushed to `develop`, `main`, and `bom-bulk-creator` as commit `971c005`
@@ -83,13 +83,13 @@
 
 **v15.1.40 — Workstation Type Rotation:**
 - Allocation key is the BOM Operation **Workstation Type**, resolved to a group of interchangeable machines; the Job Card's copied `workstation_type` is the fallback
-- `pick_workstation()` rotates within the type: not at capacity → least recently used → fewest queued Job Cards → name
-- `active_load` (`Work In Progress` / `On Hold`) vs `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is a tie-break only
+- `pick_workstation()` rotates within the type: not at capacity → fewest queued Job Cards → least recently used → name
+- `active_load` (`Work In Progress` / `On Hold`) vs `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is ordered before `last_used` so new cards spread across the type, and is never a hard availability filter
 - `last_used` comes from `actual_end_date` (or `NOW()` for a running card), not from Job Card creation; cancelled cards are ignored
 - Only `Maintenance` / `Problem` are excluded; `Off` / `Idle` stay eligible
 - Pre-assigned and capacity-planner workstations are never replaced; `scheduled_time_logs` are never overridden
 - Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
-- All machines at capacity still assigns the least recently used one (Work Order submission is never blocked) and warns
+- All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns
 - Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable types, multi-floor types and capacity overflow
 
 **Key Files:**

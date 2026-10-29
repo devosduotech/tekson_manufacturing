@@ -77,10 +77,10 @@ def workstation_workload(workstation_names):
                     (status in ACTIVE_JOB_CARD_STATUSES, docstatus < 2).
                     This is the number compared with production_capacity.
       open_load   - Job Cards still in the queue (anything not Completed or
-                    Cancelled, docstatus < 2). Includes active_load. Used as a
-                    tie-breaker, never as a hard availability filter: a large
-                    batch of future Job Cards must not make a machine look
-                    unavailable today.
+                    Cancelled, docstatus < 2). Includes active_load. Used to
+                    spread queued work evenly; never a hard availability filter:
+                    a large batch of future Job Cards must not make a machine
+                    look unavailable today.
       last_used   - latest actual production activity on the machine: the Job
                     Card's actual end date, or "now" while a Job Card is still
                     running (no actual end date yet). Queued Job Cards that never
@@ -158,8 +158,8 @@ def pick_workstation(workstation_type, reasons=None, candidates=None):
     workstation should this Job Card go to?" so the same rules can be used by
     the current allocation hook and by a future capacity planner.
 
-    Current phase: least-recently-used rotation across eligible workstations
-    of `workstation_type`.
+    Current phase: queue-balanced least-recently-used rotation across eligible
+    workstations of `workstation_type`.
 
     Future capacity planning: the planner should compute which workstations
     have a free time slot for the operation (working hours, holidays, existing
@@ -171,9 +171,11 @@ def pick_workstation(workstation_type, reasons=None, candidates=None):
     Ordering (best first):
       1. machines not already at their concurrent capacity (active_load <
          production_capacity) before those that are
-      2. least recently used first, based on actual production activity
+      2. fewest queued Job Cards (open_load), so a batch of new Job Cards is
+         spread across the type instead of stacking on the least recently used
+         machine
+      3. least recently used first, based on actual production activity
          (machines that have never run work sort first)
-      3. fewest queued Job Cards (open_load) as a load-balancing tie-break
       4. workstation name (stable tie-break)
 
     Args:
@@ -224,8 +226,8 @@ def pick_workstation(workstation_type, reasons=None, candidates=None):
         capacity = ws.production_capacity or 1
         return (
             metrics["active_load"] >= capacity,
-            metrics["last_used"],
             metrics["open_load"],
+            metrics["last_used"],
             ws.name,
         )
 
@@ -234,7 +236,7 @@ def pick_workstation(workstation_type, reasons=None, candidates=None):
     if usable[0] and selection_key(usable[0])[0] and reasons is not None:
         reasons.append(
             f"all Workstations of type '{workstation_type}' are running at "
-            f"capacity; assigned least recently used (job creation is not "
+            f"capacity; assigned the least loaded machine (job creation is not "
             f"blocked)"
         )
 

@@ -1176,12 +1176,14 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   candidates=...)` in `utils/job_card_utils.py` is the single decision point.
   The `candidates` argument is the integration seam for scheduling.
 - **Selection order:** not at concurrent capacity
-  (`active_load < production_capacity`) → least recently used → fewest queued
-  Job Cards (`open_load`) → workstation name.
+  (`active_load < production_capacity`) → fewest queued Job Cards
+  (`open_load`) → least recently used → workstation name.
 - **`active_load` vs `open_load`:** `active_load` counts Job Cards in
   `Work In Progress` / `On Hold` and is compared with `production_capacity`;
-  `open_load` counts everything not `Completed` / `Cancelled` and is only a
-  tie-breaker, so future queued work cannot make a machine look unavailable.
+  `open_load` counts everything not `Completed` / `Cancelled` and is ordered
+  before `last_used` so a batch of new Job Cards is spread across the type
+  instead of stacking on one machine. It is never a hard availability filter,
+  so future queued work cannot make a machine look unavailable.
 - **`last_used` is actual production activity:** the Job Card's
   `actual_end_date`, or `NOW()` while a Job Card is still running. Queued Job
   Cards that never started do not count; cancelled Job Cards are ignored; a
@@ -1203,9 +1205,9 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   per-operation shortage list with the whole Work Order's list; the readiness
   refresh already used the per-operation evaluation. Both paths now evaluate
   the same scope. Surfaced by the diagnostics section 6 consistency check.
-- **All machines at capacity:** the least recently used machine is still
-  assigned so Work Order submission is never blocked, and a warning is logged.
-  The overflow is reported by the diagnostic.
+- **All machines at capacity:** the least loaded machine (fewest queued Job
+  Cards) is still assigned so Work Order submission is never blocked, and a
+  warning is logged. The overflow is reported by the diagnostic.
 
 ### Diagnostics
 New read-only section 7 "Workstation routing" in
