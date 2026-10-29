@@ -404,8 +404,9 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
         lines.append("  OK   every Workstation Type has at least one usable workstation")
 
     # Make the exclusion rule visible: which machines are skipped and why.
-    # Only BLOCKED_WORKSTATION_STATUSES block; Off, Idle and Production are
-    # operational states that still accept queued work.
+    # Only BLOCKED_WORKSTATION_STATUSES block. Off/Idle/Production are free or
+    # running states that still accept queued work; status follows the Job Card
+    # lifecycle (start -> Production, complete -> Off).
     excluded = frappe.get_all(
         "Workstation",
         filters={"status": ["in", blocked_statuses]},
@@ -417,6 +418,10 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
             "  INFO excluded from rotation ("
             + " / ".join(blocked_statuses)
             + "):"
+        )
+        lines.append(
+            "    Setup = new machine being set up, Problem = reported fault, "
+            "Maintenance = under maintenance"
         )
         for row in excluded[:20]:
             lines.append(

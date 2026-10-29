@@ -145,7 +145,7 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 - Selection order: not at concurrent capacity → fewest queued Job Cards → least recently used → name
 - `active_load` (`Work In Progress` / `On Hold`) is compared with `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is the queue and is never a hard availability filter
 - `last_used` comes from `actual_end_date` (or `NOW()` for a running card), not Job Card creation; queued-never-started and cancelled cards are ignored; never-used machines sort first
-- Only `Maintenance` / `Problem` / `Setup` are excluded; `Off` / `Idle` / `Production` stay eligible (`Off` is set automatically on completion; a queued card is not started immediately)
+- Only `Maintenance` / `Problem` / `Setup` are excluded; `Off` / `Idle` / `Production` stay eligible. Workstation status follows the Job Card lifecycle: **starting a Job Card sets its machine to `Production`**, **completing it sets the machine back to `Off`**. `Setup` = new machine setup / commissioning, `Problem` = reported fault, `Maintenance` = under maintenance — these block allocation until cleared
 - Pre-assigned and capacity-planner workstations are never replaced; `scheduled_time_logs` are never overridden
 - Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
 - All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns; the diagnostic reports the overflow

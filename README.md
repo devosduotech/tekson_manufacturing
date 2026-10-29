@@ -40,8 +40,16 @@ Job Card is never pinned to one machine by the BOM:
   queue and is never a hard availability filter
 - **`last_used` is real production activity** (`actual_end_date`, or "now" while
   running) — not Job Card creation; cancelled and never-started cards do not count
-- **Excluded machines:** `Maintenance`, `Problem`, `Setup`; `Off`, `Idle` and
-  `Production` stay eligible (`Off` is set automatically on completion)
+- **Excluded machines:** `Maintenance`, `Problem`, `Setup`. Status follows the
+  Job Card lifecycle: **starting a card sets its machine to `Production`** and
+  **completing it sets the machine back to `Off`**, so `Off`, `Idle` and
+  `Production` can all take new work. `Setup` means a **new machine being set
+  up / commissioned**, `Problem` means a fault has been reported and
+  `Maintenance` means the machine is under maintenance — those three are skipped
+  until cleared.
+- **Status is not availability:** the allocator counts open and active Job Cards
+  on each machine; a free machine is never skipped just because its status is
+  `Off`.
 - **Never overridden:** user / planner / ERPNext scheduled picks are respected and
   `scheduled_time_logs` are not touched
 - **Legacy machine-in-BOM rows** are a preference: fall back to that machine's

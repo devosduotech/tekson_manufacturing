@@ -54,10 +54,13 @@ def populate_job_card_fields(doc, method=None):
 
 
 # Workstation statuses that must never receive a new Job Card, regardless of load.
-# "Setup" is a changeover: the machine is not free for new work until it finishes.
+# "Setup" means the machine is still being set up / commissioned and is not yet
+# in production. "Problem" means a fault has been reported on it, and
+# "Maintenance" means it is under maintenance.
 # "Off", "Idle" and "Production" are deliberately NOT blocked: ERPNext core sets
-# a workstation to "Off" whenever a Job Card on it completes, so treating "Off"
-# as unavailable would exclude every free machine.
+# a workstation to "Production" when a Job Card on it starts and back to "Off"
+# when that Job Card completes, so treating "Off" as unavailable would exclude
+# every free machine.
 BLOCKED_WORKSTATION_STATUSES = ("Maintenance", "Problem", "Setup")
 
 # Job Card states where the machine is occupied right now. These count against

@@ -1189,9 +1189,13 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   Cards that never started do not count; cancelled Job Cards are ignored; a
   machine that has never run work sorts first.
 - **Eligibility:** `Maintenance`, `Problem` and `Setup` are excluded. `Off`,
-  `Idle` and `Production` remain eligible: `Off` is set automatically when a Job
-  Card on the machine completes, and a queued Job Card is not started
-  immediately.
+  `Idle` and `Production` remain eligible. Workstation status follows the Job
+  Card lifecycle (ERPNext core): **starting a Job Card sets its machine to
+  `Production`**, **completing that Job Card sets the machine back to `Off`**.
+  `Setup` means a new machine is being set up / commissioned, `Problem` means a
+  fault has been reported on it, and `Maintenance` means it is under
+  maintenance. Those three block allocation until cleared; `Off` simply means
+  the machine is free.
 - **No scheduling override:** a workstation already on the Job Card (user or
   capacity-planner choice) is never replaced, and `scheduled_time_logs` are not
   touched. With capacity planning enabled, ERPNext's scheduling pick is

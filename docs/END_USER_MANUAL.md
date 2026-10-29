@@ -387,7 +387,7 @@ eligible machine of that type.
 **How the machine is chosen**
 
 1. A machine already set on the Job Card is kept (manual or capacity-planner choice).
-2. Machines with status `Maintenance`, `Problem` or `Setup` are skipped.
+2. Machines in `Setup` (new machine setup), `Problem` or `Maintenance` are skipped.
 3. Machines below their **Production Capacity** (number of Job Cards running at
    the same time) are preferred.
 4. Among those, the machine with the **fewest open Job Cards**.
@@ -398,16 +398,23 @@ eligible machine of that type.
 This spreads a batch of Work Orders across the interchangeable machines of the
 type instead of putting everything on the first one.
 
-**Which machine statuses can receive work**
+**What the workstation statuses mean**
 
-| Workstation status | New Job Card? | Why |
+| Status | Meaning | New Job Card? |
 |---|---|---|
-| `Off` | ✅ Yes | ERPNext sets `Off` automatically when a Job Card completes |
-| `Idle` | ✅ Yes | Machine is free |
-| `Production` | ✅ Yes | Finishing current work; queued cards can still be planned |
-| `Setup` | ❌ No | Changeover in progress |
-| `Problem` | ❌ No | Machine reported faulty |
-| `Maintenance` | ❌ No | Under maintenance |
+| `Off` | Machine is free — set **automatically when a Job Card on it completes** | ✅ Yes |
+| `Production` | Machine is running a Job Card — set **automatically when a Job Card on it starts** | ✅ Yes |
+| `Idle` | Machine is available but not running work (manually set free state) | ✅ Yes |
+| `Setup` | **New machine setup** — being installed/commissioned, not yet in production | ❌ No |
+| `Problem` | A fault has been reported on the machine | ❌ No |
+| `Maintenance` | Machine is under maintenance | ❌ No |
+
+`Production` and `Off` are maintained by ERPNext itself as Job Cards start and
+complete — operators do not set them manually. `Setup`, `Problem` and
+`Maintenance` are set by the administrator or maintenance team and must be
+cleared when the machine is usable again; until then it receives no new Job
+Cards. `Off` never means "out of service" here: it is simply the state a free
+machine returns to after its Job Card completes.
 
 **What must be configured**
 
