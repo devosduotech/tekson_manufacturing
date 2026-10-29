@@ -215,13 +215,17 @@ class JobCardService:
         # One previous-operation lookup (returns None for sequence_id <= 1)
         previous_operation = self.get_previous_operation_status(jc)
 
-        # One material readiness evaluation (None when no Work Order)
+        # One material readiness evaluation (None when no Work Order).
+        # Pass the Job Card so the engine filters BOM items to this operation
+        # and checks its own WIP warehouse — the same evaluation the readiness
+        # refresh uses. Without it, saving a Job Card would overwrite the
+        # per-operation result with a whole-Work-Order shortage list.
         readiness = None
         if jc.work_order:
             from tekson_manufacturing.readiness.material_readiness import MaterialReadinessEngine
 
             engine = MaterialReadinessEngine(work_order=jc.work_order)
-            readiness = engine.evaluate_material_readiness()
+            readiness = engine.evaluate_material_readiness(job_card=jc)
 
         fields = compute_status_fields(jc.status, previous_operation, readiness, bool(jc.work_order))
 

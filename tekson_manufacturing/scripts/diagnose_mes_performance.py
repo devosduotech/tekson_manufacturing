@@ -306,7 +306,7 @@ def section_consistency_spot_check(sample=10):
     return {"mismatches": mismatches, "lines": lines}
 
 
-def section_workstation_routing(scheduled_log_days=30):
+def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
     """Section 7: is the BOM -> Workstation Type -> eligible machine chain intact?"""
     lines = []
 
@@ -423,6 +423,61 @@ def section_workstation_routing(scheduled_log_days=30):
             "rotation cannot be observed until a sibling is added"
         )
 
+    # Did recent Job Cards actually rotate? Group the assignments by type so a
+    # single-machine result is visible immediately, without opening each card.
+    assignments = frappe.db.sql(
+        """
+        SELECT IFNULL(NULLIF(jc.workstation_type, ''), ws.workstation_type)
+                   AS workstation_type,
+               jc.workstation,
+               COUNT(*) AS cnt
+        FROM `tabJob Card` jc
+        LEFT JOIN `tabWorkstation` ws ON ws.name = jc.workstation
+        WHERE jc.docstatus < 2
+          AND jc.creation >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+          AND IFNULL(jc.workstation, '') != ''
+        GROUP BY workstation_type, jc.workstation
+        ORDER BY workstation_type, cnt DESC, jc.workstation
+        """,
+        (assignment_hours,),
+        as_dict=True,
+    )
+    by_type = {}
+    for row in assignments:
+        by_type.setdefault(row.workstation_type or "(no type)", []).append(row)
+
+    if by_type:
+        eligible_counts = {
+            row.workstation_type: int(row.usable) for row in rotation_ready
+        }
+        lines.append(
+            f"  INFO Workstation assignments for Job Cards created in the last "
+            f"{assignment_hours}h:"
+        )
+        for ws_type, rows in list(by_type.items())[:15]:
+            total = sum(int(row.cnt) for row in rows)
+            machine_count = len(rows)
+            detail = ", ".join(
+                f"{row.workstation}({int(row.cnt)})" for row in rows[:10]
+            )
+            if len(rows) > 10:
+                detail += f" (+{len(rows) - 10} more)"
+            if total > 1 and machine_count == 1 and eligible_counts.get(ws_type, 0) > 1:
+                lines.append(
+                    f"  WARN {ws_type}: {total} Job Cards on one machine — {detail} "
+                    f"(rotation was not applied)"
+                )
+            else:
+                lines.append(
+                    f"    {ws_type}: {total} Job Card(s) on {machine_count} "
+                    f"machine(s) — {detail}"
+                )
+    else:
+        lines.append(
+            f"  NOTE no Job Card with a workstation was created in the last "
+            f"{assignment_hours}h — rotation cannot be verified yet"
+        )
+
     floor_split = frappe.db.sql(
         """
         SELECT workstation_type,
@@ -489,8 +544,8 @@ def run(options=None):
     Run all diagnostics and print a report.
 
     Args:
-        options: dict, e.g. {"consistency_sample": 20, "scheduled_log_days": 30}
-                 (defaults: 10, 30)
+        options: dict, e.g. {"consistency_sample": 20, "scheduled_log_days": 30,
+                 "assignment_hours": 24} (defaults: 10, 30, 24)
     """
     options = options or {}
     sample = int(options.get("consistency_sample", 10))
@@ -504,7 +559,8 @@ def run(options=None):
         ("Readiness snapshot", section_readiness_snapshot),
         ("Consistency spot-check", lambda: section_consistency_spot_check(sample)),
         ("Workstation routing", lambda: section_workstation_routing(
-            options.get("scheduled_log_days", 30)
+            options.get("scheduled_log_days", 30),
+            options.get("assignment_hours", 24),
         )),
     ]
 

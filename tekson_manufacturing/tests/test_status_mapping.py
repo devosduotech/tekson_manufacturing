@@ -31,7 +31,10 @@ from tekson_manufacturing.readiness.job_card_readiness import (
 from tekson_manufacturing.readiness.material_readiness import (
     enqueue_inter_department_transfers,
 )
-from tekson_manufacturing.services.job_card_service import compute_status_fields
+from tekson_manufacturing.services.job_card_service import (
+    JobCardService,
+    compute_status_fields,
+)
 
 
 def _ready_view():
@@ -107,6 +110,43 @@ class TestComputeStatusFields(unittest.TestCase):
         fields = compute_status_fields("Open", {"status": "Open"}, None, False)
         self.assertEqual(fields["custom_start_status"], "Awaiting Previous Operation")
         self.assertEqual(fields["custom_can_start_operation"], 0)
+
+
+class TestEvaluateStatusFields(unittest.TestCase):
+    """The validate hook must evaluate materials for this operation only."""
+
+    def test_material_evaluation_receives_the_job_card(self):
+        jc = SimpleNamespace(
+            name="JC-TEST-1",
+            status="Open",
+            work_order="WO-TEST-1",
+            operation="Tig Welding",
+            sequence_id=1,
+            wip_warehouse="WIP-RP - TPL",
+        )
+        captured = {}
+
+        class FakeEngine:
+            def __init__(self, work_order=None):
+                captured["work_order"] = work_order
+
+            def evaluate_material_readiness(self, job_card=None):
+                captured["job_card"] = job_card
+                return _ready_view()
+
+        service = JobCardService()
+        with patch.object(
+            service, "get_previous_operation_status", return_value=None
+        ), patch(
+            "tekson_manufacturing.readiness.material_readiness.MaterialReadinessEngine",
+            FakeEngine,
+        ):
+            fields = service.evaluate_status_fields(jc)
+
+        self.assertIs(captured["job_card"], jc)
+        self.assertEqual(captured["work_order"], "WO-TEST-1")
+        self.assertEqual(fields["custom_start_status"], "Ready to Start")
+        self.assertEqual(fields["custom_material_available_for_operation"], 1)
 
 
 class TestMapReadinessResultToFields(unittest.TestCase):
