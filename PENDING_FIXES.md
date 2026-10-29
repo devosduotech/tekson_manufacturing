@@ -226,6 +226,7 @@ backlog will age out on its own.
 | ~~NEW~~ | MR + Pick List target fell back to the WO first-operation WIP when the Job Card lookup missed (key mismatch, no JC) — never fallback for operation-bearing items; operation-driven resolution added | v15.1.37 |
 | ~~NEW~~ | UAT skips: operation names compared case-sensitively across BOM Item / BOM Operation / Job Card (`Tank Assembly` vs `TANK ASSEMBLY`) | v15.1.38 |
 | ~~NEW~~ | UAT skips gave no clue *why* the operation warehouse failed to resolve; Job Card with a blank `wip_warehouse` had no fallback | v15.1.39 |
+| ~~NEW~~ | Job Card validate hook evaluated the whole Work Order's materials and overwrote the per-operation shortage details written by the readiness refresh | v15.1.40 |
 
 ---
 

@@ -1198,6 +1198,11 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   `workstation_type` is used. Legacy machine-in-BOM rows are a preference —
   honoured when eligible, otherwise rotation falls back to that machine's type
   with the blocked machine logged.
+- **Job Card save now evaluates its own operation.** The validate hook passed
+  no `job_card` to the material engine, so saving a Job Card replaced the
+  per-operation shortage list with the whole Work Order's list; the readiness
+  refresh already used the per-operation evaluation. Both paths now evaluate
+  the same scope. Surfaced by the diagnostics section 6 consistency check.
 - **All machines at capacity:** the least recently used machine is still
   assigned so Work Order submission is never blocked, and a warning is logged.
   The overflow is reported by the diagnostic.
@@ -1214,6 +1219,11 @@ review.
 Sections 1 and 2 now resolve their field names from the doctype metadata
 (`Server Script.reference_doctype`/`doctype_event`, `Error Log.method` instead
 of the removed `title`), so the report runs cleanly on current Frappe v15.
+Section 2 also reports the last-24-hour count and latest timestamp per title, so
+a historical backlog is not mistaken for ongoing logging. Section 7 lists
+Workstation Types that can rotate and the actual assignments of Job Cards
+created in the last 24 hours, flagging a type whose recent cards all landed on
+one machine.
 
 ### Verification
 Offline stub suites for `pick_workstation()` and `allocate_workstation()` cover
