@@ -395,6 +395,32 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
     else:
         lines.append("  OK   every Workstation Type has at least one usable workstation")
 
+    # Make the exclusion rule visible: which machines are skipped, and which
+    # non-standard statuses remain eligible. Only Maintenance/Problem block;
+    # Off, Idle, Production and Setup are operational states that still accept
+    # queued work (a queued Job Card is not started immediately).
+    special = frappe.get_all(
+        "Workstation",
+        filters={"status": ["in", ("Maintenance", "Problem", "Setup")]},
+        fields=["name", "workstation_type", "status"],
+        order_by="status, workstation_type, name",
+    )
+    excluded = [row for row in special if row.status in ("Maintenance", "Problem")]
+    setup = [row for row in special if row.status == "Setup"]
+    if excluded:
+        lines.append("  INFO excluded from rotation (Maintenance / Problem):")
+        for row in excluded[:20]:
+            lines.append(
+                f"    {row.name} ({row.workstation_type or 'no type'}): {row.status}"
+            )
+    if setup:
+        lines.append(
+            "  INFO in Setup but still eligible (only Maintenance / Problem are "
+            "excluded):"
+        )
+        for row in setup[:20]:
+            lines.append(f"    {row.name} ({row.workstation_type or 'no type'})")
+
     # Types with 2+ eligible machines are where rotation can be observed; a
     # single-machine type can never rotate.
     rotation_ready = frappe.db.sql(
@@ -534,6 +560,13 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
         "capacity_planning_disabled": bool(disable_planning),
         "missing_type": missing_type,
         "unusable_types": unusable,
+        "excluded_workstations": [
+            {"workstation": row.name, "type": row.workstation_type, "status": row.status}
+            for row in excluded
+        ],
+        "setup_workstations": [
+            {"workstation": row.name, "type": row.workstation_type} for row in setup
+        ],
         "capacity_overflow": overflow,
         "lines": lines,
     }

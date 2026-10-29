@@ -86,11 +86,12 @@
 - `pick_workstation()` rotates within the type: not at capacity → fewest queued Job Cards → least recently used → name
 - `active_load` (`Work In Progress` / `On Hold`) vs `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is ordered before `last_used` so new cards spread across the type, and is never a hard availability filter
 - `last_used` comes from `actual_end_date` (or `NOW()` for a running card), not from Job Card creation; cancelled cards are ignored
-- Only `Maintenance` / `Problem` are excluded; `Off` / `Idle` stay eligible
+- Only `Maintenance` / `Problem` are excluded; `Off` / `Idle` / `Production` / `Setup` stay eligible (status is operational, not availability, and a queued card is not started immediately)
 - Pre-assigned and capacity-planner workstations are never replaced; `scheduled_time_logs` are never overridden
 - Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
 - All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns
-- Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable types, multi-floor types and capacity overflow
+- Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable types, multi-floor types, machines excluded by `Maintenance` / `Problem`, machines in `Setup` and capacity overflow
+- Test Server validated: 134 recreated Job Cards rotated evenly (e.g. Accurate Cutting 2 per machine across 4, Helicoil 5/4 across 2 with one machine in `Maintenance`); consistency spot-check clean
 
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic

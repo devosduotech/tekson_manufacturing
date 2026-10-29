@@ -22,11 +22,12 @@
 - **Problem:** every Job Card for a Workstation Type went to the first machine alphabetically (`get_workstations(type)[0]`); siblings stayed idle and one machine became the bottleneck.
 - **Fix:** the BOM Operation's **Workstation Type** is the routing key. New shared `pick_workstation(workstation_type, reasons, candidates=...)` in `utils/job_card_utils.py` rotates across the eligible machines: not at capacity (`active_load < production_capacity`) → fewest queued cards (`open_load`) → least recently used → name. `candidates` is the seam for the future capacity planner.
 - **`last_used` is real use:** `actual_end_date`, or `NOW()` while a Job Card is running. Queued cards never worked do not count, cancelled cards are ignored, never-used machines sort first. `open_load` is ordered before `last_used` so a batch of new cards spreads across the type instead of stacking on one machine; it is not a hard availability filter.
-- **Eligibility:** only `Maintenance` / `Problem` are excluded; `Off` / `Idle` remain eligible (ERPNext sets `Off` on completion).
+- **Eligibility:** only `Maintenance` / `Problem` are excluded; `Off` / `Idle` / `Production` / `Setup` remain eligible (a queued card is not started immediately; `Off` is also set automatically on completion).
 - **No scheduling override:** pre-assigned / planner-chosen workstations are kept and `scheduled_time_logs` are never touched. With capacity planning enabled, ERPNext's scheduling pick wins — so **keep `Manufacturing Settings → Disable Capacity Planning` ticked**.
 - **Legacy machine-in-BOM rows** are a preference: honoured when eligible, otherwise fall back to that machine's type and log the blocked machine.
 - **All machines at capacity:** the least loaded card count is still assigned (Work Order submission never blocked) with a warning; the diagnostic reports the overflow.
-- **Diagnostics:** section 7 "Workstation routing" — capacity-planning setting, recent Job Cards that still carry scheduled time logs, BOM Operations without a Workstation Type, types with no usable machine, types spanning multiple plant floors, and workstations above `production_capacity`.
+- **Diagnostics:** section 7 "Workstation routing" — capacity-planning setting, recent Job Cards that still carry scheduled time logs, BOM Operations without a Workstation Type, types with no usable machine, types spanning multiple plant floors, machines excluded by `Maintenance` / `Problem`, machines in `Setup`, and workstations above `production_capacity`.
+- **Test Server result:** 134 recreated open Job Cards rotated evenly — Accurate Cutting 2 per machine across 4, Corner Cutting 5/5/5, Helicoil 5/4 across 2 with the third machine in `Maintenance` (excluded), Fin Forming spread over 5. Single-machine types stayed on their machine. No rotation warning, no capacity overflow, consistency spot-check clean.
 - **Files:** `utils/job_card_utils.py`, `scripts/diagnose_mes_performance.py`
 
 ### Tests

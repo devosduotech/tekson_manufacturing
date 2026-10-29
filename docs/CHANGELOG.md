@@ -1188,9 +1188,10 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   `actual_end_date`, or `NOW()` while a Job Card is still running. Queued Job
   Cards that never started do not count; cancelled Job Cards are ignored; a
   machine that has never run work sorts first.
-- **Eligibility:** only `Maintenance` and `Problem` are excluded. `Off` / `Idle`
-  are still eligible because ERPNext sets a workstation to `Off` when a Job Card
-  on it completes.
+- **Eligibility:** only `Maintenance` and `Problem` are excluded. `Off`, `Idle`,
+  `Production` and `Setup` are still eligible: they are operational states, and
+  a queued Job Card is not started immediately. `Off` also occurs automatically
+  when a Job Card on the machine completes.
 - **No scheduling override:** a workstation already on the Job Card (user or
   capacity-planner choice) is never replaced, and `scheduled_time_logs` are not
   touched. With capacity planning enabled, ERPNext's scheduling pick is
@@ -1213,9 +1214,10 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
 New read-only section 7 "Workstation routing" in
 `scripts/diagnose_mes_performance.py`: capacity-planning setting plus recent
 Job Cards that actually carry scheduled time logs, BOM Operations without a
-Workstation Type, Workstation Types with no usable machine, types spanning
-multiple plant floors (WIP-warehouse mapping risk), and workstations above
-`production_capacity` (active/capacity/queued). Adds
+Workstation Type, Workstation Types with no usable machine, machines excluded
+by `Maintenance` / `Problem` (with status), machines in `Setup` (still
+eligible), types spanning multiple plant floors (WIP-warehouse mapping risk),
+and workstations above `production_capacity` (active/capacity/queued). Adds
 `("tabJob Card", ["workstation", "docstatus"])` to the index candidates for DBA
 review.
 Sections 1 and 2 now resolve their field names from the doctype metadata
@@ -1235,6 +1237,13 @@ exclusion, type-first vs legacy routing, pre-assigned preservation and blocked
 machine fallback. `py_compile` and `ruff` clean on changed files. Concurrent
 Job Card creation (same workload snapshot) is not covered offline and must be
 tested on the Test Server.
+
+On the Test Server, 134 recreated open Job Cards rotated evenly: Accurate
+Cutting 2 per machine across 4; Corner Cutting 5 / 5 / 5; Helicoil & Tapping
+5 / 4 across 2 with the third machine in `Maintenance` and correctly excluded;
+Fin Forming and Cutting spread over all 5 machines. Single-machine types stayed
+on their only machine. Consistency spot-check clean, no rotation warning, no
+capacity overflow.
 
 ### Files Changed
 - `tekson_manufacturing/utils/job_card_utils.py` — workload metrics, eligibility
