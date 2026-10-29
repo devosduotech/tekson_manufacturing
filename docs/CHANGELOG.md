@@ -1155,6 +1155,83 @@ matching, diagnostic skip warnings) into the `v15.1.39` tagged release.
 
 ---
 
+## Version 15.1.40 — Workstation Type Rotation
+
+**Date:** 2026-10-29
+**Status:** On `develop` (v15.1.40) — Test Server build
+**Type:** Feature
+
+### Overview
+Job Cards were always assigned the first Workstation of the required type
+(alphabetically), so one machine absorbed all work while its siblings stayed
+idle. v15.1.40 makes the **Workstation Type** on the BOM Operation the routing
+key and rotates allocation across the eligible machines of that type, using a
+shared selection service that a future capacity planner can reuse.
+
+Python-only release: no doctype, field or permission JSON changes, so
+deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
+
+### Changes
+- **Shared selection service:** `pick_workstation(workstation_type, reasons,
+  candidates=...)` in `utils/job_card_utils.py` is the single decision point.
+  The `candidates` argument is the integration seam for scheduling.
+- **Selection order:** not at concurrent capacity
+  (`active_load < production_capacity`) → least recently used → fewest queued
+  Job Cards (`open_load`) → workstation name.
+- **`active_load` vs `open_load`:** `active_load` counts Job Cards in
+  `Work In Progress` / `On Hold` and is compared with `production_capacity`;
+  `open_load` counts everything not `Completed` / `Cancelled` and is only a
+  tie-breaker, so future queued work cannot make a machine look unavailable.
+- **`last_used` is actual production activity:** the Job Card's
+  `actual_end_date`, or `NOW()` while a Job Card is still running. Queued Job
+  Cards that never started do not count; cancelled Job Cards are ignored; a
+  machine that has never run work sorts first.
+- **Eligibility:** only `Maintenance` and `Problem` are excluded. `Off` / `Idle`
+  are still eligible because ERPNext sets a workstation to `Off` when a Job Card
+  on it completes.
+- **No scheduling override:** a workstation already on the Job Card (user or
+  capacity-planner choice) is never replaced, and `scheduled_time_logs` are not
+  touched. With capacity planning enabled, ERPNext's scheduling pick is
+  respected; rotation requires it disabled.
+- **Type-first routing:** BOM Operation `workstation_type` is resolved to its
+  machine group; when the BOM Operation cannot be resolved the Job Card's copied
+  `workstation_type` is used. Legacy machine-in-BOM rows are a preference —
+  honoured when eligible, otherwise rotation falls back to that machine's type
+  with the blocked machine logged.
+- **All machines at capacity:** the least recently used machine is still
+  assigned so Work Order submission is never blocked, and a warning is logged.
+  The overflow is reported by the diagnostic.
+
+### Diagnostics
+New read-only section 7 "Workstation routing" in
+`scripts/diagnose_mes_performance.py`: capacity-planning setting plus recent
+Job Cards that actually carry scheduled time logs, BOM Operations without a
+Workstation Type, Workstation Types with no usable machine, types spanning
+multiple plant floors (WIP-warehouse mapping risk), and workstations above
+`production_capacity` (active/capacity/queued). Adds
+`("tabJob Card", ["workstation", "docstatus"])` to the index candidates for DBA
+review.
+
+### Verification
+Offline stub suites for `pick_workstation()` and `allocate_workstation()` cover
+true-LRU rotation, queued-vs-active semantics, concurrent capacity, the
+`candidates` filter, blocked statuses, all-at-capacity fallback, cancelled-Card
+exclusion, type-first vs legacy routing, pre-assigned preservation and blocked
+machine fallback. `py_compile` and `ruff` clean on changed files. Concurrent
+Job Card creation (same workload snapshot) is not covered offline and must be
+tested on the Test Server.
+
+### Files Changed
+- `tekson_manufacturing/utils/job_card_utils.py` — workload metrics, eligibility
+  helper, shared selection service, type-first allocation
+- `tekson_manufacturing/scripts/diagnose_mes_performance.py` — workstation
+  routing diagnostic, index candidate
+
+### Release Notes
+See `docs/V15.1.40_RELEASE_NOTES.md`.
+
+---
+
 ## Related Documents
 
 - PHASE1_STATUS_REPORT.md - Overall project status

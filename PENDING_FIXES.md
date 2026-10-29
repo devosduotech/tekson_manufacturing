@@ -1,7 +1,7 @@
 # Pending Fixes — Phase 1 & Phase 1.1
 
 **Date:** Oct 12, 2026
-**Last Updated:** Oct 27, 2026 (v15.1.39)
+**Last Updated:** Oct 29, 2026 (v15.1.40)
 **Version:** v15.1.31 (on `develop`, pending tag)
 **Status:** HIGH items resolved; production bugs fixed in v15.1.36 / v15.1.37 / v15.1.38 / v15.1.39
 
@@ -129,6 +129,28 @@ SELECT name FROM `tabWarehouse` WHERE name LIKE 'WIP-%';
 
 Since v15.1.38 operation matching ignores case and extra whitespace, so a
 mismatch in those three tables is no longer a cause on its own.
+
+---
+
+## Release Preparation Checklist (v15.1.40)
+
+- [x] Decide the version number and bump `pyproject.toml` + `tekson_manufacturing/__init__.py` (15.1.40)
+- [x] Implement BOM Operation Workstation Type → eligible-machine rotation (`pick_workstation()`)
+- [x] `last_used` from actual production activity; queued/cancelled handling defined
+- [x] No override of `scheduled_time_logs` or pre-assigned workstations
+- [x] Diagnostic section 7 (routing + capacity overflow)
+- [x] Write `docs/V15.1.40_RELEASE_NOTES.md`
+- [x] Offline stub suites pass; `py_compile` + `ruff` clean
+- [x] Commit to `develop` and push (Test Server build)
+- [ ] Test Server: `git pull` + `bench restart`; confirm
+      `Manufacturing Settings → Disable Capacity Planning` is ticked
+- [ ] Test Server: run `bench --site <site> execute
+      tekson_manufacturing.scripts.diagnose_mes_performance.run` and review
+      section 7
+- [ ] Test Server: submit a representative Work Order; verify Job Cards rotate
+      across each Workstation Type and carry no newly scheduled time logs
+- [ ] Test Server: concurrent Job Card creation + Maintenance transition
+- [ ] After sign-off: tag `v15.1.40`, fast-forward `main`, then UAT → Live
 
 ---
 
