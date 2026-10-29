@@ -53,77 +53,326 @@ def populate_job_card_fields(doc, method=None):
         update_work_order_status_if_ready(doc.work_order)
 
 
+# Workstation statuses that must never receive a new Job Card, regardless of load.
+# "Off" and "Idle" are deliberately NOT blocked: ERPNext core sets a workstation
+# to "Off" whenever a Job Card on it completes, so treating "Off" as unavailable
+# would exclude every free machine.
+BLOCKED_WORKSTATION_STATUSES = ("Maintenance", "Problem")
+
+# Job Card states where the machine is occupied right now. These count against
+# Workstation.production_capacity (the number of concurrent Job Cards allowed).
+ACTIVE_JOB_CARD_STATUSES = ("Work In Progress", "On Hold")
+
+# Terminal Job Card states. Anything else is planned work: it sits in the
+# station's queue but does not occupy the machine yet.
+CLOSED_JOB_CARD_STATUSES = ("Completed", "Cancelled")
+
+
+def workstation_workload(workstation_names):
+    """
+    Workload metrics for the given workstations, in one aggregate query.
+
+    Metrics per workstation:
+      active_load - Job Cards occupying the machine now
+                    (status in ACTIVE_JOB_CARD_STATUSES, docstatus < 2).
+                    This is the number compared with production_capacity.
+      open_load   - Job Cards still in the queue (anything not Completed or
+                    Cancelled, docstatus < 2). Includes active_load. Used as a
+                    tie-breaker, never as a hard availability filter: a large
+                    batch of future Job Cards must not make a machine look
+                    unavailable today.
+      last_used   - latest actual production activity on the machine: the Job
+                    Card's actual end date, or "now" while a Job Card is still
+                    running (no actual end date yet). Queued Job Cards that never
+                    started do not count as use; cancelled Job Cards
+                    (docstatus = 2) are ignored. A machine that has never run
+                    work keeps an empty value and sorts first.
+
+    Also usable by a future capacity planner, which can combine these metrics
+    with its own time-slot eligibility before calling pick_workstation().
+    """
+    names = list(workstation_names or [])
+    metrics = {
+        name: {"active_load": 0, "open_load": 0, "last_used": ""}
+        for name in names
+    }
+    if not names:
+        return metrics
+
+    for row in frappe.db.sql(
+        """
+        SELECT workstation,
+               MAX(
+                   CASE
+                       WHEN actual_start_date IS NOT NULL AND actual_end_date IS NULL
+                       THEN NOW()
+                       ELSE COALESCE(actual_end_date, actual_start_date)
+                   END
+               ) AS last_used,
+               COUNT(DISTINCT CASE WHEN status NOT IN %(closed)s THEN name END) AS open_load,
+               COUNT(DISTINCT CASE WHEN status IN %(active)s THEN name END) AS active_load
+        FROM `tabJob Card`
+        WHERE docstatus < 2 AND workstation IN %(names)s
+        GROUP BY workstation
+        """,
+        {
+            "closed": list(CLOSED_JOB_CARD_STATUSES),
+            "active": list(ACTIVE_JOB_CARD_STATUSES),
+            "names": tuple(names),
+        },
+        as_dict=True,
+    ):
+        metrics[row.workstation] = {
+            "active_load": int(row.active_load or 0),
+            "open_load": int(row.open_load or 0),
+            "last_used": str(row.last_used or ""),
+        }
+
+    return metrics
+
+
+def is_workstation_eligible(workstation, reasons=None):
+    """A workstation can take work when it exists and is not Maintenance/Problem."""
+    if not workstation:
+        return False
+
+    if not frappe.db.exists("Workstation", workstation):
+        if reasons is not None:
+            reasons.append(f"Workstation '{workstation}' does not exist")
+        return False
+
+    status = frappe.db.get_value("Workstation", workstation, "status")
+    if (status or "") in BLOCKED_WORKSTATION_STATUSES:
+        if reasons is not None:
+            reasons.append(f"Workstation '{workstation}' is marked {status}")
+        return False
+
+    return True
+
+
+def pick_workstation(workstation_type, reasons=None, candidates=None):
+    """
+    Shared workstation-selection service (Business Rule JC-006).
+
+    This service deliberately does not schedule. It answers "which eligible
+    workstation should this Job Card go to?" so the same rules can be used by
+    the current allocation hook and by a future capacity planner.
+
+    Current phase: least-recently-used rotation across eligible workstations
+    of `workstation_type`.
+
+    Future capacity planning: the planner should compute which workstations
+    have a free time slot for the operation (working hours, holidays, existing
+    scheduled operations, duration, dependencies) and pass that subset as
+    `candidates`. This service then applies the same eligibility, workload and
+    rotation rules within that subset. Rotation is a tie-breaker between
+    equally suitable machines, never a replacement for scheduling.
+
+    Ordering (best first):
+      1. machines not already at their concurrent capacity (active_load <
+         production_capacity) before those that are
+      2. least recently used first, based on actual production activity
+         (machines that have never run work sort first)
+      3. fewest queued Job Cards (open_load) as a load-balancing tie-break
+      4. workstation name (stable tie-break)
+
+    Args:
+        workstation_type: Workstation Type to select from.
+        reasons: optional list collecting plain-English diagnostics.
+        candidates: optional iterable of workstation names to restrict the
+            selection to (used by capacity planning to pass time-slot-eligible
+            workstations). None means "any workstation of the type".
+
+    Returns:
+        Workstation name, or None when no eligible workstation exists.
+    """
+    if not workstation_type:
+        return None
+
+    workstations = frappe.get_all(
+        "Workstation",
+        filters={"workstation_type": workstation_type},
+        fields=["name", "status", "production_capacity"],
+    )
+
+    if not workstations:
+        if reasons is not None:
+            reasons.append(f"no Workstation of type '{workstation_type}'")
+        return None
+
+    allowed = set(candidates) if candidates is not None else None
+    usable = [
+        ws for ws in workstations
+        if (ws.status or "") not in BLOCKED_WORKSTATION_STATUSES
+        and (allowed is None or ws.name in allowed)
+    ]
+
+    if not usable:
+        if reasons is not None:
+            reasons.append(
+                f"no eligible Workstation of type '{workstation_type}' "
+                f"(blocked: {', '.join(BLOCKED_WORKSTATION_STATUSES)}"
+                + (", no free time slot" if allowed is not None else "")
+                + ")"
+            )
+        return None
+
+    workload = workstation_workload([ws.name for ws in usable])
+
+    def selection_key(ws):
+        metrics = workload[ws.name]
+        capacity = ws.production_capacity or 1
+        return (
+            metrics["active_load"] >= capacity,
+            metrics["last_used"],
+            metrics["open_load"],
+            ws.name,
+        )
+
+    usable.sort(key=selection_key)
+
+    if usable[0] and selection_key(usable[0])[0] and reasons is not None:
+        reasons.append(
+            f"all Workstations of type '{workstation_type}' are running at "
+            f"capacity; assigned least recently used (job creation is not "
+            f"blocked)"
+        )
+
+    return usable[0].name
+
+
 def allocate_workstation(doc, method=None):
     """
     Auto-allocate Workstation from BOM Operation
-    
+
     Business Rule: JC-006 - Workstation auto-assignment
-    
+
     Trigger: Job Card Before Insert
-    
+
     Args:
         doc: Job Card document
         method: Event method name (optional)
-    
+
     Logic:
-    - If workstation not set and work_order + operation exist
-    - Get BOM from Work Order
-    - Fetch BOM Operation with matching operation
-    - Use workstation_type or workstation from BOM Operation
-    - Select first workstation of that type
+    - Never rotate a workstation already set on the Job Card. That covers a
+      user's choice and, later, a capacity planner's choice. Scheduling must
+      call pick_workstation() before it creates time logs instead of relying on
+      this hook to correct the machine afterwards.
+    - Get the BOM Operation for this Job Card's operation (parent BOM, then the
+      item's own BOM for multi-level builds).
+    - Route by Workstation Type, which the BOM uses to group interchangeable
+      machines: rotate across the eligible workstations of that type (least
+      recently used, skipping Maintenance/Problem and machines already at their
+      concurrent capacity where possible).
+    - If the BOM Operation has no type, fall back to the type ERPNext copied
+      onto the Job Card from the Work Order Operation.
+    - Backward compatibility: a BOM Operation that names a machine instead of a
+      type is honoured when that machine is eligible. It is treated as a
+      preference, not a hard constraint: a blocked machine falls back to
+      rotation within its type with a logged warning. Teksons routes by type,
+      so this path only handles legacy rows.
     - Assign workstation and copy plant_floor
     """
-    if not doc.workstation and doc.work_order and doc.operation:
-        # Get BOM from Work Order
-        bom_no = frappe.db.get_value("Work Order", doc.work_order, "bom_no")
-        
-        bom_op = None
-        if bom_no:
-            # Fetch BOM Operation from parent BOM
+    if not (doc.work_order and doc.operation):
+        return
+
+    # Get BOM from Work Order
+    bom_no = frappe.db.get_value("Work Order", doc.work_order, "bom_no")
+
+    bom_op = None
+    if bom_no:
+        # Fetch BOM Operation from parent BOM
+        bom_op = frappe.db.get_value(
+            "BOM Operation",
+            {"parent": bom_no, "operation": doc.operation},
+            ["workstation_type", "workstation"],
+            as_dict=True
+        )
+
+    # If not found in parent BOM, try child BOM for this item (multi-level)
+    if not bom_op and getattr(doc, "production_item", None):
+        child_bom = frappe.db.get_value("BOM",
+            {"item": doc.production_item, "is_active": 1, "docstatus": 1})
+        if child_bom and child_bom != bom_no:
             bom_op = frappe.db.get_value(
                 "BOM Operation",
-                {"parent": bom_no, "operation": doc.operation},
+                {"parent": child_bom, "operation": doc.operation},
                 ["workstation_type", "workstation"],
                 as_dict=True
             )
-        
-        # If not found in parent BOM, try child BOM for this item (multi-level)
-        if not bom_op and hasattr(doc, 'production_item') and doc.production_item:
-            child_bom = frappe.db.get_value("BOM", 
-                {"item": doc.production_item, "is_active": 1, "docstatus": 1})
-            if child_bom and child_bom != bom_no:
-                bom_op = frappe.db.get_value(
-                    "BOM Operation",
-                    {"parent": child_bom, "operation": doc.operation},
-                    ["workstation_type", "workstation"],
-                    as_dict=True
-                )
-        
-        if bom_op:
-                # Prefer workstation_type, fallback to workstation
-                workstation_type = bom_op.workstation_type or bom_op.workstation
-                
-                if workstation_type:
-                    # Get first workstation of this type (alphabetically)
-                    workstation = frappe.db.get_value(
-                        "Workstation",
-                        {"workstation_type": workstation_type},
-                        "name",
-                        order_by="name asc"
-                    )
-                    
-                    if workstation:
-                        doc.workstation = workstation
-                        
-                        # Also set plant_floor for warehouse mapping
-                        plant_floor = frappe.db.get_value(
-                            "Workstation",
-                            workstation,
-                            "plant_floor"
-                        )
-                        
-                        if plant_floor:
-                            doc.custom_plant_floor = plant_floor
+
+    reasons = []
+    explicit = bom_op.get("workstation") if bom_op else None
+    workstation_type = bom_op.get("workstation_type") if bom_op else None
+    explicit_is_machine = bool(explicit) and frappe.db.exists("Workstation", explicit)
+
+    if not workstation_type and explicit and not explicit_is_machine:
+        # Legacy routing rows store the workstation *type* in `workstation`
+        # and leave `workstation_type` blank.
+        workstation_type = explicit
+        explicit = None
+        explicit_is_machine = False
+
+    # ERPNext copies the BOM Operation's routing onto the Work Order Operation
+    # and then onto the Job Card, so this is the same type. It matters when the
+    # BOM Operation cannot be resolved (e.g. a renamed Operation master).
+    workstation_type = workstation_type or doc.get("workstation_type")
+
+    if doc.get("workstation"):
+        # A workstation already on the card is a deliberate choice — the user's
+        # or, later, the capacity planner's — so it is never rotated. The one
+        # exception is a machine configured on a legacy BOM Operation, which
+        # ERPNext copies onto the card before insert: it still has to be
+        # eligible, otherwise fall back to rotating within its type.
+        if not (explicit_is_machine and doc.workstation == explicit):
+            return
+
+        if is_workstation_eligible(doc.workstation, reasons):
+            return
+
+        workstation_type = workstation_type or frappe.db.get_value(
+            "Workstation", explicit, "workstation_type"
+        )
+    elif not workstation_type and explicit_is_machine:
+        # Backward compatibility: BOM Operation names a specific machine.
+        # Treat it as a preference (Teksons routes by Workstation Type).
+        if is_workstation_eligible(explicit, reasons):
+            _assign_workstation(doc, explicit)
+            return
+
+        # Blocked machine: the machine is a preference, so rotate within its
+        # type when we can and keep the Job Card moving. Log the rejection.
+        workstation_type = frappe.db.get_value(
+            "Workstation", explicit, "workstation_type"
+        )
+
+    if not workstation_type and not reasons:
+        reasons.append(
+            f"BOM Operation {doc.operation} has no Workstation Type"
+        )
+
+    workstation = pick_workstation(workstation_type, reasons)
+
+    if reasons:
+        frappe.logger("tekson").warning(
+            f"Job Card {doc.get('name') or doc.operation}: " + "; ".join(reasons)
+        )
+
+    if workstation:
+        if workstation_type and not doc.get("workstation_type"):
+            doc.workstation_type = workstation_type
+        _assign_workstation(doc, workstation)
+
+
+def _assign_workstation(doc, workstation):
+    """Set the workstation and its plant floor on a Job Card."""
+    doc.workstation = workstation
+
+    # Also set plant_floor for warehouse mapping
+    plant_floor = frappe.db.get_value("Workstation", workstation, "plant_floor")
+
+    if plant_floor:
+        doc.custom_plant_floor = plant_floor
 
 
 def set_wip_warehouse(doc, method=None):
