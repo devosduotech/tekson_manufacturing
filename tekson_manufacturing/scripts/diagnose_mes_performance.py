@@ -141,7 +141,10 @@ def section_error_log_volume(days=7):
         title_field = "method"
     rows = frappe.db.sql(
         f"""
-        SELECT `{title_field}` AS title, COUNT(*) AS cnt
+        SELECT `{title_field}` AS title,
+               COUNT(*) AS cnt,
+               SUM(creation >= DATE_SUB(NOW(), INTERVAL 1 DAY)) AS cnt_24h,
+               MAX(creation) AS latest
         FROM `tabError Log`
         WHERE creation >= DATE_SUB(NOW(), INTERVAL %s DAY)
           AND (`{title_field}` LIKE 'MES%%' OR `{title_field}` LIKE 'Security Event%%')
@@ -153,12 +156,26 @@ def section_error_log_volume(days=7):
         as_dict=True,
     )
     total = sum(row.cnt for row in rows)
-    lines = [f"  MES/Security Error Logs last {days} days: {total}"]
+    total_24h = sum(row.cnt_24h or 0 for row in rows)
+    # A large historical count is expected on a site that ran pre-v15.1.32
+    # code; what matters is whether MES logging is still inserting rows now.
+    lines = [
+        f"  MES/Security Error Logs last {days} days: {total}",
+        f"  MES/Security Error Logs last 24 hours: {total_24h}",
+    ]
     for row in rows[:25]:
-        lines.append(f"  {row.cnt:>6}  {row.title}")
+        lines.append(
+            f"  {row.cnt:>6}  {row.title}  "
+            f"(24h: {int(row.cnt_24h or 0)}, latest: {row.latest})"
+        )
     if total == 0:
         lines.append("  OK   no MES/Security Error Logs — Phase 5 cleanup in effect")
-    return {"total": total, "lines": lines}
+    elif total_24h == 0:
+        lines.append(
+            "  OK   no new MES/Security Error Logs in the last 24 hours "
+            "(the backlog above is historical)"
+        )
+    return {"total": total, "total_24h": total_24h, "lines": lines}
 
 
 def _table_indexes(table):
