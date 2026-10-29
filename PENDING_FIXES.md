@@ -2,8 +2,8 @@
 
 **Date:** Oct 12, 2026
 **Last Updated:** Oct 29, 2026 (v15.1.40)
-**Version:** v15.1.31 (on `develop`, pending tag)
-**Status:** HIGH items resolved; production bugs fixed in v15.1.36 / v15.1.37 / v15.1.38 / v15.1.39
+**Version:** v15.1.40 (released on `develop` + `main`; UAT deployment pending)
+**Status:** HIGH items resolved; production bugs fixed through v15.1.40
 
 ---
 
@@ -142,15 +142,18 @@ mismatch in those three tables is no longer a cause on its own.
 - [x] Write `docs/V15.1.40_RELEASE_NOTES.md`
 - [x] Offline stub suites pass; `py_compile` + `ruff` clean
 - [x] Commit to `develop` and push (Test Server build)
-- [ ] Test Server: `git pull` + `bench restart`; confirm
+- [x] Test Server: `git pull` + `bench restart`; confirm
       `Manufacturing Settings → Disable Capacity Planning` is ticked
-- [ ] Test Server: run `bench --site <site> execute
+- [x] Test Server: run `bench --site <site> execute
       tekson_manufacturing.scripts.diagnose_mes_performance.run` and review
       section 7
-- [ ] Test Server: submit a representative Work Order; verify Job Cards rotate
-      across each Workstation Type and carry no newly scheduled time logs
-- [ ] Test Server: concurrent Job Card creation + Maintenance transition
-- [ ] After sign-off: tag `v15.1.40`, fast-forward `main`, then UAT → Live
+- [x] Test Server: bulk concurrent submission of 91 Work Orders → 134 Job Cards
+      rotated across each Workstation Type; `Maintenance` / `Setup` machines
+      received nothing; no newly scheduled time logs
+- [x] Tag `v15.1.40`, fast-forward `main`, write `V15.1.40_REVIEW_SUMMARY.md`
+- [ ] UAT: pull `main` + `bench migrate` + `bench build --force` + `bench restart`
+      (jump from v15.1.37/38), then re-run diagnostic section 7 and submit one WO
+- [ ] Live: same commands after UAT sign-off
 
 ---
 
@@ -247,3 +250,4 @@ backlog will age out on its own.
 - ✅ v15.1.37: Operation-driven target warehouse for MRs + Pick List (never first-operation WO header)
 - ✅ v15.1.38: Case/whitespace-insensitive operation matching (UAT "could not be resolved" skips)
 - ✅ v15.1.39: Skip warnings name the broken link; Job Card workstation fallback; unique `WIP-{floor}` naming variants accepted
+- ✅ v15.1.40: Job Card Workstation Type rotation (queue-balanced LRU, capacity-aware, no scheduling override); `Maintenance` / `Problem` / `Setup` excluded; operation-scoped readiness on Job Card save; routing diagnostics

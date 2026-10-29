@@ -1,18 +1,18 @@
 # Tekson MES — Project Status & Session Handoff
 
 **Date:** 2026-10-29
-**Session:** Workstation Type Rotation — BOM Operation type → LRU machine allocation → v15.1.40
-**Status:** 🧪 **v15.1.40 ON `develop` — TEST SERVER BUILD (not UAT / Live)**
+**Session:** Workstation Type Rotation — BOM Operation type → LRU machine allocation → v15.1.40 released
+**Status:** ✅ **v15.1.40 TAGGED + ON `develop` / `main` — Test Server validated; UAT deployment pending**
 
 ---
 
-## Current Version: v15.1.39 (main) | v15.1.40 (develop)
+## Current Version: v15.1.40 (main + develop)
 
 | Branch | Version | Status |
 |--------|---------|--------|
-| main | v15.1.39 | ✅ Released |
-| develop | v15.1.40 | 🧪 Test Server validation |
-| bom-bulk-creator | v15.1.39 | ✅ Released |
+| main | v15.1.40 | ✅ Released (tag `v15.1.40`) |
+| develop | v15.1.40 | ✅ Released + docs |
+| bom-bulk-creator | v15.1.39 | ✅ Released (side branch) |
 
 ---
 
@@ -28,7 +28,9 @@
 - **All machines at capacity:** the least loaded card count is still assigned (Work Order submission never blocked) with a warning; the diagnostic reports the overflow.
 - **Diagnostics:** section 7 "Workstation routing" — capacity-planning setting, recent Job Cards that still carry scheduled time logs, BOM Operations without a Workstation Type, types with no usable machine, types spanning multiple plant floors, machines excluded by `Maintenance` / `Problem` / `Setup`, and workstations above `production_capacity`.
 - **Test Server result:** 134 Job Cards from a bulk concurrent submission of 91 Work Orders rotated evenly — Accurate Cutting 2 per machine across 4, Corner Cutting 5/5/5, Helicoil 5/4 across 2 with the third in `Maintenance`, Fin Forming 2/2/1/1 across 4 with the fifth in `Setup`. Both excluded machines received nothing. Single-machine types stayed on their machine. No rotation warning, no capacity overflow, consistency spot-check clean, no new MES errors under concurrent allocation.
-- **Files:** `utils/job_card_utils.py`, `scripts/diagnose_mes_performance.py`
+- **Files:** `utils/job_card_utils.py`, `services/job_card_service.py`, `scripts/diagnose_mes_performance.py`
+- **Review document:** `V15.1.40_REVIEW_SUMMARY.md` (problem, rules, validation, limitations, deployment, commits)
+- **Release state:** tag `v15.1.40` → `0ccf71b`; `develop` and `main` both at the docs commit after it
 
 ### Tests
 - Offline stub suites for `pick_workstation()` / `allocate_workstation()`: rotation, queued-vs-active, `production_capacity > 1`, candidates filter, blocked statuses, all-at-capacity, cancelled exclusion, type-first vs legacy routing, pre-assigned preservation, blocked-machine fallback
@@ -74,30 +76,32 @@
 ### Local Development (this workspace)
 ```
 Remote: origin
-Branches: develop at v15.1.40; main / bom-bulk-creator at v15.1.39
-Status: ✅ Synced
+Branches: develop / main at v15.1.40 (in sync with origin); bom-bulk-creator at v15.1.39
+Status: ✅ Synced — only SESSION_LOG_Oct23_2026.md untracked (intentionally)
 ```
 
-### Test Server
+### Test Server (teksons.dev)
 ```
-Status: ⏳ Pull pending — git pull origin develop + bench restart, then run the diagnostic
+Status: ✅ Validated on v15.1.40 — 134 Job Cards from a bulk concurrent submit of 91 Work Orders
 Required setting: Manufacturing Settings → Disable Capacity Planning = ticked
+Pull: git pull upstream develop + bench restart (no migrate/build for v15.1.40)
 ```
 
-### Test / UAT VM (tekson.site)
+### UAT VM (tekson.site)
 ```
 Last observed: v15.1.37/38 (skip warnings + _comments error, 2026-10-26/27)
-Status: ⏳ v15.1.40 arrives on the Test Server first; UAT after sign-off
-Note: v15.1.40 is Python-only (no migrate). v15.1.35 permission JSON still requires
-      bench migrate + bench build --force if the site is below v15.1.39
+Status: ⏳ v15.1.40 released; UAT pull pending
+Note: jump from v15.1.37/38 carries v15.1.39 + v15.1.35 permission JSON →
+      bench migrate + bench build --force + bench restart are required
+Rollback: git checkout v15.1.39 && bench restart (no schema change to reverse)
 ```
 
 ### Dev Machine (karthic@teksons-development)
 ```
 Remote: upstream (not origin)
-Branch: bom-bulk-creator
+Branch: develop
 Site: teksons.dev
-Status: Check current version; pull + restart if behind v15.1.39
+Status: ✅ Running v15.1.40 (validated)
 ```
 
 ### UAT Machine (cwd_admin@cwd)
@@ -105,7 +109,7 @@ Status: Check current version; pull + restart if behind v15.1.39
 Remote: origin
 Branch: main
 Site: tekson.site
-Status: Check current version; pull + restart if behind v15.1.39
+Status: ⏳ v15.1.40 released on main; deploy pending (currently v15.1.37/38)
 ```
 
 ---
@@ -115,15 +119,19 @@ Status: Check current version; pull + restart if behind v15.1.39
 ### Dev Machine
 ```bash
 cd ~/frappe-bench/apps/tekson_manufacturing
-git fetch upstream && git reset --hard upstream/bom-bulk-creator
-cd ~/frappe-bench && bench --site teksons.dev migrate && bench build --force && bench restart
+git pull upstream develop
+cd ~/frappe-bench && sudo systemctl restart frappe-bench.target
+bench --site teksons.dev execute tekson_manufacturing.scripts.diagnose_mes_performance.run \
+  --args '[{"assignment_hours": 1}]'
 ```
 
 ### UAT Machine
 ```bash
 cd ~/cwd-bench/apps/tekson_manufacturing
-git pull origin main
+git fetch origin && git checkout main && git pull origin main
 cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && bench restart
+bench --site tekson.site execute tekson_manufacturing.scripts.diagnose_mes_performance.run \
+  --args '[{"assignment_hours": 24}]'
 ```
 
 ---
@@ -139,15 +147,17 @@ cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && ben
 | `tekson_manufacturing/reports/material_transfer_pick_list/material_transfer_pick_list.py` | Operation-driven target + Operation column |
 | `tekson_manufacturing/tests/test_material_planning_qty.py` | 30-test suite (22 new across v15.1.37–39) |
 | `tekson_manufacturing/__init__.py`, `pyproject.toml` | Version 15.1.40 |
-| `docs/CHANGELOG.md`, `docs/V15.1.40_RELEASE_NOTES.md`, `PROJECT_STATUS.md`, `README.md` | Documentation refresh |
+| `V15.1.40_REVIEW_SUMMARY.md` | Full review document for v15.1.40 |
+| `docs/CHANGELOG.md`, `docs/V15.1.40_RELEASE_NOTES.md`, `docs/END_USER_MANUAL.md`, `PROJECT_STATUS.md`, `README.md` | Documentation refresh |
 
 ---
 
 ## Next Session Goals
 
-1. Test Server: `git pull origin develop` + `bench restart`; confirm `Manufacturing Settings → Disable Capacity Planning` is ticked
-2. Run the diagnostic: `bench --site <site> execute tekson_manufacturing.scripts.diagnose_mes_performance.run` — section 7 must show the planning setting, no recent scheduled time logs, valid Workstation Types and no capacity overflow
-3. Submit a representative Work Order; confirm its Job Cards rotate across the eligible machines of each operation's Workstation Type, then test concurrent JC creation and a Maintenance transition
-4. After Test Server sign-off: merge/tag for UAT (`tekson.site`), then production
-5. Re-run the standalone unit suite: `python3 tekson_manufacturing/tests/test_material_planning_qty.py` (30 tests)
-6. Work down `PENDING_FIXES.md` (P1 N+1 Bin lookups in the Pick List, dashboards)
+1. **UAT deploy** (`tekson.site`): pull `main`, `bench migrate`, `bench build --force`, `bench restart` — the jump from v15.1.37/38 carries v15.1.39 + the v15.1.35 permission JSON
+2. Confirm `Manufacturing Settings → Disable Capacity Planning` is ticked on UAT
+3. Run the diagnostic (`--args '[{"assignment_hours": 24}]'`); section 7 must show the planning setting, no recent scheduled time logs, valid Workstation Types, excluded machines listed, no capacity overflow
+4. Submit one Work Order on UAT and confirm its Job Cards rotate across the eligible machines of each operation's Workstation Type; do not delete open cards — cancel instead
+5. Update `PROJECT_STATUS.md` / this file to mark UAT deployed; then Live with the same commands
+6. Re-run the standalone unit suite: `python3 tekson_manufacturing/tests/test_material_planning_qty.py` (30 tests)
+7. Work down `PENDING_FIXES.md` (P1 N+1 Bin lookups in the Pick List, dashboards)

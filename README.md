@@ -8,7 +8,7 @@
 
 Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends standard ERPNext Manufacturing with readiness evaluation, dependency validation, and automated workflow controls — without replacing ERPNext's inventory, costing, or backflush engine.
 
-**Status:** ✅ Customer UAT Ready
+**Status:** ✅ Released (`main` + `develop`) — UAT deployment pending
 **Version:** v15.1.40
 **Last Updated:** October 29, 2026
 
@@ -21,12 +21,39 @@ Manufacturing Execution System (MES) for Teksons, built on ERPNext V15. Extends 
 - Child Work Order validation — parent blocked until sub-assemblies complete
 - Auto Work Order completion — last JC triggers Manufacture SE + WO closure
 - Multi-department WIP — per-operation warehouse assignment
-- Workstation Type rotation — Job Cards rotate across the eligible machines of the BOM Operation's type (capacity-aware, least-recently-used, never overrides a schedule)
+- Workstation Type rotation — Job Cards rotate across the eligible machines of the BOM Operation's type (capacity-aware, least-recently-used, never overrides a schedule) — see [Workstation allocation](#workstation-allocation)
 - WO Consolidation — sub-assemblies grouped by planned start date
 - Daily Material Planning — Material Requests per department WIP, quantities net of WIP stock, target warehouse driven by each BOM item's operation
 - Material Transfer Pick List — open-WO raw material transfers, source → operation-driven department WIP
 - Batch production rounding — fixed-yield BOM support
 - Clear operator error messages — shows exactly what's blocking
+
+### Workstation allocation
+
+v15.1.40 makes the **Workstation Type** on the BOM Operation the routing key. A
+Job Card is never pinned to one machine by the BOM:
+
+- **Rotation:** machines not at concurrent capacity → fewest queued Job Cards →
+  least recently used → name
+- **Load model:** `active_load` (`Work In Progress` / `On Hold`) is compared with
+  `Workstation.production_capacity`; `open_load` (any non-closed card) is the
+  queue and is never a hard availability filter
+- **`last_used` is real production activity** (`actual_end_date`, or "now" while
+  running) — not Job Card creation; cancelled and never-started cards do not count
+- **Excluded machines:** `Maintenance`, `Problem`, `Setup`; `Off`, `Idle` and
+  `Production` stay eligible (`Off` is set automatically on completion)
+- **Never overridden:** user / planner / ERPNext scheduled picks are respected and
+  `scheduled_time_logs` are not touched
+- **Legacy machine-in-BOM rows** are a preference: fall back to that machine's
+  type with a logged warning
+- **All machines at capacity:** the least loaded machine is still assigned so Work
+  Order submission is never blocked, with a warning reported by the diagnostic
+- **Requires** `Manufacturing Settings → Disable Capacity Planning`; verify with
+  `diagnose_mes_performance` section 7
+
+Set up: give every **Workstation** a `workstation_type`, `plant_floor` and
+`production_capacity`, and give every **BOM Operation** a `workstation_type`.
+Details: `docs/V15.1.40_RELEASE_NOTES.md`, `docs/END_USER_MANUAL.md` §6.6.
 
 ---
 

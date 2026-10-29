@@ -1,9 +1,6 @@
 # Tekson Manufacturing — User Guide
 
-**Version:** 1.0 (Draft)  
-**Date:** September 2026  
-**Product:** Tekson Manufacturing Execution System (MES)  
-**Platform:** ERPNext v15  
+**Version:** 1.1 (Draft) · **Date:** October 2026 · **Product:** Tekson Manufacturing Execution System (MES) · **Platform:** ERPNext v15
 
 ---
 
@@ -380,6 +377,77 @@ If multiple Job Cards share the same sequence number (parallel operations), they
 | Operation Item | Which item this operation produces |
 | Blocked By | What is preventing this JC from starting |
 
+### 6.6 Automatic Workstation Allocation (v15.1.40)
+
+When a Work Order is submitted, ERPNext creates its Job Cards and the system
+assigns each one a machine. You do **not** choose the machine on the Work Order:
+the BOM Operation names only a **Workstation Type**, and the system picks an
+eligible machine of that type.
+
+**How the machine is chosen**
+
+1. A machine already set on the Job Card is kept (manual or capacity-planner choice).
+2. Machines with status `Maintenance`, `Problem` or `Setup` are skipped.
+3. Machines below their **Production Capacity** (number of Job Cards running at
+   the same time) are preferred.
+4. Among those, the machine with the **fewest open Job Cards**.
+5. Then the machine that has been **idle the longest**, measured from actual
+   production end time — a machine that has never run work is used first.
+6. Then by name, so the outcome is repeatable.
+
+This spreads a batch of Work Orders across the interchangeable machines of the
+type instead of putting everything on the first one.
+
+**Which machine statuses can receive work**
+
+| Workstation status | New Job Card? | Why |
+|---|---|---|
+| `Off` | ✅ Yes | ERPNext sets `Off` automatically when a Job Card completes |
+| `Idle` | ✅ Yes | Machine is free |
+| `Production` | ✅ Yes | Finishing current work; queued cards can still be planned |
+| `Setup` | ❌ No | Changeover in progress |
+| `Problem` | ❌ No | Machine reported faulty |
+| `Maintenance` | ❌ No | Under maintenance |
+
+**What must be configured**
+
+- Every **Workstation**: Workstation Type, Plant Floor, and Production Capacity
+  (leave at `1` unless the machine can genuinely run several Job Cards at once)
+- Every **BOM Operation** row: Workstation Type — this is the only routing key
+  the allocation uses
+- `Manufacturing Settings → Disable Capacity Planning` must stay ticked;
+  ERPNext's own scheduling would otherwise choose a machine before allocation
+  runs
+
+A machine named directly on an old BOM Operation is treated as a *preference*:
+it is used when eligible, otherwise the system falls back to that machine's
+Workstation Type and logs the blocked machine.
+
+**If a Job Card has no machine**
+
+- Message: `no eligible Workstation of type '…'` — every machine of that type is
+  in `Maintenance` / `Problem` / `Setup`, or no machine carries that type. Fix
+  the machine status or its Workstation Type, then submit again.
+- Existing Job Cards keep their machine — allocation is **not retroactive**. Set
+  the machine manually if an existing card must move.
+- Under a race (two Work Orders submitted at the same moment) two cards can be
+  planned onto the same machine. Capacity is soft: the cards are still created
+  and the diagnostic reports the overflow.
+
+**Checking that rotation works**
+
+Run the read-only diagnostic and look at section 7 "Workstation routing":
+
+```bash
+bench --site <site> execute tekson_manufacturing.scripts.diagnose_mes_performance.run \
+  --args '[{"assignment_hours": 24}]'
+```
+
+It lists the eligible machines per type, excluded machines with their status,
+and the machines used by recently created Job Cards. If a type with several
+eligible machines shows all recent cards on one machine, rotation is not
+happening — check that capacity planning is disabled.
+
 ---
 
 ## 7. Dashboards & Reports
@@ -446,8 +514,20 @@ Backend APIs are ready but no frontend page exists yet. Planned features:
 
 - Warehouses auto-populate from BOM and Workstation configuration
 - FG Warehouse comes from BOM's target FG warehouse
-- WIP Warehouse comes from the first operation's workstation plant floor
+- WIP Warehouse follows each BOM item's operation → Workstation Type → Plant
+  Floor (`WIP-{floor} - TPL`), not the Work Order's first operation (v15.1.37+)
 - Source Warehouse defaults to "Raw Material Stores"
+
+**Job Cards all land on one machine**
+
+- Confirm `Manufacturing Settings → Disable Capacity Planning` is ticked — if
+  ERPNext scheduling runs, its machine pick is respected
+- Confirm the machines of that Workstation Type are not all in `Maintenance` /
+  `Problem` / `Setup`
+- Run the diagnostic (section 7) and read the recent assignment report: it groups
+  Job Cards created in the last N hours by Workstation Type
+- Existing Job Cards are not re-allocated; the rotation applies to newly created
+  cards only
 
 ### Getting Help
 

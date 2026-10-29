@@ -1158,7 +1158,7 @@ matching, diagnostic skip warnings) into the `v15.1.39` tagged release.
 ## Version 15.1.40 — Workstation Type Rotation
 
 **Date:** 2026-10-29
-**Status:** On `develop` (v15.1.40) — Test Server build
+**Status:** Released — `develop` + `main`, tag `v15.1.40` (UAT deployment pending)
 **Type:** Feature
 
 ### Overview
@@ -1238,12 +1238,13 @@ machine fallback. `py_compile` and `ruff` clean on changed files. Concurrent
 Job Card creation (same workload snapshot) is not covered offline and must be
 tested on the Test Server.
 
-On the Test Server, 134 recreated open Job Cards rotated evenly: Accurate
-Cutting 2 per machine across 4; Corner Cutting 5 / 5 / 5; Helicoil & Tapping
-5 / 4 across 2 with the third machine in `Maintenance`; Fin Forming and Cutting
-2 / 2 / 1 / 1 across 4 with the fifth machine in `Setup`. Both excluded machines
-received nothing. Single-machine types stayed on their only machine.
-Consistency spot-check clean, no rotation warning, no capacity overflow.
+On the Test Server, 134 Job Cards created by a bulk concurrent submission of 91
+Work Orders rotated evenly: Accurate Cutting 2 per machine across 4; Corner
+Cutting 5 / 5 / 5; Helicoil & Tapping 5 / 4 across 2 with the third machine in
+`Maintenance`; Fin Forming and Cutting 2 / 2 / 1 / 1 across 4 with the fifth
+machine in `Setup`. Both excluded machines received nothing. Single-machine
+types stayed on their only machine. Consistency spot-check clean, no rotation
+warning, no capacity overflow.
 
 The same 134 cards came from a bulk concurrent submission of 91 Work Orders, so
 this also covers concurrent allocation: every Job Card was created with a
@@ -1256,7 +1257,8 @@ machine of its operation's type and no new MES exception was logged.
   routing diagnostic, index candidate
 
 ### Release Notes
-See `docs/V15.1.40_RELEASE_NOTES.md`.
+See `docs/V15.1.40_RELEASE_NOTES.md` and the review document
+`V15.1.40_REVIEW_SUMMARY.md`.
 
 ---
 

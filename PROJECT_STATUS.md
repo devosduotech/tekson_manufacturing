@@ -1,12 +1,12 @@
 # Tekson Manufacturing - Project Status
 
-## Current Version: v15.1.39 (main) | v15.1.40 (develop)
+## Current Version: v15.1.40 (main + develop)
 
 ---
 
 ## Current Status (October 29, 2026)
 
-- **v15.1.40 tagged `v15.1.40` and merged to `main`** (Test Server validated; UAT pull pending) — Job Card allocation now routes by **BOM Operation Workstation Type** and rotates across the eligible machines of that type instead of always picking the first. New shared `pick_workstation()` service with a `candidates` seam for future capacity planning; workload split into `active_load` (compared with `production_capacity`), `open_load` (queue, balanced before LRU) and `last_used` (real production activity, not Job Card creation). `Maintenance` / `Problem` / `Setup` machines are excluded. No doctype/field/permission changes: `git pull` + `bench restart` (no migrate/build). **Capacity planning must stay disabled** (`Manufacturing Settings → Disable Capacity Planning`) — ERPNext's scheduling pick runs before the Job Card hook and is respected. Verify with diagnostic section 7.
+- **v15.1.40 tagged `v15.1.40` and merged to `main`** (Test Server validated; UAT pull pending) — Job Card allocation now routes by **BOM Operation Workstation Type** and rotates across the eligible machines of that type instead of always picking the first. New shared `pick_workstation()` service with a `candidates` seam for future capacity planning; workload split into `active_load` (compared with `production_capacity`), `open_load` (queue, balanced before LRU) and `last_used` (real production activity, not Job Card creation). `Maintenance` / `Problem` / `Setup` machines are excluded. No doctype/field/permission changes: `git pull` + `bench restart` (no migrate/build). **Capacity planning must stay disabled** (`Manufacturing Settings → Disable Capacity Planning`) — ERPNext's scheduling pick runs before the Job Card hook and is respected. Verify with diagnostic section 7. Full review: `V15.1.40_REVIEW_SUMMARY.md`.
 - **v15.1.39 released** — UAT skip warnings now name the broken configuration link (`routing row … has no workstation / workstation type`, `no Workstation of type …`, `Workstation … has no plant floor`, `warehouse WIP-RP - TPL does not exist for plant floor RP`, `no Job Card WIP warehouse …`). Also adds a Job Card `workstation` → `plant_floor` fallback and accepts a unique `WIP-{floor}` naming variant instead of dropping the material. The planning fixes (v15.1.36–39) need no `bench migrate`, but this release also carries v15.1.35 role/permission JSON (Pick List report, BOM Bulk Creator, workspace) — sites upgrading from `v15.1.33` **must** run `bench migrate`: `git pull` + `bench --site <site> migrate` + `bench build --force` + `bench restart`
 - **v15.1.38** — case/whitespace-insensitive operation matching across BOM Item, BOM Operation row and Job Card (`normalize_operation`)
 - **v15.1.36 (MR qty fix) + v15.1.37 (operation-driven target WIP) released** — pushed to `develop`, `main`, and `bom-bulk-creator` as commit `971c005`
@@ -81,18 +81,6 @@
 - A *unique* `WIP-{floor}` naming variant (e.g. `WIP - RP - TPL`) is accepted when the convention name is missing; ambiguous matches are never guessed
 - Pick List report logs the same reasons and now calls the shared `resolve_target_warehouse()`
 
-**v15.1.40 — Workstation Type Rotation:**
-- Allocation key is the BOM Operation **Workstation Type**, resolved to a group of interchangeable machines; the Job Card's copied `workstation_type` is the fallback
-- `pick_workstation()` rotates within the type: not at capacity → fewest queued Job Cards → least recently used → name
-- `active_load` (`Work In Progress` / `On Hold`) vs `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is ordered before `last_used` so new cards spread across the type, and is never a hard availability filter
-- `last_used` comes from `actual_end_date` (or `NOW()` for a running card), not from Job Card creation; cancelled cards are ignored
-- Only `Maintenance` / `Problem` / `Setup` are excluded; `Off` / `Idle` / `Production` stay eligible (`Off` is set automatically on completion; a queued card is not started immediately)
-- Pre-assigned and capacity-planner workstations are never replaced; `scheduled_time_logs` are never overridden
-- Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
-- All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns
-- Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable types, multi-floor types, machines excluded by `Maintenance` / `Problem` / `Setup` and capacity overflow
-- Test Server validated: 134 Job Cards from a bulk concurrent submission of 91 Work Orders rotated evenly (Accurate Cutting 2 per machine across 4, Helicoil 5/4 across 2 with one machine in `Maintenance`, Fin Forming 2/2/1/1 across 4 with one in `Setup`); excluded machines received nothing, consistency clean, no new errors
-
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
 - `utils/operation_warehouse.py` — operation → target WIP resolver
@@ -148,6 +136,30 @@ After Material Transfer to department WIP, Job Cards now auto-update:
 - `custom_start_status` → "Ready to Start" (if first JC with materials available)
 - `custom_can_start_operation` → 1
 - `custom_material_available_for_operation` → 1
+
+### 7. Job Card Workstation Allocation (v15.1.40)
+**Status: ✅ Complete — tagged `v15.1.40`, on `develop` + `main`; UAT deployment pending**
+
+- Allocation key is the BOM Operation **Workstation Type**, resolved to a group of interchangeable machines; the Job Card's copied `workstation_type` is the fallback
+- `pick_workstation()` is the single selection service; its `candidates` argument is the seam for the future capacity planner
+- Selection order: not at concurrent capacity → fewest queued Job Cards → least recently used → name
+- `active_load` (`Work In Progress` / `On Hold`) is compared with `production_capacity`; `open_load` (anything not `Completed` / `Cancelled`) is the queue and is never a hard availability filter
+- `last_used` comes from `actual_end_date` (or `NOW()` for a running card), not Job Card creation; queued-never-started and cancelled cards are ignored; never-used machines sort first
+- Only `Maintenance` / `Problem` / `Setup` are excluded; `Off` / `Idle` / `Production` stay eligible (`Off` is set automatically on completion; a queued card is not started immediately)
+- Pre-assigned and capacity-planner workstations are never replaced; `scheduled_time_logs` are never overridden
+- Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
+- All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns; the diagnostic reports the overflow
+- Job Card save now evaluates material readiness for its **own operation**, matching the readiness refresh (previously the save replaced it with the whole Work Order's list)
+- Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable and rotation-ready types, multi-floor types, machines excluded by `Maintenance` / `Problem` / `Setup`, recent assignment spread and capacity overflow
+
+**Key Files:**
+- `utils/job_card_utils.py` — workload metrics, eligibility helper, shared `pick_workstation()`, type-first allocation
+- `services/job_card_service.py` — operation-scoped readiness on Job Card save
+- `scripts/diagnose_mes_performance.py` — section 7 routing / assignment diagnostics
+- `tests/test_status_mapping.py` — operation-scope regression test
+- `V15.1.40_REVIEW_SUMMARY.md` — full review (problem, rules, validation, limitations)
+
+**Validation (Test Server):** 134 Job Cards from a bulk concurrent submission of 91 Work Orders rotated evenly — Accurate Cutting 2/2/2/2 across 4, Corner Cutting 5/5/5, Helicoil & Tapping 5/4 across 2 with the third machine in `Maintenance`, Fin Forming 2/2/1/1 across 4 with the fifth in `Setup`. Both excluded machines received nothing. Consistency spot-check clean, no rotation warning, no capacity overflow, queue `failed=0`, no new MES errors.
 
 ---
 
@@ -223,19 +235,29 @@ Planned features:
 
 ## Deployment
 
-### Dev Machine (karthic@teksons-development)
+### Dev / Test Server (karthic@teksons-development)
 ```bash
 cd ~/frappe-bench/apps/tekson_manufacturing
-git fetch upstream && git reset --hard upstream/bom-bulk-creator
-cd ~/frappe-bench && bench --site teksons.dev migrate && bench build --force && bench restart
+git pull upstream develop
+cd ~/frappe-bench && sudo systemctl restart frappe-bench.target
+# configure once, then verify:
+# Manufacturing Settings -> Disable Capacity Planning = ticked
+bench --site teksons.dev execute tekson_manufacturing.scripts.diagnose_mes_performance.run \
+  --args '[{"assignment_hours": 1}]'
 ```
 
 ### UAT Machine (cwd_admin@cwd)
 ```bash
 cd ~/cwd-bench/apps/tekson_manufacturing
-git pull origin main
+git fetch origin && git checkout main && git pull origin main
 cd ~/cwd-bench && bench --site tekson.site migrate && bench build --force && bench restart
+bench --site tekson.site execute tekson_manufacturing.scripts.diagnose_mes_performance.run \
+  --args '[{"assignment_hours": 24}]'
 ```
+
+v15.1.40 itself is Python-only, but UAT is still on v15.1.37/38, so this jump
+carries v15.1.39 and the v15.1.35 permission JSON — `bench migrate` and
+`bench build --force` are required. Keep capacity planning disabled.
 
 ### Local Development
 ```bash
@@ -280,3 +302,16 @@ git pull origin main
 - [x] Stock Entry hook triggers JC refresh
 - [x] Dependency blocking (previous op must complete)
 - [x] Material availability check before JC start
+
+### Job Card Workstation Allocation (v15.1.40)
+- [x] Job Cards route by the BOM Operation's Workstation Type, never a hard-coded machine
+- [x] A batch spreads across eligible machines (capacity → queue depth → least recently used → name)
+- [x] `active_load` respects `production_capacity`
+- [x] `Maintenance` / `Problem` / `Setup` machines receive no new cards
+- [x] `Off` / `Idle` / `Production` machines remain eligible
+- [x] Pre-assigned / planner workstation and `scheduled_time_logs` are never overridden
+- [x] Legacy machine-in-BOM row falls back to its type with a logged warning
+- [x] Bulk concurrent submission of 91 Work Orders → 134 cards, all typed, excluded machines untouched, no new errors
+- [x] Diagnostic section 7 clean: capacity planning disabled, no scheduled-log leakage, no capacity overflow
+- [x] Job Card save evaluates readiness for its own operation
+- [ ] UAT verification (pending)
