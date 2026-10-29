@@ -1211,6 +1211,9 @@ multiple plant floors (WIP-warehouse mapping risk), and workstations above
 `production_capacity` (active/capacity/queued). Adds
 `("tabJob Card", ["workstation", "docstatus"])` to the index candidates for DBA
 review.
+Sections 1 and 2 now resolve their field names from the doctype metadata
+(`Server Script.reference_doctype`/`doctype_event`, `Error Log.method` instead
+of the removed `title`), so the report runs cleanly on current Frappe v15.
 
 ### Verification
 Offline stub suites for `pick_workstation()` and `allocate_workstation()` cover

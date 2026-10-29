@@ -73,30 +73,52 @@ def _fmt_row(row):
     return " | ".join(f"{k}: {v}" for k, v in dict(row).items())
 
 
+def _server_script_fields():
+    """Server Script field names differ across Frappe versions."""
+    meta = frappe.get_meta("Server Script")
+    if meta.has_field("reference_doctype"):
+        doctype_field = "reference_doctype"
+    else:  # older Frappe
+        doctype_field = "doc_type"
+    if meta.has_field("doctype_event"):
+        event_field = "doctype_event"
+    else:  # older Frappe
+        event_field = "event"
+    return doctype_field, event_field
+
+
 def section_retired_server_scripts():
     """Section 1: retired scripts disabled? any MES Server Script still enabled?"""
     lines = []
     still_enabled = []
+    doctype_field, event_field = _server_script_fields()
 
     for script_name in RETIRED_SERVER_SCRIPTS:
         row = frappe.db.get_value(
             "Server Script",
             script_name,
-            ["name", "disabled", "doc_type", "event"],
+            ["name", "disabled", doctype_field, event_field],
             as_dict=True,
         )
         if not row:
             lines.append(f"  OK   {script_name}: not present")
         elif row.disabled:
-            lines.append(f"  OK   {script_name}: disabled (doc_type={row.doc_type})")
+            lines.append(
+                f"  OK   {script_name}: disabled "
+                f"({doctype_field}={row.get(doctype_field)})"
+            )
         else:
-            lines.append(f"  FAIL {script_name}: STILL ENABLED (doc_type={row.doc_type}, event={row.event})")
+            lines.append(
+                f"  FAIL {script_name}: STILL ENABLED "
+                f"({doctype_field}={row.get(doctype_field)}, "
+                f"{event_field}={row.get(event_field)})"
+            )
             still_enabled.append(script_name)
 
     generic = frappe.get_all(
         "Server Script",
-        filters={"disabled": 0, "doc_type": ("in", list(MES_DOCTYPES))},
-        fields=["name", "doc_type", "event"],
+        filters={"disabled": 0, doctype_field: ("in", list(MES_DOCTYPES))},
+        fields=["name", doctype_field, event_field],
     )
     for script in generic:
         lines.append(f"  FAIL enabled MES Server Script: {_fmt_row(script)}")
@@ -111,13 +133,19 @@ def section_retired_server_scripts():
 
 def section_error_log_volume(days=7):
     """Section 2: how many Error Log docs MES logging was creating."""
+    # Error Log stores the title in "method" on current Frappe; older versions
+    # had a "title" column.
+    if frappe.get_meta("Error Log").has_field("title"):
+        title_field = "title"
+    else:
+        title_field = "method"
     rows = frappe.db.sql(
-        """
-        SELECT title, COUNT(*) AS cnt
+        f"""
+        SELECT `{title_field}` AS title, COUNT(*) AS cnt
         FROM `tabError Log`
         WHERE creation >= DATE_SUB(NOW(), INTERVAL %s DAY)
-          AND (title LIKE 'MES%%' OR title LIKE 'Security Event%%')
-        GROUP BY title
+          AND (`{title_field}` LIKE 'MES%%' OR `{title_field}` LIKE 'Security Event%%')
+        GROUP BY `{title_field}`
         ORDER BY cnt DESC
         LIMIT 25
         """,
