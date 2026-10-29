@@ -1240,11 +1240,14 @@ tested on the Test Server.
 
 On the Test Server, 134 recreated open Job Cards rotated evenly: Accurate
 Cutting 2 per machine across 4; Corner Cutting 5 / 5 / 5; Helicoil & Tapping
-5 / 4 across 2 with the third machine in `Maintenance` and correctly excluded;
-Fin Forming and Cutting spread over all 5 machines. Single-machine types stayed
-on their only machine. Consistency spot-check clean, no rotation warning, no
-capacity overflow. `Setup` was still eligible at that point; it is now blocked
-like `Maintenance` / `Problem` and must be re-checked after deployment.
+5 / 4 across 2 with the third machine in `Maintenance`; Fin Forming and Cutting
+2 / 2 / 1 / 1 across 4 with the fifth machine in `Setup`. Both excluded machines
+received nothing. Single-machine types stayed on their only machine.
+Consistency spot-check clean, no rotation warning, no capacity overflow.
+
+The same 134 cards came from a bulk concurrent submission of 91 Work Orders, so
+this also covers concurrent allocation: every Job Card was created with a
+machine of its operation's type and no new MES exception was logged.
 
 ### Files Changed
 - `tekson_manufacturing/utils/job_card_utils.py` — workload metrics, eligibility

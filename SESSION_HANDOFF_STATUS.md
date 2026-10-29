@@ -27,7 +27,7 @@
 - **Legacy machine-in-BOM rows** are a preference: honoured when eligible, otherwise fall back to that machine's type and log the blocked machine.
 - **All machines at capacity:** the least loaded card count is still assigned (Work Order submission never blocked) with a warning; the diagnostic reports the overflow.
 - **Diagnostics:** section 7 "Workstation routing" — capacity-planning setting, recent Job Cards that still carry scheduled time logs, BOM Operations without a Workstation Type, types with no usable machine, types spanning multiple plant floors, machines excluded by `Maintenance` / `Problem` / `Setup`, and workstations above `production_capacity`.
-- **Test Server result:** 134 recreated open Job Cards rotated evenly — Accurate Cutting 2 per machine across 4, Corner Cutting 5/5/5, Helicoil 5/4 across 2 with the third machine in `Maintenance` (excluded), Fin Forming spread over 5. Single-machine types stayed on their machine. No rotation warning, no capacity overflow, consistency spot-check clean.
+- **Test Server result:** 134 Job Cards from a bulk concurrent submission of 91 Work Orders rotated evenly — Accurate Cutting 2 per machine across 4, Corner Cutting 5/5/5, Helicoil 5/4 across 2 with the third in `Maintenance`, Fin Forming 2/2/1/1 across 4 with the fifth in `Setup`. Both excluded machines received nothing. Single-machine types stayed on their machine. No rotation warning, no capacity overflow, consistency spot-check clean, no new MES errors under concurrent allocation.
 - **Files:** `utils/job_card_utils.py`, `scripts/diagnose_mes_performance.py`
 
 ### Tests

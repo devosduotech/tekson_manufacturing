@@ -91,7 +91,7 @@
 - Legacy machine-in-BOM rows are a preference: fall back to the machine's type with a logged warning
 - All machines at capacity still assigns the least loaded one (Work Order submission is never blocked) and warns
 - Diagnostic section 7 reports capacity-planning status, recent scheduled time logs, missing Workstation Types, unusable types, multi-floor types, machines excluded by `Maintenance` / `Problem` / `Setup` and capacity overflow
-- Test Server validated: 134 recreated Job Cards rotated evenly (e.g. Accurate Cutting 2 per machine across 4, Helicoil 5/4 across 2 with one machine in `Maintenance`); consistency spot-check clean
+- Test Server validated: 134 Job Cards from a bulk concurrent submission of 91 Work Orders rotated evenly (Accurate Cutting 2 per machine across 4, Helicoil 5/4 across 2 with one machine in `Maintenance`, Fin Forming 2/2/1/1 across 4 with one in `Setup`); excluded machines received nothing, consistency clean, no new errors
 
 **Key Files:**
 - `planning/material_planning_service.py` — MR generation logic
