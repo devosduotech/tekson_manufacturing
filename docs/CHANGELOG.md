@@ -1188,10 +1188,10 @@ deployment is `git pull` + `bench restart` (no `bench migrate` / `bench build`).
   `actual_end_date`, or `NOW()` while a Job Card is still running. Queued Job
   Cards that never started do not count; cancelled Job Cards are ignored; a
   machine that has never run work sorts first.
-- **Eligibility:** only `Maintenance` and `Problem` are excluded. `Off`, `Idle`,
-  `Production` and `Setup` are still eligible: they are operational states, and
-  a queued Job Card is not started immediately. `Off` also occurs automatically
-  when a Job Card on the machine completes.
+- **Eligibility:** `Maintenance`, `Problem` and `Setup` are excluded. `Off`,
+  `Idle` and `Production` remain eligible: `Off` is set automatically when a Job
+  Card on the machine completes, and a queued Job Card is not started
+  immediately.
 - **No scheduling override:** a workstation already on the Job Card (user or
   capacity-planner choice) is never replaced, and `scheduled_time_logs` are not
   touched. With capacity planning enabled, ERPNext's scheduling pick is
@@ -1215,8 +1215,8 @@ New read-only section 7 "Workstation routing" in
 `scripts/diagnose_mes_performance.py`: capacity-planning setting plus recent
 Job Cards that actually carry scheduled time logs, BOM Operations without a
 Workstation Type, Workstation Types with no usable machine, machines excluded
-by `Maintenance` / `Problem` (with status), machines in `Setup` (still
-eligible), types spanning multiple plant floors (WIP-warehouse mapping risk),
+by `Maintenance` / `Problem` / `Setup` (with status), types spanning multiple
+plant floors (WIP-warehouse mapping risk),
 and workstations above `production_capacity` (active/capacity/queued). Adds
 `("tabJob Card", ["workstation", "docstatus"])` to the index candidates for DBA
 review.
@@ -1243,7 +1243,8 @@ Cutting 2 per machine across 4; Corner Cutting 5 / 5 / 5; Helicoil & Tapping
 5 / 4 across 2 with the third machine in `Maintenance` and correctly excluded;
 Fin Forming and Cutting spread over all 5 machines. Single-machine types stayed
 on their only machine. Consistency spot-check clean, no rotation warning, no
-capacity overflow.
+capacity overflow. `Setup` was still eligible at that point; it is now blocked
+like `Maintenance` / `Problem` and must be re-checked after deployment.
 
 ### Files Changed
 - `tekson_manufacturing/utils/job_card_utils.py` — workload metrics, eligibility

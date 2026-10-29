@@ -25,8 +25,9 @@ Sections:
   7. Workstation routing     - capacity-planning setting, recent Job Cards
                                that still carry scheduled time logs, BOM
                                Operations with no Workstation Type, types with
-                               no usable workstation, and machines above
-                               production_capacity (read-only)
+                               no usable workstation, machines excluded by
+                               status, and machines above production_capacity
+                               (read-only)
 
 Usage:
     bench --site <site> execute tekson_manufacturing.scripts.diagnose_mes_performance.run
@@ -308,7 +309,13 @@ def section_consistency_spot_check(sample=10):
 
 def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
     """Section 7: is the BOM -> Workstation Type -> eligible machine chain intact?"""
+    from tekson_manufacturing.utils.job_card_utils import (
+        BLOCKED_WORKSTATION_STATUSES,
+    )
+
     lines = []
+    blocked_statuses = tuple(BLOCKED_WORKSTATION_STATUSES)
+    status_placeholders = ", ".join(["%s"] * len(blocked_statuses)) or "NULL"
 
     disable_planning = frappe.db.get_single_value(
         "Manufacturing Settings", "disable_capacity_planning"
@@ -374,14 +381,15 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
         lines.append("  OK   every active BOM Operation has a Workstation Type")
 
     blocked_types = frappe.db.sql(
-        """
+        f"""
         SELECT workstation_type,
                COUNT(*) AS total,
-               SUM(CASE WHEN status IN ('Maintenance', 'Problem') THEN 1 ELSE 0 END) AS blocked
+               SUM(CASE WHEN status IN ({status_placeholders}) THEN 1 ELSE 0 END) AS blocked
         FROM `tabWorkstation`
         WHERE IFNULL(workstation_type, '') != ''
         GROUP BY workstation_type
         """,
+        blocked_statuses,
         as_dict=True,
     )
     unusable = [row for row in blocked_types if (row.total or 0) <= (row.blocked or 0)]
@@ -395,46 +403,41 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
     else:
         lines.append("  OK   every Workstation Type has at least one usable workstation")
 
-    # Make the exclusion rule visible: which machines are skipped, and which
-    # non-standard statuses remain eligible. Only Maintenance/Problem block;
-    # Off, Idle, Production and Setup are operational states that still accept
-    # queued work (a queued Job Card is not started immediately).
-    special = frappe.get_all(
+    # Make the exclusion rule visible: which machines are skipped and why.
+    # Only BLOCKED_WORKSTATION_STATUSES block; Off, Idle and Production are
+    # operational states that still accept queued work.
+    excluded = frappe.get_all(
         "Workstation",
-        filters={"status": ["in", ("Maintenance", "Problem", "Setup")]},
+        filters={"status": ["in", blocked_statuses]},
         fields=["name", "workstation_type", "status"],
         order_by="status, workstation_type, name",
     )
-    excluded = [row for row in special if row.status in ("Maintenance", "Problem")]
-    setup = [row for row in special if row.status == "Setup"]
     if excluded:
-        lines.append("  INFO excluded from rotation (Maintenance / Problem):")
+        lines.append(
+            "  INFO excluded from rotation ("
+            + " / ".join(blocked_statuses)
+            + "):"
+        )
         for row in excluded[:20]:
             lines.append(
                 f"    {row.name} ({row.workstation_type or 'no type'}): {row.status}"
             )
-    if setup:
-        lines.append(
-            "  INFO in Setup but still eligible (only Maintenance / Problem are "
-            "excluded):"
-        )
-        for row in setup[:20]:
-            lines.append(f"    {row.name} ({row.workstation_type or 'no type'})")
 
     # Types with 2+ eligible machines are where rotation can be observed; a
     # single-machine type can never rotate.
     rotation_ready = frappe.db.sql(
-        """
+        f"""
         SELECT workstation_type,
                COUNT(*) AS usable,
                GROUP_CONCAT(name ORDER BY name SEPARATOR ', ') AS machines
         FROM `tabWorkstation`
         WHERE IFNULL(workstation_type, '') != ''
-          AND status NOT IN ('Maintenance', 'Problem')
+          AND status NOT IN ({status_placeholders})
         GROUP BY workstation_type
         HAVING usable > 1
         ORDER BY usable DESC, workstation_type
         """,
+        blocked_statuses,
         as_dict=True,
     )
     if rotation_ready:
@@ -563,9 +566,6 @@ def section_workstation_routing(scheduled_log_days=30, assignment_hours=24):
         "excluded_workstations": [
             {"workstation": row.name, "type": row.workstation_type, "status": row.status}
             for row in excluded
-        ],
-        "setup_workstations": [
-            {"workstation": row.name, "type": row.workstation_type} for row in setup
         ],
         "capacity_overflow": overflow,
         "lines": lines,

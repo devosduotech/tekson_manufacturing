@@ -54,10 +54,11 @@ def populate_job_card_fields(doc, method=None):
 
 
 # Workstation statuses that must never receive a new Job Card, regardless of load.
-# "Off" and "Idle" are deliberately NOT blocked: ERPNext core sets a workstation
-# to "Off" whenever a Job Card on it completes, so treating "Off" as unavailable
-# would exclude every free machine.
-BLOCKED_WORKSTATION_STATUSES = ("Maintenance", "Problem")
+# "Setup" is a changeover: the machine is not free for new work until it finishes.
+# "Off", "Idle" and "Production" are deliberately NOT blocked: ERPNext core sets
+# a workstation to "Off" whenever a Job Card on it completes, so treating "Off"
+# as unavailable would exclude every free machine.
+BLOCKED_WORKSTATION_STATUSES = ("Maintenance", "Problem", "Setup")
 
 # Job Card states where the machine is occupied right now. These count against
 # Workstation.production_capacity (the number of concurrent Job Cards allowed).
@@ -132,7 +133,7 @@ def workstation_workload(workstation_names):
 
 
 def is_workstation_eligible(workstation, reasons=None):
-    """A workstation can take work when it exists and is not Maintenance/Problem."""
+    """A workstation can take work when it exists and is not blocked by status."""
     if not workstation:
         return False
 
@@ -264,7 +265,7 @@ def allocate_workstation(doc, method=None):
       item's own BOM for multi-level builds).
     - Route by Workstation Type, which the BOM uses to group interchangeable
       machines: rotate across the eligible workstations of that type (least
-      recently used, skipping Maintenance/Problem and machines already at their
+      recently used, skipping Maintenance/Problem/Setup and machines already at their
       concurrent capacity where possible).
     - If the BOM Operation has no type, fall back to the type ERPNext copied
       onto the Job Card from the Work Order Operation.
