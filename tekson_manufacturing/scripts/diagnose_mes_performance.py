@@ -156,7 +156,7 @@ def section_error_log_volume(days=7):
         as_dict=True,
     )
     total = sum(row.cnt for row in rows)
-    total_24h = sum(row.cnt_24h or 0 for row in rows)
+    total_24h = int(sum(row.cnt_24h or 0 for row in rows))
     # A large historical count is expected on a site that ran pre-v15.1.32
     # code; what matters is whether MES logging is still inserting rows now.
     lines = [
@@ -394,6 +394,34 @@ def section_workstation_routing(scheduled_log_days=30):
             )
     else:
         lines.append("  OK   every Workstation Type has at least one usable workstation")
+
+    # Types with 2+ eligible machines are where rotation can be observed; a
+    # single-machine type can never rotate.
+    rotation_ready = frappe.db.sql(
+        """
+        SELECT workstation_type,
+               COUNT(*) AS usable,
+               GROUP_CONCAT(name ORDER BY name SEPARATOR ', ') AS machines
+        FROM `tabWorkstation`
+        WHERE IFNULL(workstation_type, '') != ''
+          AND status NOT IN ('Maintenance', 'Problem')
+        GROUP BY workstation_type
+        HAVING usable > 1
+        ORDER BY usable DESC, workstation_type
+        """,
+        as_dict=True,
+    )
+    if rotation_ready:
+        lines.append("  INFO Workstation Types that can rotate (2+ eligible machines):")
+        for row in rotation_ready[:20]:
+            lines.append(
+                f"    {row.workstation_type}: {int(row.usable)} — {row.machines}"
+            )
+    else:
+        lines.append(
+            "  NOTE no Workstation Type has more than one eligible machine — "
+            "rotation cannot be observed until a sibling is added"
+        )
 
     floor_split = frappe.db.sql(
         """
